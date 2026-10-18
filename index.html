@@ -524,10 +524,13 @@ function clientEmail(id){ const c=S.clients[id]||{}; return c.email || c.intake?
 function clientFirst(id){ const c=S.clients[id]||{}; return (c.intake?.nickname || c.intake?.preferredName || clientName(id) || "").split(/\s+/)[0].replace(/.*@.*/,"") || ""; }
 function notifyMail(id, kind){
   const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return; }
-  const first=clientFirst(id); const what = kind==="files" ? "new report" : "treatment plan";
-  const where = kind==="files" ? "\u201cMy reports\u201d" : "\u201cMy treatment plans\u201d";
-  const subject = kind==="files" ? "Your new report is ready" : "Your treatment plan is ready";
-  const body = `Hi ${first && first!=="Unnamed"?first:"there"},\n\nYour ${what} is ready in your Wellness From Within portal.\n\nTo see it, go to https://portal.dawnspain.com and sign in with this email address (${to}). You'll find it under ${where}.\n\nPlease reach out if you have any questions.\n\nWarmly,\n${PRACTICE.name}\n${PRACTICE.phone}\n${PRACTICE.site}`;
+  const first=clientFirst(id); const hi=`Hi ${first && first!=="Unnamed"?first:"there"},`;
+  const sign=`With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`;
+  const signin=`Just go to https://portal.dawnspain.com and sign in with this email address (${to}).`;
+  const subject = kind==="files" ? "Your Qest4 scan reports are ready" : "Your treatment plan is ready";
+  const body = kind==="files"
+    ? `${hi}\n\nYour Qest4 scan and Wellness Summary reports are complete, and I've added them to your client portal. You can view all of your reports there anytime, under \u201cMy reports.\u201d\n\n${signin}\n\nTake your time reading through them. If anything raises a question or you'd like to talk it over, I'm always happy to hear from you.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`
+    : `${hi}\n\nYour treatment plan is ready, and I've added it to your client portal. You'll find it under \u201cMy treatment plans,\u201d along with how often to take each remedy and for how long. You can come back to it anytime.\n\n${signin}\n\nIf anything is unclear, or you notice changes you'd like to share as you go, please reach out. I'm here to support you every step of the way.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`;
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 function clientName(id){
