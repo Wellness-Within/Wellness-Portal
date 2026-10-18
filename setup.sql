@@ -61,7 +61,8 @@ language sql security invoker set search_path = public as $$
 $$;
 grant execute on function public.doc_merge(text, jsonb) to authenticated;
 
-grant select, insert, update, delete on public.docs to authenticated;
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.docs to authenticated;
 revoke all on public.docs from anon;
 
 -- Live updates in the portal
