@@ -726,6 +726,11 @@ function planEditor(ep){
   const bottles = p.bottles.map((b,i) => `<div class="bottle" data-b="${i}">
       <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for bottle ${i+1}"><button type="button" class="ghost" data-act="bottlelib" data-i="${i}" title="Find a protocol in the library and add it to this bottle">+ Add protocol</button><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove bottle ${i+1}">Remove</button></div>
       <label class="field"><span>Remedies</span><textarea data-bf="remedies" class="mono" style="min-height:58px" placeholder="Sanguinaria 200 + Belladonna 3C">${esc(b.remedies)}</textarea></label>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <input data-remname="${i}" list="remlist" placeholder="Add a remedy, e.g. Arnica or Moldavite" aria-label="Remedy to add to bottle ${i+1}" style="flex:1 1 220px">
+        <select data-rempot="${i}" aria-label="Potency" style="width:auto">${POTENCIES.map(x=>`<option value="${x}">${x||"Potency"}</option>`).join("")}</select>
+        <button type="button" data-act="addremedy" data-i="${i}">Add remedy</button>
+      </div>
       <div class="grid2">
         <label class="field"><span>Frequency</span><input data-bf="freq" list="freqs" value="${esc(b.freq)}" placeholder="2D"><small class="muted">${esc(plainFreq(b.freq))}</small></label>
         <label class="field"><span>How long</span><input data-bf="duration" value="${esc(b.duration)}" placeholder="3 months, then review"></label>
@@ -739,6 +744,7 @@ function planEditor(ep){
       <label class="field"><span>Date</span><input id="pl-date" type="date" value="${esc(p.date)}"></label>
       <label class="field"><span>Visibility</span><select id="pl-status"><option value="draft" ${p.status!=="shared"?"selected":""}>Draft (only you)</option><option value="shared" ${p.status==="shared"?"selected":""}>Shared with client</option></select></label>
     </div>
+    <datalist id="remlist"></datalist>
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
     ${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>
@@ -748,6 +754,26 @@ function planEditor(ep){
     <div id="copyArea"></div>
   </div>`;
 }
+
+/* ---------- single-remedy picker for bottles ---------- */
+const GRIFFITH = [["Acer Pseudoplatanus (Sycamore Seed)", 1], ["Aesculus Hippocastanum Album (White Chestnut Flower)", 1], ["Amethyst", 1], ["Banisteriopsis Caapi (Ayahuasca)", 1], ["Berlin Wall", 1], ["Betula Pendula (Silver Birch)", 1], ["Black Obsidian", 1], ["Buddleia Davidii (Butterfly Bush)", 1], ["Carpinus Betulus (Hornbeam)", 1], ["Carassius Auratus (Goldfish)", 1], ["Chalice Well Water", 1], ["Clay", 1], ["Corylus Avellana (Hazel)", 1], ["Emerald", 1], ["Eryngium Maritimum (Sea Holly)", 1], ["Fagus Purpurea (Copper Beech)", 1], ["Fraxinus Excelsior (Common Ash)", 1], ["Golden Beryl (Heliodor)", 1], ["Ilex Aquifolium (Holly)", 1], ["Jet", 1], ["Latrodectus Mactans (Black Widow Spider)", 1], ["Lepisma Saccharina (Silverfish)", 1], ["Lumbricus Terrestris (Earthworm)", 1], ["Moldavite", 1], ["Moonstone", 1], ["Nelumbo Nucifera (Lotus)", 1], ["Okoubaka Aubreville", 1], ["Quercus Robur (Oak)", 1], ["Rainbow (Spectrum)", 1], ["Rhodochrosite", 1], ["Rose Quartz", 1], ["Ruby", 1], ["Salix Fragilis (Crack Willow)", 1], ["Santalum Album (Sandalwood)", 1], ["Thymus Gland", 1], ["Winchelsea Sea Salt", 1], ["Aquamarine", 2], ["Blue", 2], ["Chalcancite", 2], ["Clear Quartz", 2], ["Cotton Wool", 2], ["Curcuma Longa (Turmeric)", 2], ["Dolphin Sonar", 2], ["Eletarria Cardamomum (Cardamom)", 2], ["Epilobium Angustifolium (Rosebay Willowherb)", 2], ["Green", 2], ["Green Jade", 2], ["Himalayan Crystal Salt", 2], ["Hyacinthoides Non-scripta (Bluebell)", 2], ["Ivy Berry (Hedera Helix, the berry)", 2], ["Japanese White Oleander", 2], ["Lapis Lazuli", 2], ["Limonium Sinuatum (Statice)", 2], ["Malus Domestica (Orchard Apple Tree)", 2], ["Microwave Radiation Pulsed G3", 2], ["Natrum Bicarbonicum (Sodium bicarbonate)", 2], ["Olea Europaea (Olive)", 2], ["Orange", 2], ["Oryza Sativa (Organic Brown Rice)", 2], ["Peridot (Olivine)", 2], ["Plutonium Nitricum", 2], ["Punica Granatum (Pomegranate)", 2], ["Purple", 2], ["Red", 2], ["Rubus Fructicosus (Blackberry)", 2], ["Rutilated Smoky Quartz", 2], ["Senecio Jacobæa + Tyria Jacobæa (Common Ragwort and Cinnabar Moth)", 2], ["Sequoiadendron Giganteum (Sierra Redwood)", 2], ["Tiger’s Eye", 2], ["Tunbridge Wells Water", 2], ["Turquoise", 2], ["Yellow", 2], ["Australian Sandstone (Ayers Rock)", 3], ["Beta Vulgaris (Beetroot, decomposed)", 3], ["Black Tourmaline", 3], ["Blackbird Song", 3], ["Bombyx Mori (Domestic Silk Moth)", 3], ["Bornite (Peacock Ore, Copper Ferrous Sulphide)", 3], ["Boswellia Serrata (Olibanum Indicum or Frankincense)", 3], ["Bursera Graveolens (Palo Santo)", 3], ["Calendula Officinalis (Marigold)", 3], ["Dimethyltryptamine (The Spirit Molecule)", 3], ["Dracaena Cinnabari (Dragon’s Blood)", 3], ["Eyjafjallajökull (Volcanic Ash)", 3], ["Fagus Sylvatica (Green Beech)", 3], ["Fallopia Japonica (Japanese Knotweed)", 3], ["Ferrum Magneticum (Magnetite; Lodestone)", 3], ["Ganoderma Lucidum (Psilocybecubensis; Red Reishi Bracket) Fungus", 3], ["Geranium Robertianum (Herb Robert)", 3], ["Geum Urbanum (Herb Bennett)", 3], ["Iron Pyrite (Fool’s Gold)", 3], ["Juniperus Communis (Juniper Berry)", 3], ["Leprominium (Leprosy Nosode)", 3], ["Lotus Corniculatus (Bird’s Foot Trefoil)", 3], ["Lychnis Coronaria (Rose Campion)", 3], ["Mnium Hornum (Swan’s Neck Thyme Moss)", 3], ["Moxa (Artemisia Vulgaris)", 3], ["Ocimum Sanctum (Holy Basil)", 3], ["Phantom Quartz", 3], ["Picea Pungens (Blue Spruce)", 3], ["Pineal Gland", 3], ["Prunella Vulgaris (Self Heal)", 3], ["Rainwater (Chislehurst)", 3], ["Sarcoscypha Coccinea (Scarlet Elf Cup)", 3], ["Shungite (Carbon C60)", 3], ["Silicon", 3], ["Taconite", 3], ["Tormentil (Quatrefoil)", 3]];
+const POTENCIES = ["","3X","6X","12X","30X","3C","6C","12C","30C","200C","1M","10M","50M","CM","LM1","MT"];
+function remedyChoices(){
+  const out=new Map(); const add=(v,hint)=>{ const k=v.toLowerCase(); if(v && !out.has(k)) out.set(k,[v,hint||""]); };
+  (S.settings.myRemedies||[]).forEach(n=>add(n,"Your remedy"));
+  GRIFFITH.forEach(([n,v])=>add(n,`New Materia Medica, Vol ${v}`));
+  if(R.rep) R.rep.remedies.forEach(r=>add(r[1],"Kent / Boericke"));
+  if(R.books) R.books.nar.mixes.forEach(m=>add("Narayani "+titleCase(m.name),`${m.potency} (${m.code})`));
+  (S.combos||[]).forEach(c=>add(c.code+(c.name?" "+c.name:""),"Combination"));
+  return [...out.values()].sort((a,b)=>a[0].localeCompare(b[0]));
+}
+function fillRemedyList(){ const dl=$("#remlist"); if(!dl) return; dl.innerHTML=remedyChoices().map(([v,h])=>`<option value="${esc(v)}">${esc(h)}</option>`).join(""); }
+function ensureRemedyList(){
+  fillRemedyList();
+  if(!R.rep) loadRep().then(fillRemedyList).catch(()=>{});
+  if(!R.books) loadBooks().then(fillRemedyList).catch(()=>{});
+}
+
 function readPlanForm(){
   const ep=S.editPlan; if(!ep) return;
   const v = id => document.getElementById(id);
@@ -775,6 +801,8 @@ function planText(p, name){
 function bindClients(){
   const app = $("#app");
   bindPhoto("pp", () => S.sel);
+  if($("#remlist")) ensureRemedyList();
+  app.querySelectorAll("[data-remname]").forEach(inp => inp.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); document.querySelector(`[data-act="addremedy"][data-i="${inp.dataset.remname}"]`)?.click(); } });
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
@@ -823,6 +851,12 @@ function bindClients(){
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
       else if(act==="rmbottle"){ readPlanForm(); { const ri=+a.dataset.i, t=S.editPlan.target; if(t===ri) S.editPlan.target=null; else if(t!=null && t>ri) S.editPlan.target=t-1; } S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
+      else if(act==="addremedy"){ readPlanForm(); const i=+a.dataset.i; const nm=(document.querySelector(`[data-remname="${i}"]`)?.value||"").trim(); const pot=document.querySelector(`[data-rempot="${i}"]`)?.value||"";
+        if(!nm){ toast("Type a remedy name first"); return; }
+        const b=S.editPlan.data.bottles[i]; const line=(nm+" "+pot).trim(); b.remedies = b.remedies ? b.remedies.replace(/\s+$/,"")+"\n"+line : line; S.editPlan.dirty=true;
+        const known=remedyChoices().some(([v])=>v.toLowerCase()===nm.toLowerCase());
+        if(!known){ const mine=[...new Set([...(S.settings.myRemedies||[]), nm])].sort(); S.settings.myRemedies=mine; S.db.doc("settings/practice").update({myRemedies:mine}).catch(()=>{}); }
+        renderClients(); setTimeout(()=>{ const n=document.querySelector(`[data-remname="${i}"]`); if(n) n.focus(); },30); }
       else if(act==="bottlelib"){ readPlanForm(); S.editPlan.target=+a.dataset.i; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); toast(`Pick a protocol line to add to Bottle ${+a.dataset.i+1}`); }
       else if(act==="tolibrary"){ readPlanForm(); S.editPlan.target=null; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
       else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id; ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
@@ -1753,7 +1787,7 @@ function renderSettings(){
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   $("#app").onclick = async e => { const a=e.target.closest("[data-act]");
     if(a?.dataset.act==="setpw"){ const v=$("#pw-new").value; if(v.length<8){ toast("Use at least 8 characters"); return; } a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false; if(error) toast("Couldn't save the password: "+error.message); else { $("#pw-new").value=""; toast("Password saved"); } return; }
-    if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").set({instructions:$("#st-instr").value}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
+    if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").update({instructions:$("#st-instr").value}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
 }
 
 /* =========================================================
