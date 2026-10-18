@@ -407,24 +407,37 @@ const DB = {
 /* sign-in screen (email link, no password) */
 function renderSignIn(note){
   $("#tabs").hidden = true;
+  const pw = recall("wfw.signin", "link") === "password";
   $("#app").innerHTML = `<div class="sheet stack signin">
     <h1>Welcome</h1>
-    <p class="muted">Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and remedy plans stay together.</p>
-    <label class="field"><span>Email</span><input id="si-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></label>
-    <div class="row"><button type="button" class="primary" id="si-go">Email me a sign-in link</button></div>
+    <div class="seg" role="tablist"><button type="button" data-sim="link" aria-current="${!pw}">Email me a link</button><button type="button" data-sim="password" aria-current="${pw}">Use a password</button></div>
+    <p class="muted">${pw ? "Sign in with your email and password." : "Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and remedy plans stay together."}</p>
+    <label class="field"><span>Email</span><input id="si-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(recall("wfw.email",""))}"></label>
+    ${pw ? `<label class="field"><span>Password</span><input id="si-pass" type="password" autocomplete="current-password"></label>` : ""}
+    <div class="row"><button type="button" class="primary" id="si-go">${pw ? "Sign in" : "Email me a sign-in link"}</button></div>
     <div id="si-note">${note || ""}</div>
     ${contactBlock()}
   </div>`;
+  $("#app").onclick = e => { const m = e.target.closest("[data-sim]"); if(m){ store("wfw.signin", m.dataset.sim); renderSignIn(); } };
   const go = async () => {
     const email = $("#si-email").value.trim(); if(!/^\S+@\S+\.\S+$/.test(email)){ $("#si-note").innerHTML = `<p class="notice warn">Please enter a valid email address.</p>`; return; }
-    const b = $("#si-go"); b.disabled = true; b.textContent = "Sending…";
+    store("wfw.email", email);
+    const b = $("#si-go"); b.disabled = true; b.textContent = pw ? "Signing in…" : "Sending…";
+    if(pw){
+      const { error } = await SB.auth.signInWithPassword({ email, password: $("#si-pass").value });
+      b.disabled = false; b.textContent = "Sign in";
+      if(error) $("#si-note").innerHTML = `<p class="notice warn">${/invalid/i.test(error.message) ? "That email and password don't match." : /confirm/i.test(error.message) ? "This email hasn't been confirmed yet. Use the email link once first." : "That didn't work. Please try again."}</p>`;
+      else location.replace(location.pathname);
+      return;
+    }
     const { error } = await SB.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
     b.disabled = false; b.textContent = "Email me a sign-in link";
     $("#si-note").innerHTML = error
-      ? `<p class="notice warn">${/rate|seconds/i.test(error.message) ? "Please wait a minute before asking for another link." : "That didn't send. Check the address and try again."}</p>`
+      ? `<p class="notice warn">${/rate|seconds|limit/i.test(error.message) ? "Too many sign-in emails were sent just now. Please wait a while and try again, or contact Dawn." : "That didn't send. Check the address and try again."}</p>`
       : `<div class="notice ok"><b>Check your email.</b> We sent a sign-in link to ${esc(email)}. Open it on this device. It can take a minute to arrive; check spam if you don't see it.</div>`;
   };
-  $("#si-go").onclick = go; $("#si-email").onkeydown = e => { if(e.key === "Enter") go(); };
+  $("#si-go").onclick = go;
+  ["#si-email","#si-pass"].forEach(sel => { const el=$(sel); if(el) el.onkeydown = e => { if(e.key === "Enter") go(); }; });
 }
 function addSignOut(){
   const b = $("#signout"); if(b) return;
@@ -1627,6 +1640,11 @@ function renderSettings(){
       <p class="small muted">Their own forms and the plans you mark “Shared with client”. Never the library, combinations, other clients, or your private notes.</p>
     </div>
     <div class="formsec stack">
+      <h3>Your password</h3>
+      <p class="small muted">Set or change the password you use with “Use a password” on the sign-in page.</p>
+      <div class="row"><input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (8+ characters)" style="flex:1 1 220px"><button type="button" data-act="setpw">Save password</button></div>
+    </div>
+    <div class="formsec stack">
       <h3>Move data in</h3>
       <p class="small muted">Load the data file Claude prepared (your protocol library, notes, saved cases and client records). Loading it again replaces those items with the file's copy.</p>
       <div class="row"><label class="btn" for="imp-file" style="cursor:pointer">Choose data file</label><input type="file" id="imp-file" accept=".json,application/json" class="sr"><span id="imp-status" class="small muted">${esc(S.impStatus||"")}</span></div>
@@ -1638,7 +1656,9 @@ function renderSettings(){
       for(const it of items){ const len=JSON.stringify(it.data).length; if(size+len>400000) await flush(); batch.push({path:it.path, parent:parentOf(it.path), id:idOf(it.path), data:it.data, updated_at:new Date().toISOString()}); size+=len; }
       await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary(); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
-  $("#app").onclick = async e => { const a=e.target.closest("[data-act]"); if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").set({instructions:$("#st-instr").value}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
+  $("#app").onclick = async e => { const a=e.target.closest("[data-act]");
+    if(a?.dataset.act==="setpw"){ const v=$("#pw-new").value; if(v.length<8){ toast("Use at least 8 characters"); return; } a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false; if(error) toast("Couldn't save the password: "+error.message); else { $("#pw-new").value=""; toast("Password saved"); } return; }
+    if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").set({instructions:$("#st-instr").value}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
 }
 
 /* =========================================================
