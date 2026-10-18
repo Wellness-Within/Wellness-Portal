@@ -534,16 +534,28 @@ function render(){
 /* ---------- working-plan banner (shared by library & combos) ---------- */
 function targetBanner(){
   if(!S.editPlan) return `<div class="target"><span>To add protocol lines to a remedy plan, open a client's plan first (Clients → Remedy plans).</span></div>`;
-  return `<div class="target"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")} <span class="chip acc">${S.editPlan.data.bottles.length} bottle${S.editPlan.data.bottles.length===1?"":"s"}</span></span>
+  const bs=S.editPlan.data.bottles, t=S.editPlan.target;
+  const opts=`<option value="new" ${t==null||!bs[t]?"selected":""}>A new bottle</option>`+bs.map((b,i)=>`<option value="${i}" ${t===i?"selected":""}>Bottle ${i+1}${b.issue?": "+esc(b.issue):""}</option>`).join("");
+  return `<div class="target"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")}
+    <label style="display:inline-flex;align-items:center;gap:6px;margin-left:6px">→ <select id="plan-target" aria-label="Add protocols to" style="width:auto;padding:3px 8px">${opts}</select></label></span>
     <button type="button" class="ghost" data-act="goplan">Back to plan</button></div>`;
 }
 function addBottle(issue, remedies){
   if(!S.editPlan){ toast("Open a client's plan first"); return; }
-  S.editPlan.data.bottles.push({issue:issue||"", remedies:remedies||"", freq:"", duration:"", notes:""});
+  const bs=S.editPlan.data.bottles, t=S.editPlan.target;
+  if(t!=null && bs[t]){
+    const b=bs[t]; b.remedies = b.remedies ? b.remedies.replace(/\s+$/,"") + "\n" + (remedies||"") : (remedies||"");
+    if(!b.issue && issue) b.issue = issue;
+    toast(`Added to Bottle ${t+1}. Save the plan to keep it.`);
+  } else {
+    bs.push({issue:issue||"", remedies:remedies||"", freq:"", duration:"", notes:""});
+    S.editPlan.target = bs.length-1;
+    toast(`Added as Bottle ${bs.length}. More protocols now go into this bottle; change that at the top.`);
+  }
   S.editPlan.dirty = true;
-  toast("Added to plan. Save the plan to keep it.");
   render();
 }
+document.addEventListener("change", e => { if(e.target && e.target.id==="plan-target" && S.editPlan){ const v=e.target.value; S.editPlan.target = v==="new" ? null : +v; } });
 
 /* ---------- Clients ---------- */
 function renderClients(){
@@ -712,7 +724,7 @@ function plansPane(id){
 function planEditor(ep){
   const p = ep.data;
   const bottles = p.bottles.map((b,i) => `<div class="bottle" data-b="${i}">
-      <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for bottle ${i+1}"><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove bottle ${i+1}">Remove</button></div>
+      <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for bottle ${i+1}"><button type="button" class="ghost" data-act="bottlelib" data-i="${i}" title="Find a protocol in the library and add it to this bottle">+ Add protocol</button><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove bottle ${i+1}">Remove</button></div>
       <label class="field"><span>Remedies</span><textarea data-bf="remedies" class="mono" style="min-height:58px" placeholder="Sanguinaria 200 + Belladonna 3C">${esc(b.remedies)}</textarea></label>
       <div class="grid2">
         <label class="field"><span>Frequency</span><input data-bf="freq" list="freqs" value="${esc(b.freq)}" placeholder="2D"><small class="muted">${esc(plainFreq(b.freq))}</small></label>
@@ -729,7 +741,7 @@ function planEditor(ep){
     </div>
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
     ${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
-    <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" data-act="tolibrary">Add from protocol library</button></div>
+    <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px">${esc(p.instructions)}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
@@ -810,8 +822,9 @@ function bindClients(){
       else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Remedy plan",date:today(),status:"draft",instructions:S.settings.instructions||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
-      else if(act==="rmbottle"){ readPlanForm(); S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
-      else if(act==="tolibrary"){ readPlanForm(); S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
+      else if(act==="rmbottle"){ readPlanForm(); { const ri=+a.dataset.i, t=S.editPlan.target; if(t===ri) S.editPlan.target=null; else if(t!=null && t>ri) S.editPlan.target=t-1; } S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
+      else if(act==="bottlelib"){ readPlanForm(); S.editPlan.target=+a.dataset.i; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); toast(`Pick a protocol line to add to Bottle ${+a.dataset.i+1}`); }
+      else if(act==="tolibrary"){ readPlanForm(); S.editPlan.target=null; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
       else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id; ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
       else if(act==="askdelplan"){ S.confirmPlanDel=true; readPlanForm(); renderClients(); }
       else if(act==="delplan"){ await S.db.doc(`clients/${S.editPlan.clientId}/plans/${S.editPlan.id}`).delete(); S.editPlan=null; S.confirmPlanDel=false; toast("Plan deleted"); renderClients(); }
@@ -956,7 +969,7 @@ async function planPdf(p, clientLabel){
 }
 
 /* ---------- Library ---------- */
-const POTENCY_RX = /\b\d+\s*(C|X|M|MT)\b|\bMT\b|\b\d+D\b|\be\d+[HDW]\b|\beOD\b|\bSOS\b|\b(200|30|1000)\b/;
+const POTENCY_RX = /\b\d+\s*(C|X|M|MT)\b|\bMT\b|\b\d+D\b|\be\d+[HDW]\b|\beOD\b|\bSOS\b|\b(200|30|1000)\b/i;
 function allEntries(){ return [...S.custom, ...S.lib]; }
 function srcLabel(e){ return e.mine?"My protocols":e.source.startsWith("Banerji")?"Banerji book":e.source.startsWith("Class sheets")?e.source.replace("Class sheets: ","Class sheet · "):"Additional Banerji"; }
 function entryText(e){ return (e.title+" "+(e.blocks||[]).map(b=>b.x).join(" ")).toLowerCase(); }
