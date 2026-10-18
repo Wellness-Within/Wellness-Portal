@@ -11,7 +11,7 @@
 /* Layout: a quiet apothecary ledger. Sticky header, then a two-pane workspace (list | record) that stacks on phones. */
 :root{
   --bg:#F1FAFB; --surface:#FFFFFF; --sunk:#E4F4F6; --ink:#173A41; --muted:#4F6C72; --line:#CBE7EA;
-  --accent:#0A7F89; --accent-ink:#FFFFFF; --soft:#D3F4F7; --brand:#75E3EB; --brand-ink:#0F333A; --amber:#9A5B00; --amber-soft:#FBEBD0; --ok:#1F6B3A; --ok-soft:#DCEFE1; --danger:#A3312B;
+  --accent:#0B7891; --accent-ink:#FFFFFF; --soft:#D3F4F7; --brand:#75E3EB; --brand-ink:#0F333A; --amber:#2D5A9E; --amber-soft:#E2ECFA; --ok:#0B6F86; --ok-soft:#D9F5F8; --danger:#A3312B;
   --f-display:"Young Serif", Georgia, "Times New Roman", serif;
   --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -19,10 +19,10 @@
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0A191C; --surface:#11262A; --sunk:#0D1F23; --ink:#E0F2F4; --muted:#93B2B7; --line:#21414A;
-  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}}
+  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#A9C6F5; --amber-soft:#1A2A44; --ok:#75E3EB; --ok-soft:#173A40; --danger:#F08C84; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0A191C; --surface:#11262A; --sunk:#0D1F23; --ink:#E0F2F4; --muted:#93B2B7; --line:#21414A;
-  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}
+  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#A9C6F5; --amber-soft:#1A2A44; --ok:#75E3EB; --ok-soft:#173A40; --danger:#F08C84; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--brand)}
@@ -48,7 +48,9 @@ p{margin:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grow{flex:1 1 auto;min-width:0}
 button,.btn{font:600 14px var(--f-body);border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.primary{background:var(--brand);color:var(--brand-ink);border-color:#4FD3DD}
+button.primary:hover{background:#5ED9E2}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.primary{background:#75E3EB;color:#06262B}}
 button.ghost{border-color:transparent;background:none;color:var(--accent);padding:6px 8px}
 button.danger{color:var(--danger)}
 button:disabled{opacity:.5;cursor:not-allowed}
@@ -983,7 +985,7 @@ function remedyLines(t){ return String(t||"").split(/\s*(?:\n|;|\s\/\s)\s*/).map
 async function planPdf(p, clientLabel){
   const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=50, CW=W-2*M, FOOT=70;
-  const aqua=[117,227,235], teal=[10,127,137], deep=[19,66,74], ink=[33,47,51], muted=[98,118,123], line=[203,231,234], card=[246,252,253], gold=[10,127,137], cream=[234,249,250], hdr=[15,51,58], hdr2=[22,86,96];
+  const aqua=[117,227,235], teal=[11,120,145], deep=[19,66,74], ink=[33,47,51], muted=[98,118,123], line=[203,231,234], card=[246,252,253], gold=[11,120,145], cream=[234,249,250], hdr=[15,51,58], hdr2=[22,86,96];
   const font=(style,size,color)=>{ doc.setFont(style[0],style[1]); doc.setFontSize(size); doc.setTextColor(...color); };
   const wrap=(t,w,style,size)=>{ doc.setFont(style[0],style[1]); doc.setFontSize(size); return doc.splitTextToSize(pdfSafe(t), w); };
   const SANS=["helvetica","normal"], SANSB=["helvetica","bold"], SANSI=["helvetica","italic"], SERIF=["times","bold"], SERIFI=["times","italic"];
