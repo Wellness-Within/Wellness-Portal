@@ -209,7 +209,7 @@ function store(k,v){ try{ v===undefined ? localStorage.removeItem(k) : localStor
 function recall(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } }
 
 const PRACTICE = { name:"Dawn Spain, PHom", phone:"252-626-4104", email:"wellnessfromwithin@icloud.com", site:"www.dawnspain.com" };
-const DEFAULT_INSTRUCTIONS = "Wet dose: put 3 pellets in 2 oz of water in a spray or dropper bottle. One dose = 5 sprays or ½ dropper. Shake or tap the bottle before each dose. Remedies that share the same frequency are combined into one bottle per issue.";
+const DEFAULT_INSTRUCTIONS = "Wet dose: put 3 pellets in 2 oz of water in a spray or dropper bottle. One dose = 5 sprays or ½ dropper. Shake or tap the bottle before each dose.";
 
 /* Frequency shorthand used in the protocols, in plain words for clients */
 function plainFreq(f){
@@ -495,7 +495,7 @@ function startPractitioner(){
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
     if(S.tab==="library") render();
   }, e => console.warn(e));
-  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.tab==="settings") render(); }, e=>console.warn(e));
+  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings") render(); }, e=>console.warn(e));
   loadLibrary();
   render();
 }
@@ -797,7 +797,7 @@ function planText(p, name){
     if(b.notes) lines.push(`  Note: ${b.notes}`);
     lines.push("");
   });
-  if(p.instructions) lines.push(p.instructions, "");
+  if(cleanInstr(p.instructions)) lines.push(cleanInstr(p.instructions), "");
   lines.push(`${PRACTICE.name} · ${PRACTICE.phone} · ${PRACTICE.email}`);
   return lines.join("\n");
 }
@@ -817,7 +817,7 @@ function bindClients(){
     const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
-    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:p.instructions||"",bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
+    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
@@ -850,7 +850,7 @@ function bindClients(){
       else if(act==="canceldel"){ S.confirmDel=null; renderClients(); }
       else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
       else if(act==="merge"){ await mergeClient(S.sel, $("#mergeTo").value); }
-      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Remedy plan",date:today(),status:"draft",instructions:S.settings.instructions||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
+      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Remedy plan",date:today(),status:"draft",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
       else if(act==="rmbottle"){ readPlanForm(); { const ri=+a.dataset.i, t=S.editPlan.target; if(t===ri) S.editPlan.target=null; else if(t!=null && t>ri) S.editPlan.target=t-1; } S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
@@ -975,33 +975,91 @@ function jotReport(r){
 let JSPDF_P=null;
 function loadJsPDF(){ if(window.jspdf) return Promise.resolve(window.jspdf); if(!JSPDF_P) JSPDF_P=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"; sc.onload=()=>res(window.jspdf); sc.onerror=()=>{ JSPDF_P=null; rej(new Error("load")); }; document.head.appendChild(sc); }); return JSPDF_P; }
 function pdfSafe(t){ return String(t||"").replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,"-").replace(/\u2026/g,"...").replace(/\u00bd/g,"1/2").replace(/[^\x00-\xFF]/g,""); }
+const COMBINE_RX=/\s*Remedies that share the same frequency are combined into one bottle per issue\.?/gi;
+function cleanInstr(t){ return String(t||"").replace(COMBINE_RX,"").trim(); }
+function remedyLines(t){ return String(t||"").split(/\s*(?:\n|;|\s\/\s)\s*/).map(s=>s.trim()).filter(Boolean); }
 async function planPdf(p, clientLabel){
   const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
-  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=54, CW=W-2*M; let y=M;
-  const teal=[18,94,90], ink=[18,48,47], muted=[90,110,108];
-  const need=h=>{ if(y+h>H-M-24){ doc.addPage(); y=M; } };
-  const text=(t,{size=11,bold=false,color=ink,gap=4,indent=0,italic=false}={})=>{ doc.setFont("helvetica", bold&&italic?"bolditalic":bold?"bold":italic?"italic":"normal"); doc.setFontSize(size); doc.setTextColor(...color);
-    const lines=doc.splitTextToSize(pdfSafe(t), CW-indent); lines.forEach(l=>{ need(size*1.35); doc.text(l, M+indent, y+size); y+=size*1.35; }); y+=gap; };
-  doc.setFillColor(...teal); doc.rect(0,0,W,8,"F");
-  text("Wellness From Within",{size:20,bold:true,color:teal,gap:0});
-  text(`${PRACTICE.name}  ·  ${PRACTICE.phone}  ·  ${PRACTICE.email}  ·  ${PRACTICE.site}`.replace(/·/g,"|"),{size:9,color:muted,gap:14});
-  doc.setDrawColor(207,223,220); doc.line(M,y,W-M,y); y+=16;
-  text(p.title||"Remedy plan",{size:16,bold:true,gap:2});
-  text([clientLabel, fmtDate(p.date)].filter(Boolean).join("  |  "),{size:10,color:muted,gap:14});
-  (p.bottles||[]).forEach((b,i)=>{
-    need(70); doc.setFillColor(238,244,243); const top=y; 
-    text(`Bottle ${i+1}${b.issue?`: ${b.issue}`:""}`,{size:12.5,bold:true,color:teal,gap:3});
-    if(b.remedies) text(b.remedies,{size:11.5,bold:true,gap:3,indent:10});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=50, CW=W-2*M, FOOT=70;
+  const teal=[22,92,88], deep=[14,62,60], ink=[30,42,42], muted=[104,118,116], line=[214,226,223], card=[248,251,250], gold=[190,154,92], cream=[251,247,239];
+  const font=(style,size,color)=>{ doc.setFont(style[0],style[1]); doc.setFontSize(size); doc.setTextColor(...color); };
+  const wrap=(t,w,style,size)=>{ doc.setFont(style[0],style[1]); doc.setFontSize(size); return doc.splitTextToSize(pdfSafe(t), w); };
+  const SANS=["helvetica","normal"], SANSB=["helvetica","bold"], SANSI=["helvetica","italic"], SERIF=["times","bold"], SERIFI=["times","italic"];
+  let y=0;
+  const header=first=>{
+    if(first){
+      doc.setFillColor(...teal); doc.rect(0,0,W,104,"F");
+      doc.setFillColor(...gold); doc.rect(0,104,W,3,"F");
+      font(SERIF,25,[255,255,255]); doc.text("Wellness From Within", M, 50);
+      font(SERIFI,12.5,[206,229,225]); doc.text(pdfSafe(PRACTICE.name), M, 72);
+      font(SANSB,8.5,[206,229,225]); doc.setCharSpace(1.6); doc.text("REMEDY PLAN", W-M, 40, {align:"right"}); doc.setCharSpace(0);
+      font(SANSB,13,[255,255,255]); doc.text(pdfSafe(clientLabel||""), W-M, 59, {align:"right"});
+      font(SANS,10,[206,229,225]); doc.text(pdfSafe(fmtDate(p.date)||""), W-M, 75, {align:"right"});
+      y=140;
+      const t=(p.title||"").trim();
+      if(t && !/^remedy plan$/i.test(t)){ const ls=wrap(t,CW,SERIF,17); font(SERIF,17,deep); ls.forEach(l=>{ doc.text(l,M,y); y+=21; }); y+=6; }
+    } else {
+      doc.setFillColor(...teal); doc.rect(0,0,W,6,"F");
+      font(SERIF,11,teal); doc.text("Wellness From Within", M, 34);
+      font(SANS,9,muted); doc.text(pdfSafe([clientLabel, fmtDate(p.date)].filter(Boolean).join("  |  ")), W-M, 34, {align:"right"});
+      doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(M,44,W-M,44); y=68;
+    }
+  };
+  const room=h=>{ if(y+h>H-FOOT){ doc.addPage(); header(false); } };
+  header(true);
+  const bottles=(p.bottles||[]).filter(b=>b.issue||b.remedies||b.freq||b.duration||b.notes);
+  const PAD=18, BADGE=26, IX=M+PAD+BADGE+14, IW=W-M-PAD-IX;
+  bottles.forEach((b,i)=>{
+    const issue=wrap(b.issue||"Remedies", IW, SANSB, 13.5);
+    const rems=remedyLines(b.remedies).map(r=>wrap(r, IW-14, SANS, 11));
     const pf=plainFreq(b.freq);
-    if(b.freq) text(`How often: ${pf||b.freq}${pf?` (${b.freq})`:""}`,{size:10.5,gap:2,indent:10});
-    if(b.duration) text(`How long: ${b.duration}`,{size:10.5,gap:2,indent:10});
-    if(b.notes) text(b.notes,{size:10.5,italic:true,color:muted,gap:2,indent:10});
-    doc.setDrawColor(...teal); doc.setLineWidth(2); doc.line(M+2, top+2, M+2, y-2); doc.setLineWidth(1);
-    y+=10;
+    const often=b.freq?wrap(pf||b.freq, IW/2-12, SANSB, 10.5):[], oftenCode=(pf&&b.freq)?wrap(b.freq, IW/2-12, SANS, 9):[];
+    const long=b.duration?wrap(b.duration, IW/2-12, SANSB, 10.5):[];
+    const note=b.notes?wrap(b.notes, IW, SANSI, 10):[];
+    const hRem=rems.reduce((s,ls)=>s+ls.length*14.5+3,0);
+    const hSched=(often.length||long.length)?(14+12+Math.max(often.length*13+oftenCode.length*11, long.length*13)+4):0;
+    const h=PAD+11+issue.length*17+6+hRem+hSched+(note.length?note.length*13+8:0)+PAD-6;
+    room(h+14);
+    const top=y;
+    doc.setFillColor(...card); doc.setDrawColor(...line); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
+    doc.setFillColor(...teal); doc.circle(M+PAD+BADGE/2, top+PAD+BADGE/2, BADGE/2, "F");
+    font(SANSB,12,[255,255,255]); doc.text(String(i+1), M+PAD+BADGE/2, top+PAD+BADGE/2+4.3, {align:"center"});
+    let cy=top+PAD+8;
+    font(SANSB,7.5,gold); doc.setCharSpace(1.4); doc.text(`BOTTLE ${i+1}`, IX, cy); doc.setCharSpace(0); cy+=15;
+    font(SANSB,13.5,deep); issue.forEach(l=>{ doc.text(l,IX,cy); cy+=17; }); cy+=4;
+    rems.forEach(ls=>{ doc.setFillColor(...teal); doc.circle(IX+3, cy-3.6, 1.9, "F"); font(SANS,11,ink); ls.forEach(l=>{ doc.text(l,IX+14,cy); cy+=14.5; }); cy+=3; });
+    if(hSched){
+      cy+=4; doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(IX,cy,W-M-PAD,cy); cy+=16;
+      const col2=IX+IW/2+6;
+      font(SANSB,7.5,muted); doc.setCharSpace(1.2);
+      if(often.length) doc.text("HOW OFTEN", IX, cy); if(long.length) doc.text("HOW LONG", often.length?col2:IX, cy); doc.setCharSpace(0);
+      let a=cy+14, c=cy+14;
+      font(SANSB,10.5,ink); often.forEach(l=>{ doc.text(l,IX,a); a+=13; });
+      font(SANS,9,muted); oftenCode.forEach(l=>{ doc.text(l,IX,a); a+=11; });
+      font(SANSB,10.5,ink); long.forEach(l=>{ doc.text(l,often.length?col2:IX,c); c+=13; });
+      cy=Math.max(a,c);
+    }
+    if(note.length){ cy+=6; font(SANSI,10,muted); note.forEach(l=>{ doc.text(l,IX,cy); cy+=13; }); }
+    y=top+h+14;
   });
-  if(p.instructions){ need(40); text("How to take your remedies",{size:12,bold:true,color:teal,gap:3}); text(p.instructions,{size:10.5,gap:10}); }
-  need(40); text("Questions? Contact Dawn any time. Homeopathy is a complementary approach and does not replace care from your medical provider.",{size:9,color:muted,gap:0});
-  const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(`Page ${i} of ${n}`, W-M, H-28, {align:"right"}); }
+  const instr=cleanInstr(p.instructions);
+  if(instr){
+    const paras=instr.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>wrap(s, CW-36, SANS, 10.5));
+    const h=18+16+paras.reduce((s,ls)=>s+ls.length*14+5,0)+12;
+    room(h+10); y+=4; const top=y;
+    doc.setFillColor(...cream); doc.setDrawColor(232,220,196); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
+    let cy=top+26; font(SERIF,13,deep); doc.text("How to take your remedies", M+18, cy); cy+=18;
+    font(SANS,10.5,ink); paras.forEach(ls=>{ ls.forEach(l=>{ doc.text(l,M+18,cy); cy+=14; }); cy+=5; });
+    y=top+h+10;
+  }
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){
+    doc.setPage(i); const fy=H-FOOT+18;
+    doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(M,fy,W-M,fy);
+    font(SANSB,8.5,teal); doc.text(pdfSafe(`${PRACTICE.name}   |   ${PRACTICE.phone}   |   ${PRACTICE.email}   |   ${PRACTICE.site}`), W/2, fy+15, {align:"center"});
+    font(SANS,7.5,muted); doc.text("Homeopathy and flower essences are complementary approaches and do not replace care from your medical provider.", W/2, fy+28, {align:"center"});
+    doc.text(`Page ${i} of ${n}`, W-M, fy+40, {align:"right"});
+  }
   return doc.output("blob");
 }
 
@@ -1792,7 +1850,7 @@ function narayaniHtml(){
 function renderSettings(){
   $("#app").innerHTML = `<div class="sheet stack" style="max-width:760px">
     <h1>Settings</h1>
-    <label class="field"><span>Default instructions on new remedy plans</span><textarea id="st-instr" style="min-height:120px">${esc(S.settings.instructions||DEFAULT_INSTRUCTIONS)}</textarea></label>
+    <label class="field"><span>Default instructions on new remedy plans</span><textarea id="st-instr" style="min-height:120px">${esc(cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS)}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     <div class="formsec stack">
       <h3>Inviting clients</h3>
@@ -1943,7 +2001,7 @@ function planCard(p){
       </div>
       ${b.notes?`<p class="small">${esc(b.notes)}</p>`:""}
     </div>`).join("")}
-    ${p.instructions?`<div><p class="label">How to take your remedies</p><p style="white-space:pre-wrap">${esc(p.instructions)}</p></div>`:""}
+    ${cleanInstr(p.instructions)?`<div><p class="label">How to take your remedies</p><p style="white-space:pre-wrap">${esc(cleanInstr(p.instructions))}</p></div>`:""}
   </article>`;
 }
 function contactBlock(){
