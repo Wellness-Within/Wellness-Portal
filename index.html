@@ -614,12 +614,12 @@ function clientDetail(id){
   const c = S.clients[id];
   const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Treatment plans"],["files","Reports & files"],["notes","Private notes"],["details","Details"]];
   let body = "";
-  if(S.sub==="intake") body = intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
-  if(S.sub==="qest") body = photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
+  if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
+  if(S.sub==="qest") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
-    body = hist.length ? `<div class="stack">${hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""}</summary><div style="margin-top:8px">${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")}</div>`
+    body = hist.length ? `<div class="stack">${hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""}</summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")}</div>`
       : `<div class="empty"><p>No follow-up forms yet.</p><p class="small">Send this client <span class="mono">https://portal.dawnspain.com/#followup</span> before their next session.</p></div>`; }
   if(S.sub==="notes") body = `<div class="stack"><p class="small muted">Only you can see these notes. Clients never see this tab.</p><textarea id="notesBox" style="min-height:260px" placeholder="Case notes, Qest4 session observations, follow-up ideas">${esc(S.notesFor===id?S.notes:"")}</textarea><div class="row"><button type="button" class="primary" data-act="savenotes">Save notes</button></div></div>`;
   if(S.sub==="details") body = detailsPane(id, c);
@@ -653,6 +653,7 @@ function qestHistory(id){
   if(!h.length) return "";
   return `<div class="formsec stack"><h3>Past Qest4 forms</h3>${h.map(x=>{ const q=x.form||{};
     return `<details class="hist"><summary>${esc(fmtDate(x.submittedAt))}</summary><div class="stack small" style="margin-top:8px">
+      <div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qesthist" data-i="${esc(x.submittedAt||"")}">Download PDF</button></div>
       ${["help1","help2","help3"].filter(k=>q[k]).map((k,i)=>`<p><b>${i+1}.</b> ${esc(q[k])}</p>`).join("")}
       ${q.areas?.length?`<p><b>Support:</b> ${esc(q.areas.join(", "))}${q.areasOther?", "+esc(q.areasOther):""}</p>`:""}
       ${q.sinceLast?`<p><b>New since last scan:</b> ${esc(q.sinceLast)}</p>`:""}
@@ -854,6 +855,16 @@ function bindClients(){
         if(kind==="qest") await S.db.collection(`clients/${id}/qestForms`).doc().set({form:r.vals, submittedAt:now, source:"jotform"});
         S.jotNew=false; S.sel=id; S.sub=key; S.jotOpen=true; S.jotLast=r; toast(`${r.vals.fullName||"Client"} added from the ${kind==="qest"?"Qest4":"intake"} form`); renderClients(); setTimeout(()=>{ const rp=$("#jot-report"); if(rp) rp.innerHTML=jotReport(r); },80); }
       else if(act==="jotnewopen"){ S.jotNew=!S.jotNew; renderClients(); }
+      else if(act==="formpdf"){ const id=S.sel, c=S.clients[id]||{}, nm=clientName(id), k=a.dataset.kind; let def, vals, kind, date, photo="";
+        if(k==="intake"){ def=INTAKE; vals=c.intake||{}; kind="Homeopathy intake"; date=c.intakeAt||c.intakeSubmittedAt||vals.sigDate; }
+        else if(k==="qest"){ def=QEST; vals=c.qest||{}; kind="Qest4 pre-scan form"; date=c.qestAt||c.qestSubmittedAt||vals.sigDate; photo=S.photoFor===id?S.photo:""; }
+        else if(k==="qesthist"){ const x=(S.qhistFor===id?S.qhist:[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=QEST; vals=x.form||{}; kind="Qest4 pre-scan form"; date=x.submittedAt; }
+        else { const x=(c.followupHistory||[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=FOLLOWUP; vals=x.form||{}; kind="Homeopathy follow-up"; date=x.submittedAt; }
+        const lbl=a.textContent; a.disabled=true; a.textContent="Making PDF…";
+        try{ saveBlob(await formPdf(def, vals, {kind, who:nm, date, photo}), `${kind} - ${nm}${date?" - "+String(date).slice(0,10):""}.pdf`); }
+        catch(e1){ console.warn(e1); toast("Couldn't make the PDF. Check your connection and try again."); }
+        a.disabled=false; a.textContent=lbl; }
+      else if(act==="dlphoto"){ const id=S.sel; if(S.photoFor===id && S.photo){ fetch(S.photo).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(id)} - photo.jpg`)); } }
       else if(act==="pdfplan"){ readPlanForm(); const p=S.editPlan.data; const nm=clientName(S.editPlan.clientId); a.disabled=true; a.textContent="Making PDF…";
         try{ const blob=await planPdf(p, nm); const dl=null; const fname=`Treatment plan - ${nm} - ${p.date||today()}.pdf`.replace(/[\/:*?"<>|]/g,"");
           if(dl){ try{ await dl.save({filename:fname, data:blob}); }catch(e2){ if(e2?.code!=="cancelled" && e2?.code!=="declined") toast("The PDF wasn't saved."); } }
@@ -1079,6 +1090,84 @@ async function planPdf(p, clientLabel){
     font(SANSB,8.5,teal); doc.text(pdfSafe(`${PRACTICE.name}   |   ${PRACTICE.phone}   |   ${PRACTICE.email}   |   ${PRACTICE.site}`), W/2, fy+15, {align:"center"});
     font(SANS,7.5,muted); doc.text("Homeopathy and flower essences are complementary approaches and do not replace care from your medical provider.", W/2, fy+28, {align:"center"});
     doc.text(`Page ${i} of ${n}`, W-M, fy+40, {align:"right"});
+  }
+  return doc.output("blob");
+}
+
+function saveBlob(blob, fname){ const u=URL.createObjectURL(blob); const l=document.createElement("a"); l.href=u; l.download=String(fname).replace(/[\/:*?"<>|]/g,""); document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
+function fmtAnswer(f, v){
+  if(v==null || v==="" || (Array.isArray(v)&&!v.length)) return "";
+  if(f.type==="check") return v ? "Yes, agreed" : "";
+  if(f.type==="scale") return `${v} out of 10`;
+  if(Array.isArray(v)) return v.join(", ");
+  if(f.type==="date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return fmtDate(v);
+  return String(v);
+}
+async function formPdf(def, vals, {kind, who, date, photo}){
+  const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=50, CW=W-2*M, FOOT=64;
+  const aqua=[117,227,235], teal=[11,120,145], deep=[19,66,74], ink=[33,47,51], muted=[98,118,123], line=[203,231,234], hdr=[15,51,58], hdr2=[22,86,96];
+  const SANS=["helvetica","normal"], SANSB=["helvetica","bold"], SERIF=["times","bold"], SERIFI=["times","italic"];
+  const font=(st,sz,c)=>{ doc.setFont(st[0],st[1]); doc.setFontSize(sz); doc.setTextColor(...c); };
+  const wrap=(t,w,st,sz)=>{ doc.setFont(st[0],st[1]); doc.setFontSize(sz); return doc.splitTextToSize(pdfSafe(t), w); };
+  let y=0;
+  const header=first=>{
+    if(first){
+      doc.setFillColor(...aqua); doc.rect(0,0,W,96,"F"); doc.setFillColor(...teal); doc.rect(0,96,W,3,"F");
+      font(SERIF,23,hdr); doc.text("Wellness From Within", M, 46);
+      font(SERIFI,12,hdr2); doc.text(pdfSafe(PRACTICE.name), M, 66);
+      font(SANSB,8.5,hdr2); doc.setCharSpace(1.6); doc.text(pdfSafe(kind.toUpperCase()), W-M, 38, {align:"right"}); doc.setCharSpace(0);
+      font(SANSB,13,hdr); doc.text(pdfSafe(who||""), W-M, 56, {align:"right"});
+      font(SANS,9.5,hdr2); doc.text(pdfSafe(date?`Submitted ${fmtDate(date)}`:""), W-M, 71, {align:"right"});
+      y=126;
+    } else {
+      doc.setFillColor(...aqua); doc.rect(0,0,W,6,"F");
+      font(SERIF,11,teal); doc.text("Wellness From Within", M, 34);
+      font(SANS,9,muted); doc.text(pdfSafe([who, kind].filter(Boolean).join("  |  ")), W-M, 34, {align:"right"});
+      doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(M,44,W-M,44); y=66;
+    }
+  };
+  const room=h=>{ if(y+h>H-FOOT){ doc.addPage(); header(false); } };
+  header(true);
+  const sections=def.map(s=>({sec:s.sec, rows:s.fields.map(f=>({f, a:fmtAnswer(f, vals[f.id])})).filter(r=>r.a)})).filter(s=>s.rows.length);
+  const drawSection=(s, x, w)=>{
+    room(46);
+    font(SERIF,13.5,deep); doc.text(pdfSafe(s.sec), x, y); y+=7;
+    doc.setDrawColor(...aqua); doc.setLineWidth(1.4); doc.line(x,y,x+w,y); y+=16;
+    const LW=Math.round(w*0.36), VX=x+LW+12, VW=w-LW-12;
+    s.rows.forEach(({f,a})=>{
+      const stacked = f.type==="textarea" || f.type==="check" || f.type==="multi" || f.label.length>70;
+      const lab=wrap(f.label, stacked?w:LW, SANSB, 8.8);
+      const val=wrap(a, stacked?w:VW, SANS, 10.5);
+      const h = stacked ? lab.length*11.5+4+val.length*14 : Math.max(lab.length*11.5, val.length*14);
+      room(h+12);
+      font(SANSB,8.8,muted); lab.forEach((l,i)=>doc.text(l, x, y+i*11.5));
+      font(SANS,10.5,ink);
+      if(stacked){ const vy=y+lab.length*11.5+4; val.forEach((l,i)=>doc.text(l, x, vy+i*14+1)); }
+      else val.forEach((l,i)=>doc.text(l, VX, y+i*14+1));
+      y+=h+4; doc.setDrawColor(...line); doc.setLineWidth(0.5); doc.line(x,y,x+w,y); y+=12;
+    });
+    y+=8;
+  };
+  let rest=sections;
+  if(photo){
+    const PW=150; let ph=PW;
+    try{ const pr=doc.getImageProperties(photo); ph=Math.min(200, PW*pr.height/pr.width); }catch(e){}
+    const top=y;
+    doc.setDrawColor(...line); doc.setLineWidth(0.9); doc.roundedRect(M-1,top-1,PW+2,ph+2,4,4,"S");
+    try{ doc.addImage(photo, "JPEG", M, top, PW, ph); }catch(e){}
+    font(SANS,8,muted); doc.text("Client photo", M, top+ph+13);
+    if(sections.length){ const save=y; drawSection(sections[0], M+PW+24, CW-PW-24); rest=sections.slice(1); y=Math.max(y, top+ph+30); }
+    else y=top+ph+30;
+  }
+  rest.forEach(s=>drawSection(s, M, CW));
+  if(!sections.length){ font(SANS,11,muted); doc.text("No answers saved yet.", M, y); }
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){
+    doc.setPage(i); const fy=H-FOOT+18;
+    doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(M,fy,W-M,fy);
+    font(SANSB,8.5,teal); doc.text(pdfSafe(`${PRACTICE.name}   |   ${PRACTICE.phone}   |   ${PRACTICE.email}   |   ${PRACTICE.site}`), W/2, fy+15, {align:"center"});
+    font(SANS,7.5,muted); doc.text("Confidential client information", M, fy+30); doc.text(`Page ${i} of ${n}`, W-M, fy+30, {align:"right"});
   }
   return doc.output("blob");
 }
@@ -1980,6 +2069,8 @@ function renderClient(){
   bindPhoto("cp", () => S.me);
   $("#app").onclick = async e => {
     const fo=e.target.closest("[data-fopen]"); if(fo){ const f=(S.myFiles||[]).find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
+    const cp=e.target.closest("[data-cplanpdf]"); if(cp){ const p=(S.myPlans||[]).find(x=>x.id===cp.dataset.cplanpdf); if(!p) return; const nm=S.myRec?.intake?.fullName||S.myRec?.qest?.fullName||S.myRec?.followup?.fullName||S.myRec?.name||"";
+      cp.disabled=true; cp.textContent="Making PDF…"; try{ saveBlob(await planPdf(p, nm), `Treatment plan${nm?" - "+nm:""} - ${p.date||today()}.pdf`); }catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); } cp.disabled=false; cp.textContent="Download PDF"; return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); return; }
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
@@ -2011,7 +2102,7 @@ function renderClient(){
 }
 function planCard(p){
   return `<article class="sheet planview">
-    <div><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div>
+    <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div><button type="button" data-cplanpdf="${esc(p.id||"")}">Download PDF</button></div>
     ${(p.bottles||[]).map((b,i)=>`<div class="bottle">
       <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
       ${b.remedies?`<ul class="rxlist">${remedyLines(b.remedies).map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
