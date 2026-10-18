@@ -1,0 +1,1752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Wellness From Within Portal</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a quiet apothecary ledger. Sticky header, then a two-pane workspace (list | record) that stacks on phones. */
+:root{
+  --bg:#EEF4F3; --surface:#FFFFFF; --sunk:#E3EDEB; --ink:#12302F; --muted:#4D6967; --line:#CFDFDC;
+  --accent:#0E7470; --accent-ink:#FFFFFF; --soft:#D4ECE8; --amber:#9A5B00; --amber-soft:#FBEBD0; --ok:#1F6B3A; --ok-soft:#DCEFE1; --danger:#A3312B;
+  --f-display:"Young Serif", Georgia, "Times New Roman", serif;
+  --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C1A1A; --surface:#132525; --sunk:#0F2020; --ink:#E2EFED; --muted:#93AEAB; --line:#244140;
+  --accent:#4CC3B9; --accent-ink:#06201E; --soft:#17393A; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C1A1A; --surface:#132525; --sunk:#0F2020; --ink:#E2EFED; --muted:#93AEAB; --line:#244140;
+  --accent:#4CC3B9; --accent-ink:#06201E; --soft:#17393A; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1240px;margin:0 auto}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:12px}
+.brand{display:flex;flex-direction:column;line-height:1.1;margin-right:auto}
+.brand b{font-family:var(--f-display);font-weight:400;font-size:20px;letter-spacing:.2px}
+.brand span{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+nav.tabs button{background:none;border:0;padding:8px 12px;border-radius:999px;color:var(--muted);font:600 14px var(--f-body);cursor:pointer}
+nav.tabs button[aria-current="true"]{background:var(--soft);color:var(--ink)}
+main.wrap{padding-block:20px 48px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0}
+h1{font-size:26px} h2{font-size:21px} h3{font-size:17px}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.mono{font-family:var(--f-mono);font-size:13px}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grow{flex:1 1 auto;min-width:0}
+button,.btn{font:600 14px var(--f-body);border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.ghost{border-color:transparent;background:none;color:var(--accent);padding:6px 8px}
+button.danger{color:var(--danger)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,textarea,select{font:15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{min-height:72px;resize:vertical}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field>span{font-size:13px;font-weight:600;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)} .chip.warn{background:var(--amber-soft);color:var(--amber)} .chip.acc{background:var(--soft);color:var(--accent)}
+.panes{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:20px;align-items:start}
+.panes>*{min-width:0}
+@media (max-width:820px){.panes{grid-template-columns:1fr}.panes.has-sel>.list-pane{display:none}.panes:not(.has-sel)>.detail-pane{display:none}}
+@media (min-width:821px){.back-btn{display:none}}
+.list-pane{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.list-pane .head{padding:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.list{max-height:68vh;overflow:auto}
+.item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:11px 12px;font-weight:400}
+.item:hover{background:var(--sunk)} .item[aria-current="true"]{background:var(--soft)}
+.item b{display:block;font-weight:600}
+.item .meta{display:flex;gap:6px;align-items:center;margin-top:3px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.subtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 16px;overflow-x:auto}
+.subtabs button{border:0;background:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 12px;color:var(--muted)}
+.subtabs button[aria-current="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+fieldset{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
+legend{font-family:var(--f-display);font-size:17px;padding:0;margin-bottom:8px}
+.formsec{padding-block:14px;border-top:1px solid var(--line)} .formsec:first-child{border-top:0;padding-top:0}
+.scale{display:flex;gap:4px;flex-wrap:wrap}
+.scale label{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-weight:600;font-variant-numeric:tabular-nums}
+.scale input{position:absolute;opacity:0;width:1px;height:1px}
+.scale input:checked+span{color:var(--accent-ink)} .scale label:has(input:checked){background:var(--accent);border-color:var(--accent)}
+.scale label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.choices{display:flex;flex-wrap:wrap;gap:6px}
+.choices label{display:inline-flex;align-items:center;padding:6px 12px;border:1px solid var(--line);border-radius:999px;cursor:pointer;font-size:14px;background:var(--surface)}
+.choices input{position:absolute;opacity:0;width:1px;height:1px}
+.choices label:has(input:checked){background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.choices label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.req{color:var(--danger);font-weight:600}
+.photo{width:132px;height:132px;object-fit:cover;border-radius:var(--r);border:1px solid var(--line);background:var(--sunk)}
+.empty-photo{display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;color:var(--muted)}
+.seg{display:flex;gap:4px;padding:4px;background:var(--sunk);border-radius:10px;flex-wrap:wrap}
+.seg button{border:0;background:none;flex:1 1 180px}
+.seg button[aria-current="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.hist{border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--bg)}
+.hist summary{cursor:pointer;font-weight:600}
+.check{display:flex;gap:10px;align-items:flex-start} .check input{width:auto;margin-top:4px}
+.bottle{border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.bottle-head{display:flex;gap:10px;align-items:center}
+.bottle-num{font-family:var(--f-mono);font-size:12px;color:var(--accent);background:var(--soft);border-radius:6px;padding:2px 7px;white-space:nowrap}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);padding:10px 12px;background:var(--sunk);border-radius:8px}
+.legend code{font-family:var(--f-mono);color:var(--ink);font-weight:500}
+.proto{display:flex;flex-direction:column;gap:10px}
+.pline{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.pline .n{font-family:var(--f-mono);font-size:12px;color:var(--accent);padding-top:2px}
+.pline .x{font-family:var(--f-mono);font-size:13.5px;line-height:1.55;min-width:0;overflow-wrap:anywhere}
+.ptext{font-size:14px;color:var(--ink);overflow-wrap:anywhere}
+.ptext.rx{font-family:var(--f-mono);font-size:13.5px}
+mark{background:var(--amber-soft);color:inherit;border-radius:3px;padding:0 1px}
+.target{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:8px;background:var(--soft);font-size:13.5px}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.notice{padding:12px 14px;border-radius:8px;background:var(--amber-soft);color:var(--ink);font-size:14px}
+.notice.ok{background:var(--ok-soft)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:20;max-width:calc(100% - 32px)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:var(--sunk);position:sticky;top:0}
+td.code{font-family:var(--f-mono);white-space:nowrap;color:var(--accent)}
+details.poly{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:10px 14px}
+details.poly summary{cursor:pointer;font-weight:600}
+.planview{display:flex;flex-direction:column;gap:14px}
+.planview .rx{font-family:var(--f-mono);font-size:14px}
+.freq{font-weight:600}
+.contact{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:13.5px}
+.contact span{user-select:all}
+.rep-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,420px);gap:20px;align-items:start}
+.rep-layout>*{min-width:0}
+@media (max-width:980px){.rep-layout{grid-template-columns:1fr}}
+.case-pane{position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px)}
+@media (max-width:980px){.case-pane{position:static}}
+.case-sheet{padding:16px}
+.rubrics{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.rubric{border-bottom:1px solid var(--line)}
+.rubric:last-child{border-bottom:0}
+.rubric-row{display:flex;gap:8px;align-items:center;padding:4px 8px 4px 4px}
+.rubric-path{flex:1 1 auto;min-width:0;text-align:left;border:0;background:none;font-weight:400;padding:7px 8px;border-radius:6px;overflow-wrap:anywhere}
+.rubric-path:hover{background:var(--sunk)}
+.rubric-path b{font-weight:600;color:var(--accent)}
+.ca-out h3{margin:8px 0 0;font-size:17px}
+.ca-list{margin:0;padding-left:20px;line-height:1.6}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px}
+.ca-table{width:100%;border-collapse:collapse;font-size:14px}
+.ca-table th,.ca-table td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid var(--line)}
+.ca-table tr:last-child td{border-bottom:0}
+.ca-table th{background:var(--sunk);font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.ca-grid td,.ca-grid th{text-align:center;white-space:nowrap}
+.ca-grid td:first-child,.ca-grid th:first-child{text-align:left}
+.ca-grid td.g3{font-weight:800;color:var(--accent)} .ca-grid td.g2{font-style:italic;font-weight:600} .ca-grid td.g0{color:var(--muted)}
+.ca-q{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.rems{padding:4px 12px 12px;display:flex;flex-wrap:wrap;gap:4px 8px;line-height:1.4}
+.rem{border:0;background:none;padding:0 2px;font:13.5px var(--f-mono);color:var(--muted);cursor:pointer;border-radius:4px}
+.rem:hover{background:var(--soft)}
+.rem.g3{color:var(--ink);font-weight:700;text-transform:uppercase}
+.rem.g2{color:var(--ink);font-style:italic;font-weight:500}
+.case-rubrics{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.case-rubrics li{display:flex;gap:6px;align-items:center}
+.rep-table{font-size:13px}
+.rep-table th,.rep-table td{padding:5px 8px}
+.rep-table .num{text-align:center;font-variant-numeric:tabular-nums}
+.g-cell.g3{background:var(--soft);font-weight:700}
+.g-cell.g2{background:var(--sunk);font-weight:600}
+.linkish{border:0;background:none;padding:0;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;text-align:left}
+.linkish:hover{text-decoration:underline}
+.mmsec{border-top:1px solid var(--line);padding-top:10px}
+.mmsec summary{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--f-display);font-size:17px;list-style:none}
+.mmsec summary::-webkit-details-marker{display:none}
+.mmsec summary::before{content:"▸";color:var(--accent);font-size:13px;transition:transform .15s}
+.mmsec[open] summary::before{transform:rotate(90deg)}
+.mmbody{padding:8px 0 4px}
+.mmtext{font-size:14.5px;line-height:1.6;overflow-wrap:anywhere}
+.mmtext.pre{white-space:pre-wrap}
+.note-para{padding-left:12px;border-left:2px solid var(--line)}
+.strong-list{margin:0;padding-left:18px;columns:2 280px;column-gap:24px;line-height:1.6}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.copybox{width:100%;min-height:160px;font-family:var(--f-mono);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+header.top .wrap{position:relative}
+#signout{position:absolute;top:10px;right:12px;font-size:13px;padding:4px 10px}
+.signin{max-width:520px;margin:0 auto}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <div class="brand"><b>Wellness From Within</b><span id="sub">Client Portal</span></div>
+  <nav class="tabs" id="tabs" aria-label="Sections" hidden></nav>
+</div></header>
+<main class="wrap" id="app">
+  <div class="sheet stack" id="boot">
+    <h1>Welcome</h1>
+    <p class="muted">Opening your portal…</p>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today = () => new Date().toISOString().slice(0,10);
+const fmtDate = d => { if(!d) return ""; const x = new Date(d.length===10 ? d+"T12:00:00" : d); return isNaN(x) ? d : x.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}); };
+let toastT; function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2600); }
+const rid = p => p + Math.random().toString(36).slice(2,10);
+function store(k,v){ try{ v===undefined ? localStorage.removeItem(k) : localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function recall(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } }
+
+const PRACTICE = { name:"Dawn Spain, PHom", phone:"252-626-4104", email:"wellnessfromwithin@icloud.com", site:"www.dawnspain.com" };
+const DEFAULT_INSTRUCTIONS = "Wet dose: put 3 pellets in 2 oz of water in a spray or dropper bottle. One dose = 5 sprays or ½ dropper. Shake or tap the bottle before each dose. Remedies that share the same frequency are combined into one bottle per issue.";
+
+/* Frequency shorthand used in the protocols, in plain words for clients */
+function plainFreq(f){
+  const s = String(f||"").trim(); if(!s) return "";
+  const t = s.replace(/\s+/g,"");
+  const words = {1:"once",2:"twice",3:"3 times",4:"4 times",5:"5 times",6:"6 times"};
+  let m;
+  if((m=t.match(/^(\d)D$/i))) return (words[m[1]]||m[1]+" times")+" a day";
+  if(/^eOD$/i.test(t)) return "every other day";
+  if(/^eOtherNight$/i.test(t)) return "every other night";
+  if((m=t.match(/^e(\d+)H$/i))) return m[1]==="1" ? "every hour" : `every ${m[1]} hours`;
+  if((m=t.match(/^e(\d+)D$/i))) return `every ${m[1]} days`;
+  if((m=t.match(/^e(\d+)(min|m)$/i))) return `every ${m[1]} minutes`;
+  if((m=t.match(/^e(\d+)W$/i))) return m[1]==="1" ? "every week" : `every ${m[1]} weeks`;
+  if(/^1W$/i.test(t)) return "once a week";
+  if(/^SOS$/i.test(t)) return "as needed";
+  return "";
+}
+const FREQS = ["1D","2D","3D","4D","eOD","e3D","1W","e10D","e14D","e1H","e2H","e3H","SOS"];
+
+/* ---------- intake form definition ---------- */
+const INTAKE = [
+  {sec:"About you", note:"All sessions are remote, so Dawn needs to know how and when to reach you.", fields:[
+    {id:"fullName",label:"Full name",type:"text",req:true},{id:"preferredName",label:"What you like to be called",type:"text"},
+    {id:"dob",label:"Date of birth",type:"date"},
+    {id:"phone",label:"Phone",type:"text"},{id:"email",label:"Email",type:"text"},
+    {id:"country",label:"Country",type:"text"},
+    {id:"street",label:"Street address",type:"text",wide:true},
+    {id:"city",label:"City",type:"text"},{id:"state",label:"State",type:"text"},{id:"zip",label:"ZIP code",type:"text"},
+    {id:"contactPref",label:"Best way to reach you",type:"choice",options:["Text","Phone call","Email"]},
+    {id:"timeZone",label:"Your time zone",type:"choice",options:["Eastern","Central","Mountain","Pacific","Other"]},
+    {id:"sessionTimes",label:"Best days and times for your remote sessions",type:"text"},
+    {id:"referral",label:"How did you hear about Wellness From Within?",type:"text",wide:true}]},
+  {sec:"What brings you in", note:"Describe it in your own words. Small details help Dawn choose your remedies.", fields:[
+    {id:"concern1",label:"Your main concern",type:"textarea",wide:true,hint:"What it feels like, where it is, and how it affects your day"},
+    {id:"concern1Since",label:"When did it start? Did anything happen around that time?",type:"textarea",wide:true},
+    {id:"concern1Mod",label:"What makes it better or worse?",type:"textarea",wide:true,hint:"Time of day, heat or cold, movement or rest, food, weather, company"},
+    {id:"concern1Sev",label:"How much it affects you (1 = a little, 10 = a lot)",type:"scale"},
+    {id:"concern2",label:"Second concern",type:"textarea",wide:true},
+    {id:"concern3",label:"Anything else you'd like help with",type:"textarea",wide:true},
+    {id:"goals",label:"What would feeling well look like for you?",type:"textarea",wide:true}]},
+  {sec:"Health history", gentle:true, note:"Everything from here on is optional. Share as much or as little as you like. A few words is plenty, and there's no need to list every medication, dose or doctor. Anything you skip, Dawn can ask about during your session.", fields:[
+    {id:"diagnoses",label:"Diagnosed conditions",type:"textarea"},{id:"surgeries",label:"Surgeries, injuries, hospital stays",type:"textarea"},
+    {id:"meds",label:"Prescription medications",type:"textarea"},{id:"supplements",label:"Supplements, herbs, essential oils and remedies you use",type:"textarea"},
+    {id:"allergies",label:"Allergies and sensitivities",type:"textarea"},{id:"vaccines",label:"Reactions to vaccines, medications or anesthesia",type:"textarea"},
+    {id:"childhood",label:"Childhood illnesses and anything you were never quite well after",type:"textarea"},
+    {id:"family",label:"Family health history",type:"textarea",hint:"Parents, grandparents, siblings"},
+    {id:"providers",label:"Other doctors or practitioners you see",type:"textarea",wide:true}]},
+  {sec:"Your body day to day", note:"These everyday details matter in homeopathy, even if they seem unrelated.", fields:[
+    {id:"temp",label:"Do you run warm or cold?",type:"choice",options:["Usually warm","Usually cold","It changes","Not sure"]},
+    {id:"thirst",label:"Thirst",type:"choice",options:["Very thirsty","Average","Rarely thirsty"]},
+    {id:"drinkTemp",label:"Drinks you prefer",type:"choice",options:["Ice cold","Room temperature","Warm or hot","No preference"]},
+    {id:"cravings",label:"Foods you crave",type:"textarea",hint:"Salt, sweets, sour, spicy, fat, eggs, milk…"},
+    {id:"aversions",label:"Foods you dislike or that disagree with you",type:"textarea"},
+    {id:"weather",label:"How weather affects you",type:"textarea",hint:"Heat, cold, damp, storms, wind, being by the sea"},
+    {id:"sweat",label:"Sweating",type:"textarea",hint:"How much, where, when, any odor"},
+    {id:"sleep",label:"Sleep",type:"textarea",hint:"Hours, waking times, falling or staying asleep, position you sleep in"},
+    {id:"dreams",label:"Dreams you remember or that repeat",type:"textarea"},
+    {id:"energy",label:"Energy: best and worst times of day",type:"textarea"},
+    {id:"digestion",label:"Digestion and bowels",type:"textarea",hint:"Gas, bloating, reflux, constipation, loose stool"},
+    {id:"skin",label:"Skin, hair and nails",type:"textarea"},
+    {id:"hormonal",label:"Menstrual, hormonal or menopause notes (if relevant)",type:"textarea",wide:true}]},
+  {sec:"Mind and emotions", fields:[
+    {id:"mood",label:"Your mood lately and how you handle stress",type:"textarea",wide:true},
+    {id:"stressLevel",label:"Stress level right now (1–10)",type:"scale"},
+    {id:"whenUnwell",label:"When you're unwell or upset, do you want company or to be left alone?",type:"choice",options:["Want company and comfort","Want to be left alone","Depends"]},
+    {id:"fears",label:"Fears or worries that come up often",type:"textarea"},
+    {id:"crying",label:"Do you cry easily? Is it easy or hard in front of others?",type:"textarea"},
+    {id:"events",label:"Losses, shocks or big life changes, recent or long ago, that still affect you",type:"textarea",wide:true}]},
+  {sec:"Lifestyle", fields:[
+    {id:"diet",label:"A typical day of eating",type:"textarea"},{id:"water",label:"Water, coffee, tea, alcohol, soda",type:"textarea"},
+    {id:"exercise",label:"Movement and exercise",type:"textarea"},{id:"exposures",label:"Exposures at home or work",type:"textarea",hint:"Mold, chemicals, pesticides, smoke, screens"}]},
+  {sec:"Remedies and sessions", fields:[
+    {id:"homeopathyBefore",label:"Used homeopathy, flower essences or bioenergetic testing before? What helped?",type:"textarea",wide:true},
+    {id:"anythingElse",label:"Anything else you'd like Dawn to know",type:"textarea",wide:true}]},
+  {sec:"Agreement", note:"Please read and check each one before sending.", fields:[
+    {id:"consent",jot:"Complementary care agreement",label:"I understand homeopathy and flower essences are complementary approaches. They do not diagnose or treat disease and do not replace care from my medical provider. I will keep my medical provider informed and will not stop prescribed medication without talking to them.",type:"check",wide:true,req:true},
+    {id:"qest4Consent",jot:"Qest4 agreement",label:"I understand Qest4 bioenergetic testing is a wellness assessment, not a medical diagnostic test.",type:"check",wide:true,req:true},
+    {id:"ordering",jot:"Remedy ordering agreement",label:"I understand Dawn recommends remedies and I order them myself.",type:"check",wide:true,req:true},
+    {id:"signature",label:"Type your full name as your signature",type:"text",req:true},{id:"sigDate",label:"Date",type:"date",req:true}]}
+];
+
+const AREAS = ["Sleep","Energy","Hormones","Skin","Stress","Digestion","Pain","Detox","Anxiety","Immune","Headaches","Weight","Mood","Allergies","Focus / brain fog","Emotional support"];
+const QEST = [
+  {sec:"About you", fields:[
+    {id:"fullName",label:"Full name",type:"text",req:true},{id:"dob",label:"Date of birth",type:"date"},
+    {id:"email",label:"Email",type:"text"},{id:"phone",label:"Phone",type:"text"},
+    {id:"firstScan",label:"First scan with Dawn?",type:"choice",options:["Yes, this is my first scan","No, I've had a scan before"]},
+    {id:"country",label:"Country",type:"text"},
+    {id:"street",label:"Street address",type:"text",wide:true},
+    {id:"city",label:"City",type:"text"},{id:"state",label:"State",type:"text"},{id:"zip",label:"ZIP code",type:"text"}]},
+  {sec:"What would you most like help with?", note:"Most important first.", fields:[
+    {id:"help1",jot:"Most important thing you would like help with",label:"1.",type:"textarea",wide:true},{id:"help2",jot:"Second thing you would like help with",label:"2.",type:"textarea",wide:true},{id:"help3",jot:"Third thing you would like help with",label:"3.",type:"textarea",wide:true}]},
+  {sec:"Areas where you'd like support", note:"Choose any that apply.", fields:[
+    {id:"areas",jot:"Areas where you would like support",label:"Areas of support",type:"multi",options:AREAS},
+    {id:"areasOther",jot:"Other areas of support",label:"Other",type:"text",wide:true}]},
+  {sec:"A few more things", fields:[
+    {id:"anythingElse",label:"Anything else you would like to share?",type:"textarea"},
+    {id:"sinceLast",label:"Returning clients: anything new since your last scan?",type:"textarea"}]},
+  {sec:"Acknowledgement", fields:[
+    {id:"ack",jot:"Wellness services acknowledgement",label:"Qest4 bioenergetic testing and homeopathy are wellness services. They do not diagnose, treat, or cure disease and are not a substitute for care from a licensed medical provider.",type:"check",wide:true,req:true},
+    {id:"signature",label:"Signature (type your full name)",type:"text",req:true},{id:"sigDate",label:"Date",type:"date",req:true}]}
+];
+
+/* Photo: resized in the browser and kept in the client's own private record */
+function resizePhoto(file){
+  return new Promise((res, rej) => {
+    if(!file || !/^image\//.test(file.type)) return rej(new Error("type"));
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const max = 900, k = Math.min(1, max/Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      let q = .85, out = c.toDataURL("image/jpeg", q);
+      while(out.length > 220000 && q > .4){ q -= .1; out = c.toDataURL("image/jpeg", q); }
+      res(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("read")); };
+    img.src = url;
+  });
+}
+function photoBlock(pre, dataUrl, editable, req){
+  return `<div class="formsec stack"><h3>Your photo${req?' <b class="req" aria-hidden="true">*</b>':""}</h3>
+    <p class="small muted">A recent photo of yourself is needed for your Qest4 scan. A clear photo of your face works best.</p>
+    <div class="row" style="align-items:flex-start">
+      ${dataUrl ? `<img src="${dataUrl}" alt="Client photo" class="photo">` : `<div class="photo empty-photo" aria-hidden="true">No photo yet</div>`}
+      ${editable ? `<label class="btn" for="${pre}-photo" style="cursor:pointer">${dataUrl?"Replace photo":"Add photo"}</label><input type="file" id="${pre}-photo" accept="image/*" class="sr" data-photo="${pre}">` : ""}
+    </div></div>`;
+}
+
+/* ---------- state ---------- */
+const S = {
+  user:null, db:null, me:null, prac:false, tab:"clients",
+  clients:{}, clientsLoaded:false, sel:null, sub:"intake",
+  plans:[], plansFor:null, plansUnsub:null, notes:"", notesFor:null, notesUnsub:null,
+  editPlan:null, // {clientId, id, data}
+  lib:[], libLoaded:false, custom:[], combos:[], poly:[], settings:{},
+  q:"", src:"all", libSel:null, cq:"", profiles:{}, clientWrite:null
+};
+
+/* ---------- Supabase data layer: a small document store on one "docs" table ---------- */
+const SB = window.supabase.createClient(WFW_CONFIG.supabaseUrl, WFW_CONFIG.supabaseKey, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "implicit" } });
+const parentOf = p => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+const idOf = p => p.slice(p.lastIndexOf("/") + 1);
+const genId = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "").slice(0, 20) : Math.random().toString(36).slice(2) + Date.now().toString(36));
+function sbErr(error){ const e = new Error(error?.message || "database error"); e.code = /row-level security|permission|violates/i.test(error?.message || "") ? "invalid_argument" : (error?.code || "error"); return e; }
+function docSnap(path, row){ return { id: idOf(path), exists: !!row, data: () => row ? row.data : undefined }; }
+
+/* live listeners: one realtime channel, refetch whatever a change touches */
+const LIVE = { docs: new Map(), cols: new Map(), channel: null, timer: null, dirty: new Set() };
+function liveStart(){
+  if(LIVE.channel) return;
+  LIVE.channel = SB.channel("docs-live").on("postgres_changes", { event: "*", schema: "public", table: "docs" }, ev => {
+    const p = (ev.new && ev.new.path) || (ev.old && ev.old.path); if(!p) return;
+    LIVE.dirty.add(p); clearTimeout(LIVE.timer); LIVE.timer = setTimeout(liveFlush, 120);
+  }).subscribe();
+}
+function liveFlush(){
+  const paths = [...LIVE.dirty]; LIVE.dirty.clear();
+  const docs = new Set(), cols = new Set();
+  paths.forEach(p => { if(LIVE.docs.has(p)) docs.add(p); const par = parentOf(p); if(LIVE.cols.has(par)) cols.add(par); });
+  docs.forEach(p => fetchDoc(p).then(s => LIVE.docs.get(p)?.forEach(l => l.cb(s))).catch(e => LIVE.docs.get(p)?.forEach(l => l.err && l.err(e))));
+  cols.forEach(c => fetchCol(c).then(s => LIVE.cols.get(c)?.forEach(l => l.cb(s))).catch(e => LIVE.cols.get(c)?.forEach(l => l.err && l.err(e))));
+}
+async function fetchDoc(path){
+  const { data, error } = await SB.from("docs").select("data").eq("path", path).maybeSingle();
+  if(error) throw sbErr(error); return docSnap(path, data);
+}
+async function fetchCol(col){
+  const out = []; let from = 0;
+  for(;;){ const { data, error } = await SB.from("docs").select("path,data").eq("parent", col).range(from, from + 999); if(error) throw sbErr(error);
+    out.push(...data); if(data.length < 1000) break; from += 1000; }
+  return { docs: out.map(r => ({ id: idOf(r.path), data: () => r.data })), size: out.length };
+}
+function listen(map, key, fetcher, cb, err){
+  liveStart(); const l = { cb, err }; if(!map.has(key)) map.set(key, new Set()); map.get(key).add(l);
+  fetcher(key).then(cb).catch(e => err && err(e));
+  return () => map.get(key)?.delete(l);
+}
+function makeDoc(path){
+  return {
+    id: idOf(path), path,
+    get: () => fetchDoc(path),
+    set: async (data) => { const { error } = await SB.from("docs").upsert({ path, parent: parentOf(path), id: idOf(path), data, updated_at: new Date().toISOString() }); if(error) throw sbErr(error); },
+    update: async (data) => { const { error } = await SB.rpc("doc_merge", { p_path: path, p_data: data }); if(error) throw sbErr(error); },
+    delete: async () => { const { error } = await SB.from("docs").delete().eq("path", path); if(error) throw sbErr(error); },
+    onSnapshot: (cb, err) => listen(LIVE.docs, path, fetchDoc, cb, err),
+  };
+}
+const DB = {
+  doc: path => makeDoc(path),
+  collection: col => ({ doc: id => makeDoc(col + "/" + (id || genId())), get: () => fetchCol(col), onSnapshot: (cb, err) => listen(LIVE.cols, col, fetchCol, cb, err) }),
+};
+
+/* sign-in screen (email link, no password) */
+function renderSignIn(note){
+  $("#tabs").hidden = true;
+  $("#app").innerHTML = `<div class="sheet stack signin">
+    <h1>Welcome</h1>
+    <p class="muted">Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and remedy plans stay together.</p>
+    <label class="field"><span>Email</span><input id="si-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></label>
+    <div class="row"><button type="button" class="primary" id="si-go">Email me a sign-in link</button></div>
+    <div id="si-note">${note || ""}</div>
+    ${contactBlock()}
+  </div>`;
+  const go = async () => {
+    const email = $("#si-email").value.trim(); if(!/^\S+@\S+\.\S+$/.test(email)){ $("#si-note").innerHTML = `<p class="notice warn">Please enter a valid email address.</p>`; return; }
+    const b = $("#si-go"); b.disabled = true; b.textContent = "Sending…";
+    const { error } = await SB.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+    b.disabled = false; b.textContent = "Email me a sign-in link";
+    $("#si-note").innerHTML = error
+      ? `<p class="notice warn">${/rate|seconds/i.test(error.message) ? "Please wait a minute before asking for another link." : "That didn't send. Check the address and try again."}</p>`
+      : `<div class="notice ok"><b>Check your email.</b> We sent a sign-in link to ${esc(email)}. Open it on this device. It can take a minute to arrive; check spam if you don't see it.</div>`;
+  };
+  $("#si-go").onclick = go; $("#si-email").onkeydown = e => { if(e.key === "Enter") go(); };
+}
+function addSignOut(){
+  const b = $("#signout"); if(b) return;
+  const btn = document.createElement("button"); btn.id = "signout"; btn.type = "button"; btn.className = "ghost small"; btn.textContent = "Sign out";
+  btn.onclick = async () => { await SB.auth.signOut(); location.reload(); };
+  $("header.top .wrap").appendChild(btn);
+}
+
+/* ---------- boot ---------- */
+(async function boot(){
+  if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
+  const hashErr = /error_code=otp_expired|error=access_denied/.test(location.hash);
+  const { data:{ session } } = await SB.auth.getSession();
+  if(!session){ renderSignIn(hashErr?`<p class="notice warn">That sign-in link has expired or was already used. Enter your email for a new one.</p>`:""); SB.auth.onAuthStateChange((ev,sess)=>{ if(sess) location.replace(location.pathname); }); return; }
+  if(/access_token|refresh_token/.test(location.hash)) history.replaceState(null,"",location.pathname);
+  S.db = DB; S.me = session.user.id; S.myEmail = session.user.email || "";
+  S.user = { id: async()=>S.me, profiles: async()=>({}) };
+  const { data:isAdm } = await SB.rpc("is_admin"); S.prac = !!isAdm;
+  addSignOut();
+  if(S.prac) startPractitioner();
+  else { try{ await DB.doc("clients/"+S.me).update({email:S.myEmail, lastSeen:new Date().toISOString()}); }catch(e){ console.warn(e); } startClient(); }
+})();
+
+/* =========================================================
+   PRACTITIONER
+   ========================================================= */
+function startPractitioner(){
+  $("#sub").textContent = "Practitioner workspace";
+  S.tab = recall("wfw.tab","clients");
+  renderTabs();
+  S.db.collection("clients").onSnapshot(snap => {
+    const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
+    resolveNames(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr")) render();
+  }, e => console.warn(e));
+  S.db.collection("custom").onSnapshot(snap => {
+    S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
+    if(S.tab==="library") render();
+  }, e => console.warn(e));
+  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.tab==="settings") render(); }, e=>console.warn(e));
+  loadLibrary();
+  render();
+}
+async function loadLibrary(){
+  try{
+    const SHEETS=["pain","mind","skin","allergies","detox","gut","fem","abx"];
+    const docs = await Promise.all(["lib/banerji","lib/additional","lib/combos",...SHEETS.map(k=>"lib/sheets-"+k)].map(p => S.db.doc(p).get().catch(()=>null)));
+    const [b,a,c] = docs; const ents = d => d && d.exists ? d.data().entries||[] : [];
+    S.lib = [...ents(b), ...ents(a), ...docs.slice(3).flatMap(ents)];
+    if(c.exists){ S.combos = c.data().combos||[]; S.poly = c.data().poly||[]; }
+  }catch(e){ console.warn(e); }
+  S.libLoaded = true; if(S.tab!=="clients" && S.tab!=="settings") render();
+}
+async function resolveNames(){
+  if(!S.user) return;
+  const ids = Object.keys(S.clients).filter(id => !id.startsWith("c-"));
+  if(!ids.length) return;
+  S.profiles = await S.user.profiles(ids);
+  if(S.tab==="clients") render();
+}
+function clientName(id){
+  const c = S.clients[id] || {};
+  return c.name || c.intake?.fullName || c.qest?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
+}
+function renderTabs(){
+  const t = $("#tabs"); t.hidden = false;
+  const tabs = [["clients","Clients"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
+  t.innerHTML = tabs.map(([k,l]) => `<button type="button" data-tab="${k}" aria-current="${S.tab===k}">${l}</button>`).join("");
+  t.onclick = e => { const b=e.target.closest("[data-tab]"); if(!b) return; S.tab=b.dataset.tab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); };
+}
+function render(){
+  if(!S.prac) return renderClient();
+  (({clients:renderClients, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
+}
+
+/* ---------- working-plan banner (shared by library & combos) ---------- */
+function targetBanner(){
+  if(!S.editPlan) return `<div class="target"><span>To add protocol lines to a remedy plan, open a client's plan first (Clients → Remedy plans).</span></div>`;
+  return `<div class="target"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")} <span class="chip acc">${S.editPlan.data.bottles.length} bottle${S.editPlan.data.bottles.length===1?"":"s"}</span></span>
+    <button type="button" class="ghost" data-act="goplan">Back to plan</button></div>`;
+}
+function addBottle(issue, remedies){
+  if(!S.editPlan){ toast("Open a client's plan first"); return; }
+  S.editPlan.data.bottles.push({issue:issue||"", remedies:remedies||"", freq:"", duration:"", notes:""});
+  S.editPlan.dirty = true;
+  toast("Added to plan. Save the plan to keep it.");
+  render();
+}
+
+/* ---------- Clients ---------- */
+function renderClients(){
+  const ids = Object.keys(S.clients).sort((a,b)=>clientName(a).localeCompare(clientName(b)));
+  const f = (S.clientFilter||"").toLowerCase();
+  const shown = ids.filter(id => !f || clientName(id).toLowerCase().includes(f));
+  const sel = S.sel && S.clients[S.sel] ? S.sel : null;
+  const list = !S.clientsLoaded ? `<div class="empty">Loading clients…</div>`
+    : !ids.length ? `<div class="empty"><p>No clients yet.</p><p class="small">Add one with “New client”, or share this portal with a client and their intake appears here when they save it.</p></div>`
+    : shown.map(id => { const c=S.clients[id]; const st=intakeChip(c);
+        return `<button type="button" class="item" data-client="${esc(id)}" aria-current="${id===sel}"><b>${esc(clientName(id))}</b><span class="meta">${st}${!id.startsWith("c-")?'<span class="chip acc">Portal account</span>':""}${c.nextVisit?`<span>Next: ${esc(fmtDate(c.nextVisit))}</span>`:""}</span></button>`; }).join("") || `<div class="empty">No match.</div>`;
+  $("#app").innerHTML = `
+  <div class="panes ${sel?"has-sel":""}">
+    <section class="list-pane" aria-label="Clients">
+      <div class="head">
+        <div class="row"><h2 class="grow">Clients</h2><button type="button" class="primary" data-act="newclient">New client</button></div>
+        ${S.jotNew?`<div class="stack" style="gap:6px;padding:8px;border:1px solid var(--line);border-radius:8px"><p class="small muted" style="margin:0">Paste a Jotform submission (intake or Qest4). A new client is made from it.</p><textarea id="jotnew-text" class="small" style="min-height:100px" placeholder="Paste the whole submission"></textarea><div class="row"><button type="button" class="primary" data-act="jotnew">Create client</button><button type="button" class="ghost" data-act="jotnewopen">Cancel</button></div><div id="jotnew-report"></div></div>`:""}
+        <input id="clientFilter" type="search" placeholder="Find a client" value="${esc(S.clientFilter||"")}" aria-label="Find a client">
+      </div>
+      <div class="list">${list}</div>
+    </section>
+    <section class="detail-pane">${sel ? clientDetail(sel) : `<div class="sheet empty"><h2>Pick a client</h2><p class="small">Their intake, private notes and remedy plans open here.</p></div>`}</section>
+  </div>`;
+  bindClients();
+}
+function intakeChip(c){
+  const out = [];
+  if(c.intakeStatus==="submitted") out.push(`<span class="chip ok">Intake in</span>`);
+  else if(c.intake && Object.keys(c.intake).length) out.push(`<span class="chip warn">Intake started</span>`);
+  if(c.qestStatus==="submitted") out.push(`<span class="chip ok">Qest4 form in</span>`);
+  else if(c.qest && Object.keys(c.qest).length) out.push(`<span class="chip warn">Qest4 form started</span>`);
+  return out.join("") || `<span class="chip">No forms yet</span>`;
+}
+function clientDetail(id){
+  const c = S.clients[id];
+  const subs = [["intake","Homeopathy intake"],["qest","Qest4 form"],["plans","Remedy plans"],["notes","Private notes"],["details","Details"]];
+  let body = "";
+  if(S.sub==="intake") body = intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
+  if(S.sub==="qest") body = photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
+  if(S.sub==="plans") body = plansPane(id);
+  if(S.sub==="notes") body = `<div class="stack"><p class="small muted">Only you can see these notes. Clients never see this tab.</p><textarea id="notesBox" style="min-height:260px" placeholder="Case notes, Qest4 session observations, follow-up ideas">${esc(S.notesFor===id?S.notes:"")}</textarea><div class="row"><button type="button" class="primary" data-act="savenotes">Save notes</button></div></div>`;
+  if(S.sub==="details") body = detailsPane(id, c);
+  ensureClientSubs(id);
+  return `<div class="sheet stack">
+    <button type="button" class="ghost back-btn" data-act="back">← All clients</button>
+    <div class="row"><h1 class="grow">${esc(clientName(id))}</h1>${intakeChip(c)}</div>
+    <p class="small muted">${[c.intake?.phone||c.qest?.phone||c.phone, c.intake?.email||c.qest?.email||c.email].filter(Boolean).map(esc).join(" · ") || "No contact details yet"}</p>
+    <div class="subtabs" role="tablist">${subs.map(([k,l])=>`<button type="button" role="tab" data-sub="${k}" aria-current="${S.sub===k}">${l}</button>`).join("")}</div>
+    ${body}
+  </div>`;
+}
+function detailsPane(id,c){
+  const others = Object.keys(S.clients).filter(x => x!==id && !x.startsWith("c-"));
+  return `<div class="stack">
+    <div class="grid2">
+      <label class="field"><span>Display name</span><input id="d-name" value="${esc(c.name||"")}" placeholder="${esc(clientName(id))}"></label>
+      <label class="field"><span>Next appointment</span><input id="d-next" type="date" value="${esc(c.nextVisit||"")}"></label>
+    </div>
+    <div class="row"><button type="button" class="primary" data-act="savedetails">Save details</button></div>
+    ${id.startsWith("c-") ? `<div class="formsec stack"><h3>Connect to a portal account</h3>
+      <p class="small muted">When this client opens the portal and saves their intake, they get their own record. Merge this record into it so their plans show up for them.</p>
+      ${others.length ? `<div class="row"><select id="mergeTo" class="grow" aria-label="Portal record">${others.map(o=>`<option value="${esc(o)}">${esc(clientName(o))}</option>`).join("")}</select><button type="button" data-act="merge">Merge into this record</button></div>` : `<p class="small muted">No portal accounts yet.</p>`}
+    </div>` : `<p class="small muted">This client has a portal account. Plans you mark “Shared” appear for them when they open the portal.</p>`}
+    <div class="formsec stack"><h3>Remove client</h3>
+      ${S.confirmDel===id ? `<p class="small">This deletes the record, intake and private notes. Remedy plans are deleted too.</p><div class="row"><button type="button" class="danger" data-act="delclient">Yes, delete ${esc(clientName(id))}</button><button type="button" data-act="canceldel">Keep</button></div>` : `<div class="row"><button type="button" class="danger" data-act="askdel">Delete client…</button></div>`}
+    </div></div>`;
+}
+function qestHistory(id){
+  const h = S.qhistFor===id ? S.qhist : [];
+  if(!h.length) return "";
+  return `<div class="formsec stack"><h3>Past Qest4 forms</h3>${h.map(x=>{ const q=x.form||{};
+    return `<details class="hist"><summary>${esc(fmtDate(x.submittedAt))}</summary><div class="stack small" style="margin-top:8px">
+      ${["help1","help2","help3"].filter(k=>q[k]).map((k,i)=>`<p><b>${i+1}.</b> ${esc(q[k])}</p>`).join("")}
+      ${q.areas?.length?`<p><b>Support:</b> ${esc(q.areas.join(", "))}${q.areasOther?", "+esc(q.areasOther):""}</p>`:""}
+      ${q.sinceLast?`<p><b>New since last scan:</b> ${esc(q.sinceLast)}</p>`:""}
+      ${q.anythingElse?`<p><b>Also shared:</b> ${esc(q.anythingElse)}</p>`:""}
+    </div></details>`; }).join("")}</div>`;
+}
+function ensureClientSubs(id){
+  if(S.photoFor!==id){
+    S.photoUnsub && S.photoUnsub(); S.photoFor=id; S.photo="";
+    S.photoUnsub = S.db.doc(`clients/${id}/media/photo`).onSnapshot(s => { S.photo = s.exists ? (s.data().dataUrl||"") : ""; if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
+  }
+  if(S.qhistFor!==id){
+    S.qhistUnsub && S.qhistUnsub(); S.qhistFor=id; S.qhist=[];
+    S.qhistUnsub = S.db.collection(`clients/${id}/qestForms`).onSnapshot(s => { S.qhist = s.docs.map(d=>d.data()).sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||"")); if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
+  }
+  if(S.plansFor!==id){
+    S.plansUnsub && S.plansUnsub(); S.plansFor=id; S.plans=[]; S.plansLoaded=false;
+    S.plansUnsub = S.db.collection("clients/"+id+"/plans").onSnapshot(snap => {
+      S.plans = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+      S.plansLoaded = true; if(S.tab==="clients" && S.sel===id && S.sub==="plans") render();
+    }, e=>console.warn(e));
+  }
+  if(S.notesFor!==id){
+    S.notesUnsub && S.notesUnsub(); S.notesFor=id; S.notes="";
+    S.notesUnsub = S.db.doc("notes/"+id).onSnapshot(s => { const v = s.exists ? (s.data().text||"") : ""; const changed = v!==S.notes; S.notes=v;
+      if(changed && S.tab==="clients" && S.sel===id && S.sub==="notes" && document.activeElement?.id!=="notesBox") render(); }, e=>console.warn(e));
+  }
+}
+function plansPane(id){
+  const ep = S.editPlan && S.editPlan.clientId===id ? S.editPlan : null;
+  if(ep) return planEditor(ep);
+  const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No remedy plans yet.</p></div>` :
+    S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.status==="shared"?'<span class="chip ok">Shared with client</span>':'<span class="chip">Draft</span>'}<span>${(p.bottles||[]).length} bottle${(p.bottles||[]).length===1?"":"s"}</span></span></button>`).join("");
+  return `<div class="stack"><div class="row"><p class="grow small muted">One bottle per issue. Remedies that share a frequency go in the same bottle.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
+}
+function planEditor(ep){
+  const p = ep.data;
+  const bottles = p.bottles.map((b,i) => `<div class="bottle" data-b="${i}">
+      <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for bottle ${i+1}"><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove bottle ${i+1}">Remove</button></div>
+      <label class="field"><span>Remedies</span><textarea data-bf="remedies" class="mono" style="min-height:58px" placeholder="Sanguinaria 200 + Belladonna 3C">${esc(b.remedies)}</textarea></label>
+      <div class="grid2">
+        <label class="field"><span>Frequency</span><input data-bf="freq" list="freqs" value="${esc(b.freq)}" placeholder="2D"><small class="muted">${esc(plainFreq(b.freq))}</small></label>
+        <label class="field"><span>How long</span><input data-bf="duration" value="${esc(b.duration)}" placeholder="3 months, then review"></label>
+      </div>
+      <label class="field"><span>Note for client</span><input data-bf="notes" value="${esc(b.notes)}" placeholder="Take 15 minutes before food"></label>
+    </div>`).join("");
+  return `<div class="stack">
+    <div class="row"><button type="button" class="ghost" data-act="closeplan">← Plans</button><span class="grow"></span>${ep.dirty?'<span class="chip warn">Unsaved changes</span>':""}</div>
+    <div class="grid2">
+      <label class="field"><span>Plan title</span><input id="pl-title" value="${esc(p.title)}"></label>
+      <label class="field"><span>Date</span><input id="pl-date" type="date" value="${esc(p.date)}"></label>
+      <label class="field"><span>Visibility</span><select id="pl-status"><option value="draft" ${p.status!=="shared"?"selected":""}>Draft (only you)</option><option value="shared" ${p.status==="shared"?"selected":""}>Shared with client</option></select></label>
+    </div>
+    <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
+    ${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
+    <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" data-act="tolibrary">Add from protocol library</button></div>
+    <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px">${esc(p.instructions)}</textarea></label>
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>
+      <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
+    <div id="copyArea"></div>
+  </div>`;
+}
+function readPlanForm(){
+  const ep=S.editPlan; if(!ep) return;
+  const v = id => document.getElementById(id);
+  if(v("pl-title")) ep.data.title = v("pl-title").value;
+  if(v("pl-date")) ep.data.date = v("pl-date").value;
+  if(v("pl-status")) ep.data.status = v("pl-status").value;
+  if(v("pl-instr")) ep.data.instructions = v("pl-instr").value;
+  document.querySelectorAll(".bottle").forEach(el => { const b = ep.data.bottles[+el.dataset.b]; if(!b) return;
+    el.querySelectorAll("[data-bf]").forEach(inp => b[inp.dataset.bf] = inp.value); });
+}
+function planText(p, name){
+  const lines = [`${p.title||"Remedy plan"} — ${name}`, fmtDate(p.date), ""];
+  (p.bottles||[]).forEach((b,i)=>{
+    lines.push(`Bottle ${i+1}: ${b.issue||""}`.trim());
+    if(b.remedies) lines.push(`  ${b.remedies}`);
+    if(b.freq) lines.push(`  How often: ${b.freq}${plainFreq(b.freq)?` (${plainFreq(b.freq)})`:""}`);
+    if(b.duration) lines.push(`  How long: ${b.duration}`);
+    if(b.notes) lines.push(`  Note: ${b.notes}`);
+    lines.push("");
+  });
+  if(p.instructions) lines.push(p.instructions, "");
+  lines.push(`${PRACTICE.name} · ${PRACTICE.phone} · ${PRACTICE.email}`);
+  return lines.join("\n");
+}
+function bindClients(){
+  const app = $("#app");
+  bindPhoto("pp", () => S.sel);
+  const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
+  app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
+  ["pl-title","pl-date","pl-status","pl-instr"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
+  app.onclick = async e => {
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; S.confirmDel=null; renderClients(); return; }
+    const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
+    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:p.instructions||"",bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
+    const a = e.target.closest("[data-act]"); if(!a) return;
+    const act = a.dataset.act;
+    try{
+      if(act==="back"){ S.sel=null; renderClients(); }
+      else if(act==="newclient"){ const id=rid("c-"); await S.db.doc("clients/"+id).set({name:"New client", createdAt:new Date().toISOString(), intake:{}}); S.sel=id; S.sub="details"; renderClients(); setTimeout(()=>{const n=$("#d-name"); if(n){n.value="";n.focus();}},50); }
+      else if(act==="jotfill"){ const txt=$("#jot-text").value; const kind=a.dataset.kind; const def=kind==="qest"?QEST:INTAKE; const r=jotParse(txt, def);
+        if(r.count){ const key=kind==="qest"?"qest":"intake"; const cur=S.clients[S.sel]?.[key]||{}; const merged={...cur, ...r.vals}; const patch={[key]:merged, [key+"Status"]:"submitted", [key+"UpdatedAt"]:new Date().toISOString()};
+          const nm=S.clients[S.sel]?.name; if((!nm || nm==="New client") && r.vals.fullName) patch.name=r.vals.fullName;
+          a.disabled=true; await S.db.doc("clients/"+S.sel).update(patch); if(kind==="qest") await S.db.collection(`clients/${S.sel}/qestForms`).doc().set({form:merged, submittedAt:new Date().toISOString(), source:"jotform"}); S.jotOpen=true; S.jotLast=r; toast("Form filled in from Jotform"); }
+        else { S.jotLast=r; }
+        const rep=$("#jot-report"); if(rep) rep.innerHTML=jotReport(r); if(r.count) setTimeout(()=>{ const rp=$("#jot-report"); if(rp && S.jotLast) rp.innerHTML=jotReport(S.jotLast); },60); }
+      else if(act==="jotnew"){ const txt=$("#jotnew-text").value; const kind=jotKind(txt); const def=kind==="qest"?QEST:INTAKE; const r=jotParse(txt, def);
+        const out=$("#jotnew-report"); if(!r.count){ out.innerHTML=jotReport(r); return; }
+        const id=rid("c-"); const now=new Date().toISOString(); const key=kind==="qest"?"qest":"intake";
+        a.disabled=true; await S.db.doc("clients/"+id).set({name:r.vals.fullName||"New client", createdAt:now, source:"jotform", email:r.vals.email||"", phone:r.vals.phone||"", [key]:r.vals, [key+"Status"]:"submitted", [key+"UpdatedAt"]:now});
+        if(kind==="qest") await S.db.collection(`clients/${id}/qestForms`).doc().set({form:r.vals, submittedAt:now, source:"jotform"});
+        S.jotNew=false; S.sel=id; S.sub=key; S.jotOpen=true; S.jotLast=r; toast(`${r.vals.fullName||"Client"} added from the ${kind==="qest"?"Qest4":"intake"} form`); renderClients(); setTimeout(()=>{ const rp=$("#jot-report"); if(rp) rp.innerHTML=jotReport(r); },80); }
+      else if(act==="jotnewopen"){ S.jotNew=!S.jotNew; renderClients(); }
+      else if(act==="pdfplan"){ readPlanForm(); const p=S.editPlan.data; const nm=clientName(S.editPlan.clientId); a.disabled=true; a.textContent="Making PDF…";
+        try{ const blob=await planPdf(p, nm); const dl=null; const fname=`Remedy plan - ${nm} - ${p.date||today()}.pdf`.replace(/[\/:*?"<>|]/g,"");
+          if(dl){ try{ await dl.save({filename:fname, data:blob}); }catch(e2){ if(e2?.code!=="cancelled" && e2?.code!=="declined") toast("The PDF wasn't saved."); } }
+          else { const u=URL.createObjectURL(blob); const l=document.createElement("a"); l.href=u; l.download=fname; l.click(); setTimeout(()=>URL.revokeObjectURL(u),4000); } }
+        catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); }
+        a.disabled=false; a.textContent="Download PDF"; }
+      else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
+      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
+      else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
+      else if(act==="savedetails"){ await S.db.doc("clients/"+S.sel).update({name:$("#d-name").value.trim(), nextVisit:$("#d-next").value}); toast("Details saved"); }
+      else if(act==="askdel"){ S.confirmDel=S.sel; renderClients(); }
+      else if(act==="canceldel"){ S.confirmDel=null; renderClients(); }
+      else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
+      else if(act==="merge"){ await mergeClient(S.sel, $("#mergeTo").value); }
+      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Remedy plan",date:today(),status:"draft",instructions:S.settings.instructions||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
+      else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
+      else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
+      else if(act==="rmbottle"){ readPlanForm(); S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
+      else if(act==="tolibrary"){ readPlanForm(); S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
+      else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id; ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
+      else if(act==="askdelplan"){ S.confirmPlanDel=true; readPlanForm(); renderClients(); }
+      else if(act==="delplan"){ await S.db.doc(`clients/${S.editPlan.clientId}/plans/${S.editPlan.id}`).delete(); S.editPlan=null; S.confirmPlanDel=false; toast("Plan deleted"); renderClients(); }
+      else if(act==="copyplan"){ readPlanForm(); const txt=planText(S.editPlan.data, clientName(S.editPlan.clientId));
+        try{ await navigator.clipboard.writeText(txt); toast("Plan copied"); }catch(err){ $("#copyArea").innerHTML=`<textarea class="copybox" id="copyBox" readonly aria-label="Plan text">${esc(txt)}</textarea>`; const b=$("#copyBox"); b.focus(); b.select(); toast("Select all and copy"); } }
+    }catch(err){ console.warn(err); a.disabled=false; toast(err?.code==="quota_exceeded" ? "Storage is full. Delete old plans to make room." : "That didn't save. Check your connection and try again."); }
+  };
+}
+function bindPhoto(pre, getId){
+  const inp = document.getElementById(pre+"-photo"); if(!inp) return;
+  inp.onchange = async () => {
+    const id = getId(); const f = inp.files && inp.files[0]; if(!f || !id) return;
+    try{ toast("Adding photo…"); const dataUrl = await resizePhoto(f);
+      await S.db.doc(`clients/${id}/media/photo`).set({dataUrl, updatedAt:new Date().toISOString()});
+      if(!S.prac){ S.myPhoto = dataUrl; S.clientWrite="ok"; renderClient(); }
+      toast("Photo added");
+    }catch(err){ console.warn(err);
+      if(err?.code==="invalid_argument" && !S.prac){ S.clientWrite="denied"; renderClient(); }
+      else toast(err?.message==="type"||err?.message==="read" ? "That file isn't a photo we can read. Try a JPG or PNG." : "The photo didn't save. Try again."); }
+  };
+}
+async function mergeClient(fromId, toId){
+  const from = S.clients[fromId], to = S.clients[toId];
+  if(!from || !to) return;
+  const intake = {...(from.intake||{}), ...(to.intake||{})};
+  await S.db.doc("clients/"+toId).update({name: to.name || from.name || "", intake, nextVisit: to.nextVisit || from.nextVisit || ""});
+  for(const p of S.plans){ const {id, ...rest} = p; await S.db.doc(`clients/${toId}/plans/${id}`).set(rest); await S.db.doc(`clients/${fromId}/plans/${id}`).delete(); }
+  const n = await S.db.doc("notes/"+fromId).get();
+  if(n.exists){ const t = await S.db.doc("notes/"+toId).get(); await S.db.doc("notes/"+toId).set({text:[t.exists?t.data().text:"", n.data().text].filter(Boolean).join("\n\n"), updatedAt:new Date().toISOString()}); await S.db.doc("notes/"+fromId).delete(); }
+  await S.db.doc("clients/"+fromId).delete();
+  if(S.editPlan?.clientId===fromId) S.editPlan=null;
+  S.sel = toId; S.plansFor=null; S.notesFor=null; S.sub="plans"; toast("Records merged"); renderClients();
+}
+
+/* ---------- intake form (shared) ---------- */
+function intakeForm(vals, pre, readonly, def = INTAKE){
+  return `<form class="stack" id="${pre}-form" onsubmit="return false">` + def.map(s => `<fieldset class="formsec"><legend>${esc(s.sec)}</legend>${s.note?(s.gentle?`<div class="notice ok" style="margin-bottom:4px">${esc(s.note)}</div>`:`<p class="small muted" style="margin-top:-6px">${esc(s.note)}</p>`):""}<div class="grid2">` +
+    s.fields.map(f => {
+      const id = `${pre}-${f.id}`, v = vals[f.id] ?? "", dis = readonly ? "disabled" : "";
+      const style = f.wide ? ' style="grid-column:1/-1"' : "";
+      const lbl = esc(f.label) + (f.req ? ' <b class="req" aria-hidden="true">*</b>' : "");
+      if(f.type==="textarea") return `<label class="field"${style}><span>${lbl}</span><textarea id="${id}" ${dis} ${f.hint?`placeholder="${esc(f.hint)}"`:""}>${esc(v)}</textarea></label>`;
+      if(f.type==="scale") return `<div class="field" style="grid-column:1/-1"><span id="${id}-l">${esc(f.label)}</span><div class="scale" role="radiogroup" aria-labelledby="${id}-l">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<label><input type="radio" name="${id}" id="${id}-${n}" value="${n}" ${String(v)===String(n)?"checked":""} ${dis}><span>${n}</span></label>`).join("")}</div></div>`;
+      if(f.type==="choice") return `<div class="field"><span id="${id}-l">${esc(f.label)}</span><div class="choices" role="radiogroup" aria-labelledby="${id}-l">${f.options.map((o,i)=>`<label><input type="radio" name="${id}" id="${id}-${i}" value="${esc(o)}" ${v===o?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`;
+      if(f.type==="multi"){ const arr = Array.isArray(v) ? v : []; return `<div class="field" style="grid-column:1/-1"><span class="sr">${esc(f.label)}</span><div class="choices" role="group" aria-label="${esc(f.label)}">${f.options.map((o,i)=>`<label><input type="checkbox" name="${id}" id="${id}-${i}" value="${esc(o)}" ${arr.includes(o)?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`; }
+      if(f.type==="check") return `<label class="check"${style}><input type="checkbox" id="${id}" ${v?"checked":""} ${dis} ${f.req?'aria-required="true"':""}><span>${lbl}</span></label>`;
+      return `<label class="field"${style}><span>${lbl}</span><input id="${id}" type="${f.type}" ${f.req?'aria-required="true"':""} value="${esc(v)}" ${dis}></label>`;
+    }).join("") + `</div></fieldset>`).join("") + `</form>`;
+}
+function readIntake(pre, def = INTAKE){
+  const out = {};
+  def.forEach(s => s.fields.forEach(f => {
+    const id = `${pre}-${f.id}`;
+    if(f.type==="scale"){ const c = document.querySelector(`input[name="${id}"]:checked`); if(c) out[f.id]=+c.value; }
+    else if(f.type==="multi"){ const c=[...document.querySelectorAll(`input[name="${id}"]:checked`)].map(x=>x.value); if(c.length) out[f.id]=c; }
+    else if(f.type==="choice"){ const c = document.querySelector(`input[name="${id}"]:checked`); if(c) out[f.id]=c.value; }
+    else if(f.type==="check"){ const el=document.getElementById(id); if(el?.checked) out[f.id]=true; }
+    else { const el=document.getElementById(id); if(el && el.value.trim()) out[f.id]=el.value.trim(); }
+  }));
+  return out;
+}
+
+
+/* ---------- Jotform paste: turn a pasted submission into form values ---------- */
+const JOT_STOP = ["Your photo","Photo","Submission Date","Submission ID","Submission IP","Edit Submission","Form Title","Reply-To","IP Address"];
+function jotLabel(f){ return (f.jot||f.label).replace(/[\s*:?.]+$/,"").trim(); }
+function jotDate(v){
+  const t=v.trim(); let m;
+  if((m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  if((m=t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/))){ let y=m[3]; if(y.length===2) y=(+y>40?"19":"20")+y; return `${y}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`; }
+  const d=new Date(t.replace(/(\d)(st|nd|rd|th)\b/,"$1")); if(!isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return "";
+}
+function jotParse(text, def){
+  const T=String(text||"").replace(/\r/g,"").replace(/\u00a0/g," ");
+  const rx=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/\s+/g,"\\s+");
+  const fields=def.flatMap(s=>s.fields);
+  const marks=[];
+  const find=(label, f)=>{ const r=new RegExp("(^|\\n)[ \\t]*"+rx(label)+"[ \\t]*[*:?.]*[ \\t]*(?=\\t|\\n|:|$)","gi"); let m; while((m=r.exec(T))){ marks.push({f, start:m.index+m[1].length, end:m.index+m[0].length}); } };
+  fields.forEach(f=>find(jotLabel(f), f));
+  [...JOT_STOP, ...def.map(s=>s.sec)].forEach(l=>find(l.replace(/[\s*:?.]+$/,""), null));
+  marks.sort((a,b)=>a.start-b.start || (b.end-b.start)-(a.end-a.start));
+  const clean=[]; marks.forEach(m=>{ const last=clean[clean.length-1]; if(last && m.start<last.end) return;
+    if(last && last.f && last.f.options && !T.slice(last.end, m.start).trim()){ const word=T.slice(m.start, m.end).replace(/[\s*:?.]+$/,"").trim().toLowerCase(); if(last.f.options.some(o=>o.toLowerCase()===word)) return; }
+    clean.push(m); });
+  const vals={}, found=new Set(), odd=[];
+  clean.forEach((m,i)=>{ if(!m.f || found.has(m.f.id)) return; const raw=T.slice(m.end, i+1<clean.length?clean[i+1].start:T.length).replace(/^[\s:\t]+/,"").trim(); found.add(m.f.id); if(!raw) return;
+    const f=m.f, low=raw.toLowerCase();
+    if(f.type==="check"){ vals[f.id]=true; }
+    else if(f.type==="date"){ const d=jotDate(raw); if(d) vals[f.id]=d; else odd.push([f.label,raw]); }
+    else if(f.type==="scale"){ const n=parseInt(raw,10); if(n>=1&&n<=10) vals[f.id]=n; else odd.push([f.label,raw]); }
+    else if(f.type==="choice"){ const o=f.options.find(o=>low===o.toLowerCase())||f.options.find(o=>low.includes(o.toLowerCase())||o.toLowerCase().includes(low)); if(o) vals[f.id]=o; else odd.push([f.label,raw]); }
+    else if(f.type==="multi"){ const os=f.options.filter(o=>low.includes(o.toLowerCase())); if(os.length) vals[f.id]=os; else odd.push([f.label,raw]); }
+    else vals[f.id]= f.type==="textarea" ? raw : raw.split(/\n+/).map(x=>x.trim()).filter(Boolean).join(", ");
+  });
+  return {vals, count:Object.keys(vals).length, total:fields.length, odd};
+}
+function jotKind(text){ const t=String(text||"").toLowerCase(); return /areas where you would like support|wellness services acknowledgement|first scan with dawn/.test(t) ? "qest" : "intake"; }
+function jotPanel(kind){
+  return `<details class="jotpanel"${S.jotOpen?" open":""}><summary>Paste a submitted Jotform</summary>
+    <p class="small muted">Open the submission in Jotform (or the notification email), select all of it, copy, and paste here. Matching answers fill in below; answers already in this form are kept unless the paste has something new.</p>
+    <textarea id="jot-text" class="small" style="min-height:120px" placeholder="Paste the whole submission here"></textarea>
+    <div class="row"><button type="button" class="primary" data-act="jotfill" data-kind="${kind}">Fill in this form</button></div>
+    <div id="jot-report"></div></details>`;
+}
+function jotReport(r){
+  return `<div class="notice ${r.count?"ok":"warn"}"><b>${r.count} of ${r.total} answers filled in.</b>${r.odd.length?` These didn't match a choice, so add them by hand:<ul style="margin:6px 0 0;padding-left:18px">${r.odd.map(([l,v])=>`<li><b>${esc(l)}</b>: ${esc(v)}</li>`).join("")}</ul>`:""}${r.count?"":" Check that you copied the whole submission, and that the form's questions use the exact wording from your setup guide."}</div>`;
+}
+
+/* ---------- Remedy plan PDF handout ---------- */
+let JSPDF_P=null;
+function loadJsPDF(){ if(window.jspdf) return Promise.resolve(window.jspdf); if(!JSPDF_P) JSPDF_P=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"; sc.onload=()=>res(window.jspdf); sc.onerror=()=>{ JSPDF_P=null; rej(new Error("load")); }; document.head.appendChild(sc); }); return JSPDF_P; }
+function pdfSafe(t){ return String(t||"").replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,"-").replace(/\u2026/g,"...").replace(/\u00bd/g,"1/2").replace(/[^\x00-\xFF]/g,""); }
+async function planPdf(p, clientLabel){
+  const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=54, CW=W-2*M; let y=M;
+  const teal=[18,94,90], ink=[18,48,47], muted=[90,110,108];
+  const need=h=>{ if(y+h>H-M-24){ doc.addPage(); y=M; } };
+  const text=(t,{size=11,bold=false,color=ink,gap=4,indent=0,italic=false}={})=>{ doc.setFont("helvetica", bold&&italic?"bolditalic":bold?"bold":italic?"italic":"normal"); doc.setFontSize(size); doc.setTextColor(...color);
+    const lines=doc.splitTextToSize(pdfSafe(t), CW-indent); lines.forEach(l=>{ need(size*1.35); doc.text(l, M+indent, y+size); y+=size*1.35; }); y+=gap; };
+  doc.setFillColor(...teal); doc.rect(0,0,W,8,"F");
+  text("Wellness From Within",{size:20,bold:true,color:teal,gap:0});
+  text(`${PRACTICE.name}  ·  ${PRACTICE.phone}  ·  ${PRACTICE.email}  ·  ${PRACTICE.site}`.replace(/·/g,"|"),{size:9,color:muted,gap:14});
+  doc.setDrawColor(207,223,220); doc.line(M,y,W-M,y); y+=16;
+  text(p.title||"Remedy plan",{size:16,bold:true,gap:2});
+  text([clientLabel, fmtDate(p.date)].filter(Boolean).join("  |  "),{size:10,color:muted,gap:14});
+  (p.bottles||[]).forEach((b,i)=>{
+    need(70); doc.setFillColor(238,244,243); const top=y; 
+    text(`Bottle ${i+1}${b.issue?`: ${b.issue}`:""}`,{size:12.5,bold:true,color:teal,gap:3});
+    if(b.remedies) text(b.remedies,{size:11.5,bold:true,gap:3,indent:10});
+    const pf=plainFreq(b.freq);
+    if(b.freq) text(`How often: ${pf||b.freq}${pf?` (${b.freq})`:""}`,{size:10.5,gap:2,indent:10});
+    if(b.duration) text(`How long: ${b.duration}`,{size:10.5,gap:2,indent:10});
+    if(b.notes) text(b.notes,{size:10.5,italic:true,color:muted,gap:2,indent:10});
+    doc.setDrawColor(...teal); doc.setLineWidth(2); doc.line(M+2, top+2, M+2, y-2); doc.setLineWidth(1);
+    y+=10;
+  });
+  if(p.instructions){ need(40); text("How to take your remedies",{size:12,bold:true,color:teal,gap:3}); text(p.instructions,{size:10.5,gap:10}); }
+  need(40); text("Questions? Contact Dawn any time. Homeopathy is a complementary approach and does not replace care from your medical provider.",{size:9,color:muted,gap:0});
+  const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(`Page ${i} of ${n}`, W-M, H-28, {align:"right"}); }
+  return doc.output("blob");
+}
+
+/* ---------- Library ---------- */
+const POTENCY_RX = /\b\d+\s*(C|X|M|MT)\b|\bMT\b|\b\d+D\b|\be\d+[HDW]\b|\beOD\b|\bSOS\b|\b(200|30|1000)\b/;
+function allEntries(){ return [...S.custom, ...S.lib]; }
+function srcLabel(e){ return e.mine?"My protocols":e.source.startsWith("Banerji")?"Banerji book":e.source.startsWith("Class sheets")?e.source.replace("Class sheets: ","Class sheet · "):"Additional Banerji"; }
+function entryText(e){ return (e.title+" "+(e.blocks||[]).map(b=>b.x).join(" ")).toLowerCase(); }
+function hl(text, terms){
+  let s = esc(text); if(!terms.length) return s;
+  const rx = new RegExp("("+terms.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).map(esc).join("|")+")","gi");
+  return s.replace(rx,"<mark>$1</mark>");
+}
+function renderLibrary(){
+  const terms = S.q.toLowerCase().split(/\s+/).filter(Boolean);
+  let list = allEntries().filter(e => S.src==="all" || (S.src==="mine"?e.mine:S.src==="book"?e.source.startsWith("Banerji"):S.src==="sheets"?e.source.startsWith("Class sheets"):e.source.startsWith("Additional")));
+  if(terms.length) list = list.filter(e => { const t=entryText(e); return terms.every(x=>t.includes(x)); })
+    .sort((a,b)=>{ const at=terms.every(x=>a.title.toLowerCase().includes(x)), bt=terms.every(x=>b.title.toLowerCase().includes(x)); return (bt-at) || a.title.localeCompare(b.title); });
+  else list = list.slice().sort((a,b)=>a.title.localeCompare(b.title));
+  const sel = S.libSel ? allEntries().find(e=>e.id===S.libSel) : null;
+  const srcBtn = (k,l) => `<button type="button" class="chip ${S.src===k?"acc":""}" data-src="${k}" style="border:0;cursor:pointer">${l}</button>`;
+  const items = !S.libLoaded ? `<div class="empty">Loading the library…</div>` : !list.length ? `<div class="empty">${S.lib.length||S.custom.length ? "No protocol matches. Try a remedy name or a body system." : "The library is empty."}</div>` :
+    list.slice(0,150).map(e => `<button type="button" class="item" data-entry="${esc(e.id)}" aria-current="${sel&&sel.id===e.id}"><b>${hl(e.title,terms)}</b><span class="meta"><span>${esc(srcLabel(e))}${e.page?` · pg ${esc(e.page)}`:""}</span></span></button>`).join("") + (list.length>150?`<div class="empty small">Showing 150 of ${list.length}. Narrow the search to see more.</div>`:"");
+  $("#app").innerHTML = `<div class="stack">
+    ${targetBanner()}
+    <div class="panes ${sel?"has-sel":""}">
+      <section class="list-pane" aria-label="Protocols">
+        <div class="head">
+          <input id="libq" type="search" placeholder="Search conditions or remedies, e.g. thuja kidney" value="${esc(S.q)}" aria-label="Search protocols">
+          <div class="row" style="gap:6px">${srcBtn("all","All")}${srcBtn("book","Banerji book")}${srcBtn("add","Additional Banerji")}${srcBtn("sheets","Class sheets")}${srcBtn("mine","My protocols")}</div>
+          <div class="row small muted"><span class="grow">${list.length} protocol${list.length===1?"":"s"}</span><button type="button" class="ghost" data-act="newproto">Add my own</button></div>
+        </div>
+        <div class="list">${items}</div>
+      </section>
+      <section class="detail-pane">${S.protoEdit ? protoEditor() : sel ? protoDetail(sel, terms) : libIntro()}</section>
+    </div></div>`;
+  bindLibrary();
+}
+function libIntro(){
+  return `<div class="sheet stack">
+    <h2>Protocol library</h2>
+    <p class="muted">Search ${S.lib.length} protocols from your Banerji Protocols, Additional Banerji Protocols and class sheets (Pain, Mind, Skin, Allergies, Detox, Good Gut Bad Gut, Feminopathy, Antibiotic Alternative) by condition or by remedy. Open one and use “Add to plan” on a line to put it in a client's bottle.</p>
+    ${legend()}
+    <p class="small muted">Only you can open this library. Your notes ask that it not be shared with anyone who doesn't own the books, so clients never see it. Always check the book page before prescribing.</p>
+  </div>`;
+}
+function legend(){
+  return `<div class="legend"><span><code>+</code> together</span><span><code>#</code> alternate</span><span><code>/</code> also, taken separately</span><span><code>2D</code> twice a day</span><span><code>eOD</code> every other day</span><span><code>e3H</code> every 3 hours</span><span><code>1W</code> once a week</span><span><code>SOS</code> as needed</span><span><code>MT</code> mother tincture</span><span><code>1000C</code> = 1M</span></div>`;
+}
+function protoDetail(e, terms){
+  const blocks = (e.blocks||[]).map(b => b.k==="m" ? `<p class="small muted" style="margin-top:6px">${esc(b.x)}</p>` : b.k==="l"
+    ? `<div class="pline"><span class="n">Line ${b.n}</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":"disabled"}>Add to plan</button></div>`
+    : POTENCY_RX.test(b.x) ? `<div class="pline" style="background:none"><span class="n">·</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":"disabled"}>Add to plan</button></div>`
+    : `<p class="ptext">${hl(b.x,terms)}</p>`).join("");
+  return `<div class="sheet stack">
+    <button type="button" class="ghost back-btn" data-act="libback">← All protocols</button>
+    <div><p class="label">${esc(e.mine?"My protocols":e.source)}${e.page?` · page ${esc(e.page)}`:""}</p><h2>${hl(e.title,terms)}</h2></div>
+    <div class="proto">${blocks || '<p class="muted">No lines recorded.</p>'}</div>
+    ${e.mine ? `<div class="row"><button type="button" data-act="editproto">Edit</button>${S.confirmProtoDel?`<button type="button" class="danger" data-act="delproto">Confirm delete</button>`:`<button type="button" class="ghost danger" data-act="askdelproto">Delete</button>`}</div>` : e.source.startsWith("Class sheets") ? `<p class="small muted">Transcribed from your scanned ${esc(e.source.slice(14))} class sheet (row ${esc(e.row||"?")}). The times point to the class recording.</p>` : `<p class="small muted">Check ${esc(e.source.startsWith("Banerji")?"The Banerji Protocols":"Additional Banerji Protocols from the Clinic")}${e.page?`, page ${esc(e.page)},`:""} for the full notes before prescribing.</p>`}
+    ${legend()}
+  </div>`;
+}
+function protoEditor(){
+  const p = S.protoEdit;
+  return `<div class="sheet stack">
+    <h2>${p.id?"Edit protocol":"Add my own protocol"}</h2>
+    <label class="field"><span>Condition</span><input id="pe-title" value="${esc(p.title)}" placeholder="Sinus congestion, chronic"></label>
+    <label class="field"><span>Source or reference</span><input id="pe-ref" value="${esc(p.ref)}" placeholder="Joette lecture, Jill Turland, my clinic notes"></label>
+    <label class="field"><span>Protocol lines, one per line</span><textarea id="pe-lines" class="mono" style="min-height:120px" placeholder="Sanguinaria 200 2D / Kali Bich 30 2D">${esc(p.lines)}</textarea></label>
+    <label class="field"><span>Notes</span><textarea id="pe-notes">${esc(p.notes)}</textarea></label>
+    <div class="row"><button type="button" class="primary" data-act="saveproto">Save protocol</button><button type="button" data-act="cancelproto">Cancel</button></div>
+  </div>`;
+}
+function bindLibrary(){
+  const q=$("#libq"); if(q){ q.oninput=()=>{ S.q=q.value; const pos=q.selectionStart; renderLibrary(); const n=$("#libq"); n.focus(); n.setSelectionRange(pos,pos); }; }
+  $("#app").onclick = async e => {
+    const s=e.target.closest("[data-src]"); if(s){ S.src=s.dataset.src; renderLibrary(); return; }
+    const en=e.target.closest("[data-entry]"); if(en){ S.libSel=en.dataset.entry; S.protoEdit=null; S.confirmProtoDel=false; renderLibrary(); if(innerWidth<821) window.scrollTo(0,0); return; }
+    const ad=e.target.closest("[data-add]"); if(ad){ const ent=allEntries().find(x=>x.id===S.libSel); addBottle(ent?.title||"", ad.dataset.add); return; }
+    const a=e.target.closest("[data-act]"); if(!a) return;
+    const act=a.dataset.act;
+    if(act==="goplan"){ S.tab="clients"; S.sel=S.editPlan.clientId; S.sub="plans"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
+    else if(act==="libback"){ S.libSel=null; renderLibrary(); }
+    else if(act==="newproto"){ S.protoEdit={id:null,title:"",ref:"",lines:"",notes:""}; renderLibrary(); }
+    else if(act==="cancelproto"){ S.protoEdit=null; renderLibrary(); }
+    else if(act==="editproto"){ const ent=S.custom.find(x=>x.id===S.libSel); S.protoEdit={id:ent.id,title:ent.title,ref:ent.ref||"",lines:(ent.blocks||[]).filter(b=>b.k==="l").map(b=>b.x).join("\n"),notes:(ent.blocks||[]).filter(b=>b.k==="t").map(b=>b.x).join("\n")}; renderLibrary(); }
+    else if(act==="askdelproto"){ S.confirmProtoDel=true; renderLibrary(); }
+    else if(act==="delproto"){ try{ await S.db.doc("custom/"+S.libSel).delete(); S.libSel=null; S.confirmProtoDel=false; toast("Protocol deleted"); }catch(err){ toast("That didn't delete. Try again."); } }
+    else if(act==="saveproto"){
+      const title=$("#pe-title").value.trim(); if(!title){ toast("Give the protocol a condition name"); return; }
+      const lines=$("#pe-lines").value.split("\n").map(x=>x.trim()).filter(Boolean);
+      const notes=$("#pe-notes").value.split("\n").map(x=>x.trim()).filter(Boolean);
+      const doc={title, ref:$("#pe-ref").value.trim(), page:"", blocks:[...lines.map((x,i)=>({k:"l",n:i+1,x})), ...notes.map(x=>({k:"t",x}))], updatedAt:new Date().toISOString()};
+      try{ a.disabled=true; const ref = S.protoEdit.id ? S.db.doc("custom/"+S.protoEdit.id) : S.db.collection("custom").doc(); await ref.set(doc); S.libSel=ref.id; S.protoEdit=null; S.src="all"; toast("Protocol saved"); renderLibrary(); }
+      catch(err){ a.disabled=false; toast("That didn't save. Try again."); }
+    }
+  };
+}
+
+/* ---------- Combinations ---------- */
+function renderCombos(){
+  const terms = S.cq.toLowerCase().split(/\s+/).filter(Boolean);
+  const rows = S.combos.filter(c => { const t=(c.code+" "+c.remedies+" "+c.name+" "+c.potency).toLowerCase(); return terms.every(x=>t.includes(x)); });
+  const polys = S.poly.filter(g => { const t=(g.name+" "+g.items.join(" ")).toLowerCase(); return terms.every(x=>t.includes(x)); });
+  $("#app").innerHTML = `<div class="stack">
+    ${targetBanner()}
+    <div class="row"><h1 class="grow">Combination remedies</h1>
+      <div class="seg" role="tablist" style="flex:0 1 360px"><button type="button" data-nsrc="helios" aria-current="${R.nsrc==="helios"}">Helios &amp; combos</button><button type="button" data-nsrc="narayani" aria-current="${R.nsrc==="narayani"}">Narayani</button></div></div>
+    <input id="cq" type="search" placeholder="${R.nsrc==="narayani"?"Search Narayani, e.g. sinus, Mix 8, ignatia":"Search, e.g. sinus, arnica, C-Trau"}" value="${esc(R.nsrc==="narayani"?R.nq:S.cq)}" aria-label="Search combinations">
+    ${R.nsrc==="narayani" ? narayaniHtml() : !S.libLoaded ? `<div class="empty">Loading…</div>` : `
+    <div class="tablewrap"><table><thead><tr><th>Code</th><th>Contains</th><th>For</th><th>Potencies</th><th><span class="sr">Add</span></th></tr></thead><tbody>
+      ${rows.map((c,i)=>`<tr><td class="code">${hl(c.code,terms)}</td><td>${hl(c.remedies,terms)}</td><td>${hl(c.name.replace(/^Comb(ination|\.)\s*(remedy|Remedy|Rx\.)?\s*-?\s*/,""),terms)}</td><td class="mono" style="white-space:nowrap">${esc(c.potency)}${c.lm?`<br><span class="muted">LM ${esc(c.lm)}</span>`:""}</td><td><button type="button" class="ghost" data-combo="${S.combos.indexOf(c)}" ${S.editPlan?"":"disabled"}>Add</button></td></tr>`).join("") || `<tr><td colspan="5" class="empty">No combination matches.</td></tr>`}
+    </tbody></table></div>
+    <h2>Helios poly-combinations</h2>
+    <p class="small muted">Sold in 30, 200, 1M and 10M, solid forms only. Order by phone or email from Helios.</p>
+    <div class="stack">${polys.map(g=>`<details class="poly"><summary>${hl(g.name,terms)} <span class="muted small">· ${g.items.length} items</span></summary><p class="small" style="margin-top:8px">${g.items.map(x=>hl(x,terms)).join(" · ")}</p></details>`).join("") || `<p class="muted">No poly-combination matches.</p>`}</div>`}
+  </div>`;
+  if(R.nsrc==="narayani" && !R.books) loadBooks().then(()=>{ if(S.tab==="combos") renderCombos(); }).catch(()=>{});
+  let ct; const q=$("#cq"); if(q) q.oninput=()=>{ clearTimeout(ct); ct=setTimeout(()=>{ if(R.nsrc==="narayani") R.nq=q.value; else S.cq=q.value; const pos=q.selectionStart; renderCombos(); const n=$("#cq"); n.focus(); n.setSelectionRange(pos,pos); }, R.nsrc==="narayani"?150:0); };
+  $("#app").onclick = e => {
+    const ns=e.target.closest("[data-nsrc]"); if(ns){ R.nsrc=ns.dataset.nsrc; renderCombos(); return; }
+    const np=e.target.closest("[data-narplan]"); if(np){ const m=R.books.nar.mixes[+np.dataset.narplan]; addBottle(titleCase(m.name), `Narayani ${titleCase(m.name)} ${m.potency} (${m.code})`); return; }
+    const b=e.target.closest("[data-combo]"); if(b){ const c=S.combos[+b.dataset.combo]; addBottle(c.name.replace(/^Comb(ination|\.)\s*(remedy|Remedy|Rx\.)?\s*-?\s*/,"")||c.code, `${c.code} (${c.remedies})`); return; }
+    const a=e.target.closest("[data-act]"); if(a?.dataset.act==="goplan"){ S.tab="clients"; S.sel=S.editPlan.clientId; S.sub="plans"; store("wfw.tab",S.tab); renderTabs(); render(); }
+  };
+}
+
+/* =========================================================
+   REPERTORY + MATERIA MEDICA
+   ========================================================= */
+const R = { mode:recall("wfw.repmode","plain"), plain:null, rep:null, repLoading:null, lower:null, chapters:[], q:"", chap:"", shown:200, open:{},
+  mm:null, mmLoading:null, books:null, booksLoading:null, idx:null, idxBuilding:false,
+  mmSel:null, mmQ:"", mmMore:{}, caseData:{name:"", clientId:"", rubrics:[]}, caseId:null, cases:[], casesSub:null, sortBy:"score", nsrc:"helios", nq:"" };
+
+function loadRep(){
+  if(R.rep) return Promise.resolve(R.rep);
+  if(!R.repLoading) R.repLoading = fetch("data/rep-kent.json").then(r=>{ if(!r.ok) throw new Error("load"); return r.json(); }).then(d=>{
+    R.rep = d; R.lower = d.rubrics.map(r=>r[0].toLowerCase());
+    const seen = new Set(); d.rubrics.forEach(r=>{ const c=r[0].split(",")[0]; if(!seen.has(c)){ seen.add(c); R.chapters.push(c);} });
+    R.chapters.sort();
+    R.pathIndex = new Map(d.rubrics.map((r,i)=>[r[0], i]));
+    return d;
+  }).catch(e=>{ R.repLoading=null; throw e; });
+  return R.repLoading;
+}
+function loadMM(){
+  if(R.mm) return Promise.resolve(R.mm);
+  if(!R.mmLoading) R.mmLoading = fetch("data/mm-boericke.json").then(r=>r.json()).then(d=>{ R.mm=d; return d; }).catch(e=>{ R.mmLoading=null; throw e; });
+  return R.mmLoading;
+}
+function loadBooks(){
+  if(R.books) return Promise.resolve(R.books);
+  if(!R.booksLoading) R.booksLoading = Promise.all(["gbot0","gbot1","gbot2","es0","es1","narayani","notes0","notes1","notes2","notes3","notes4"].map(id=>S.db.doc("books/"+id).get())).then(snaps=>{
+    const b = {gbot:[], gbotIntro:"", es:[], nar:{mixes:[], sections:[]}, notes:[]};
+    snaps.forEach((s,i)=>{ if(!s.exists) return; const d=s.data();
+      if(i<3){ b.gbot.push(...(d.remedies||[])); if(d.intro) b.gbotIntro=d.intro; }
+      else if(i<5){ b.es.push(...(d.paras||[])); }
+      else if(i===5) b.nar = {mixes:d.mixes||[], sections:d.sections||[]};
+      else (d.docs||[]).forEach(doc=>{ const ex=b.notes.find(x=>x.title===doc.title); if(ex) ex.paras.push(...doc.paras); else b.notes.push({title:doc.title, paras:[...doc.paras]}); });
+    });
+    R.books = b; return b;
+  }).catch(e=>{ R.booksLoading=null; throw e; });
+  return R.booksLoading;
+}
+function parseLinks(s){ if(!s) return []; return s.split(" ").map(t=>{ const [h,g]=t.split("."); return [parseInt(h,16), g?+g:1]; }); }
+function remName(i){ const r=R.rep.remedies[i]; return r ? r[1] : "?"; }
+function remAbbr(i){ const r=R.rep.remedies[i]; return r ? r[0] : "?"; }
+function gradeHtml(i,g){ return `<button type="button" class="rem g${g}" data-mm="${i}" title="${esc(remName(i))} · grade ${g}">${esc(remAbbr(i))}</button>`; }
+
+/* ---------- plain-language repertory search ---------- */
+/* Each line: everyday phrases (comma separated) => Kent words (alternatives separated by " / ") */
+const PLAIN_DICT = `
+headache, headaches, head ache, head hurts, head pain, migraine, migraines, head aches => head pain
+stomach ache, stomachache, tummy ache, belly ache, stomach pain, stomach hurts, tummy hurts, stomach cramps => stomach pain / abdomen pain
+stomach, tummy => stomach / abdomen
+belly, gut, bowels, bowel, intestines, intestinal, abdominal => abdomen
+earache, ear ache, ear pain, ear hurts, ear infection, ear infections => ear pain / ear inflammation / otitis
+ears => ear
+toothache, tooth ache, tooth pain => teeth pain
+tooth, teeth => teeth
+gums => gums
+backache, back ache, back pain, back hurts => back pain
+lower back => back lumbar
+upper back => back dorsal
+neck => cervical / neck
+sore throat, throat hurts, throat pain, strep throat, strep => throat pain / throat inflammation
+tonsils, tonsillitis => tonsils
+chest pain => chest pain
+joint pain, joints hurt, joints ache, achy joints, arthritis => extremities pain joints / joints pain
+joints => joints
+knees => knee
+legs, leg => leg / lower limbs
+arms, arm => arm / upper limbs
+hands => hand
+feet, foot => foot
+fingers => fingers
+toes => toes
+eyes => eye
+blurry vision, blurred vision, vision blurry, cant see => vision blurred / vision dim
+runny nose, nose running, nose runs, runny, drippy nose => coryza / nose discharge
+stuffy nose, blocked nose, stuffed up, stuffy, congested nose, nasal congestion, congestion, stopped up => nose obstruction / coryza dry / nose stopped
+sneeze, sneezes, sneezing => sneezing
+nosebleed, nosebleeds, nose bleed, nose bleeds, bleeding nose => epistaxis / nose hemorrhage
+sinus, sinuses, sinusitis => sinuses / frontal sinuses / catarrh
+coughing, coughs => cough
+dry cough => cough dry
+wet cough, loose cough, rattling cough, chesty cough => cough loose / cough rattling
+croup, barking cough => cough barking / croupy
+phlegm, mucus, snot => expectoration / mucus
+short of breath, shortness of breath, breathless, cant breathe, difficult breathing, hard to breathe, trouble breathing => respiration difficult
+wheeze, wheezy, wheezing => respiration wheezing / wheezing
+asthma, asthmatic => respiration asthmatic / asthma
+palpitations, heart racing, heart pounding, racing heart, fast heartbeat, heart flutters => palpitation
+dizzy, dizziness, lightheaded, light headed, room spinning, spinning => vertigo
+nausea, nauseous, nauseated, queasy, sick to stomach, sick to my stomach => nausea
+vomit, vomits, vomited, throwing up, throw up, threw up, throws up, puking, puke => vomiting
+heartburn, acid reflux, reflux, gerd => heartburn / eructations sour
+burping, belching, burps, burp => eructations
+gas, gassy, farting, flatulent => flatulence / flatus
+bloating, bloated, swollen belly => distension
+constipated, constipation, cant poop, hard stools => constipation / stool hard
+diarrhea, diarrhoea, loose stools, loose stool, runs, watery stool => diarrhea / stool watery
+hemorrhoids, haemorrhoids, piles => hemorrhoids
+pee, peeing, urinate, urinating, urination, wee => urination / urinate
+bedwetting, bed wetting, wets the bed, wetting the bed => urination involuntary night / involuntary night
+uti, bladder infection, cystitis => bladder inflammation / urination painful / cystitis
+period, periods, menstruation, menstrual => menses
+painful periods, painful period, period cramps, menstrual cramps, period pain => menses painful / menses pain
+heavy periods, heavy period, heavy bleeding, heavy flow => menses copious
+pms, before period, before periods => menses before
+hot flashes, hot flushes, hot flash, flushes, flashes => heat flushes / flushes of heat
+menopause, perimenopause => climacteric / menopause
+feverish, temperature, fevers => fever
+chills, chilly, shivering, shivers => chill / chilliness
+sweat, sweating, sweaty, sweats => perspiration
+night sweats => perspiration night
+cold hands => coldness hand
+cold feet => coldness foot
+itch, itchy, itching, itches => itching
+rash, rashes => eruptions
+hives => urticaria
+eczema => eczema / eruptions eczema
+acne, pimples, zits, breakouts, spots => acne / pimples
+cold sore, cold sores, fever blister, fever blisters => herpes lips / herpes
+boil, boils => boils
+warts, wart => warts
+hair loss, hair falling out, losing hair, thinning hair, hair falling => hair falling
+insomnia, cant sleep, cannot sleep, sleepless, trouble sleeping, unable to sleep, not sleeping, cant fall asleep => sleeplessness
+wakes up, waking up, waking, wakes, wake up => waking
+nightmares, nightmare, bad dreams => dreams frightful / dreams anxious / dreams nightmare
+sleepy, drowsy => sleepiness
+tired, exhausted, fatigue, fatigued, worn out, exhaustion, no energy, weak, low energy => weakness / weariness / prostration / fatigue
+restless, fidgety, cant sit still => restlessness
+anxious, anxiety, worry, worried, worries, worrying, nervous, panic, panicky => anxiety
+afraid, scared, fear, fears, frightened, phobia, terrified => fear
+fear of dying, afraid of dying, fear of death, afraid to die, scared of dying => fear death
+fright, shock, a scare => fright / ailments fright
+sad, sadness, depressed, depression, low mood, down, blue, gloomy => sadness / despair
+hopeless, hopelessness, despair => despair
+crying, cries, cry, weepy, tearful, weeps, tears => weeping
+angry, anger, rage, temper => anger / rage
+tantrums, tantrum, temper tantrums => anger / rage / violent
+irritable, irritability, cranky, grumpy, snappy, short tempered => irritability
+jealous => jealousy
+grief, grieving, bereavement, heartbroken, heartbreak, loss of a loved one => grief
+lonely, loneliness => company desire / forsaken
+wants to be alone, prefers to be alone, likes being alone, wants to be left alone, avoids people, leave me alone => company aversion / solitude
+wants company, hates being alone, cant be alone, afraid to be alone, needs people, doesnt want to be alone => company desire / fear alone
+alone => alone / company
+consolation, comforted, sympathy => consolation
+indecisive, cant decide => irresolution
+forgetful, forgetting, forgets, poor memory, memory loss, memory => memory weakness / forgetful
+cant concentrate, concentration, cant focus, brain fog, foggy => concentration difficult / dullness
+confused, confusion => confusion
+thirsty, thirst => thirst
+not thirsty, no thirst, thirstless, never thirsty, without thirst => thirstless / without thirst / thirst absent
+hungry, hunger, appetite => appetite increased / hunger / appetite
+no appetite, loss of appetite, not hungry, poor appetite => appetite wanting / appetite diminished
+craves, crave, craving, cravings, wants, likes, loves, desire, desires, desire for => desires / desire
+dislikes, hates, aversion, cant stand, averse, doesnt like => aversion
+sweets, sugar, candy, sweet things, chocolate => sweets
+salt, salty => salt
+dairy => milk
+fatty, greasy, rich food, fat => fat / rich
+spicy => spices
+eating, eats, meals, meal, after eating, food => eating
+car, cars, carriage, driving, in the car => carriage / cars / riding
+motion sickness, car sick, carsick, seasick, travel sickness => riding / seasickness / sea
+teething => dentition
+cramps, cramping, cramp => cramp / cramping
+spasms, spasm => spasm
+throbbing, pounding, pulsing => pulsating / throbbing
+stabbing, shooting, sharp => stitching / stabbing / shooting / cutting
+burning => burning
+aching, achy, ache, aches, sore => aching / sore / pain
+hurts, hurting, painful => pain
+numb, numbness => numbness
+tingling, pins and needles => tingling / formication / prickling
+swollen, swelling, puffy => swelling
+stiff, stiffness => stiffness
+twitching, twitch, twitches, jerking => twitching / jerking
+convulsions, seizures, seizure, fits => convulsions
+injury, injuries, bruise, bruises, bruised, fall, fell => injuries / bruised / falls
+sprain, sprained => sprain
+cut, cuts => cuts / wounds
+burns => burns
+bites, bite, stings, sting => bites / stings
+sunlight, sunshine, the sun, sunstroke => sun
+heat, hot, warm, warmth, hot weather => heat / warm
+cold, cool, chilled => cold
+cold weather, winter, freezing => cold / winter
+damp, humid, wet weather, rain, rainy => damp / wet
+wind, windy, drafts, draft, drafty => wind / draft
+open air, fresh air, outdoors, outside => air open / open air
+noise, noises, loud noises => noise
+touch, touched => touch
+pressure, pressing => pressure
+motion, moving, movement => motion
+lying down, lie down, lying => lying
+morning, mornings, waking up => morning
+nighttime, at night, night time, nights => night
+evenings => evening
+afternoons => afternoon
+children, child, kids, kid => children
+baby, babies, infant, infants, toddler => infants / children
+pregnancy, pregnant => pregnancy
+labour, labor, childbirth => labor / parturition
+sex, intercourse => coition
+flu, influenza => influenza
+common cold, head cold, a cold, catching cold, colds => coryza / catarrh
+colic, colicky => colic
+`;
+const PLAIN_STOP = new Set("i im me my mine myself a an the is are am was were be been being feel feels feeling felt have has had having get gets getting got when whenever with of to and or so very really too it its this that these those there at in on by for as like kind sort some lots lot much bad badly terrible awful always often sometimes constant constantly all any also just then than them they he she his her him hers patient client symptom symptoms keep keeps can could would will do does did not no but if into up out about over because which what how who where why due cause causes caused year years old aged bit little somewhat quite lately recently slowly gradually getting".split(" "));
+const PLAIN_MOD = { worse:"agg", aggravated:"agg", aggravates:"agg", worsens:"agg", worsened:"agg", agg:"agg", better:"amel", relieved:"amel", improved:"amel", improves:"amel", eases:"amel", eased:"amel", helps:"amel", amel:"amel", relief:"amel" };
+const PLAIN_WEAK = new Set(["after","before","during","while","from","since","until"]);
+let PLAIN = null;
+function plainNorm(s){ return s.toLowerCase().replace(/[’']/g,"").replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim(); }
+function plainStem(w){ if(w.length>5 && w.endsWith("ing")) return w.slice(0,-3); if(w.length>4 && w.endsWith("ed")) return w.slice(0,-2); if(w.length>4 && w.endsWith("es") && !w.endsWith("ses")) return w.slice(0,-2); if(w.length>3 && w.endsWith("s") && !w.endsWith("ss")) return w.slice(0,-1); return w; }
+function plainInit(){
+  if(PLAIN) return PLAIN;
+  const map=new Map(); let maxN=1;
+  PLAIN_DICT.trim().split("\n").forEach(line=>{
+    const [l,r]=line.split("=>"); if(!r) return;
+    const alts=r.split("/").map(a=>a.trim().split(/\s+/).filter(Boolean));
+    l.split(",").map(x=>plainNorm(x)).filter(Boolean).forEach(k=>{ map.set(k,alts); maxN=Math.max(maxN,k.split(" ").length); });
+  });
+  PLAIN={map,maxN}; return PLAIN;
+}
+/* turn a plain-language query into concepts: {label, alts:[[tok..]..], w, mod} */
+function plainParse(q){
+  const {map,maxN}=plainInit();
+  const words=plainNorm(q).split(" ").filter(Boolean); const out=[];
+  for(let i=0;i<words.length;){
+    let hit=null;
+    for(let n=Math.min(maxN,words.length-i);n>=1;n--){ const k=words.slice(i,i+n).join(" "); if(map.has(k)){ hit={k,n}; break; } }
+    if(hit){ out.push({label:hit.k, alts:map.get(hit.k), w:1}); i+=hit.n; continue; }
+    const w=words[i]; i++;
+    if(PLAIN_MOD[w]){ const m=PLAIN_MOD[w]; out.push({label:w, alts:[[m]], w:m==="agg"?0.3:1, mod:m}); continue; }
+    if(PLAIN_STOP.has(w) || w.length<3) continue;
+    if(PLAIN_WEAK.has(w)){ out.push({label:w, alts:[[w]], w:0.3}); continue; }
+    const st=plainStem(w); out.push({label:w, alts:st!==w?[[st]]:[[w]], w:1});
+  }
+  return out;
+}
+function plainText(i){ // cached normalized rubric with word boundaries
+  if(!R.norm) R.norm = R.rep.rubrics.map(r=>" "+r[0].toLowerCase().replace(/[^a-z0-9]+/g," ").trim()+" ");
+  return R.norm[i];
+}
+function plainSearch(q, chap){
+  const cons=plainParse(q); if(!cons.length) return {cons, list:[], full:0};
+  const strong=cons.filter(c=>c.w>=1).length || cons.length;
+  const total=cons.reduce((a,c)=>a+c.w,0);
+  const hasMod=cons.find(c=>c.mod);
+  const chapPref = chap ? chap.toLowerCase()+"," : null;
+  const L=R.lower; const res=[]; const cnt=new Array(cons.length).fill(0);
+  plainText(0);
+  for(let i=0;i<L.length;i++){
+    if(chapPref && !L[i].startsWith(chapPref) && L[i]!==chap.toLowerCase()) continue;
+    const s=R.norm[i]; let mask=0;
+    for(let c=0;c<cons.length;c++){ if(cons[c].alts.some(a=>a.every(t=>s.includes(" "+t)))){ mask|=(1<<c); cnt[c]++; } }
+    if(mask) res.push([i,mask]);
+  }
+  const N=L.length; const wt=cons.map((c,k)=>c.w*(1+Math.log10(N/Math.max(1,cnt[k]))/3));
+  const out=[];
+  for(const [i,mask] of res){ let sc=0, strongHit=0;
+    for(let c=0;c<cons.length;c++) if(mask&(1<<c)){ sc+=wt[c]; if(cons[c].w>=1) strongHit++; }
+    if(!strongHit) continue;
+    if(hasMod){ const opp=hasMod.mod==="agg"?" amel":" agg"; if(R.norm[i].includes(opp)) sc-=0.8; }
+    out.push([i, sc, strongHit, L[i].split(",").length]);
+  }
+  res.length=0; res.push(...out);
+  const need=Math.min(strong, Math.max(1, strong>=3 ? strong-1 : strong));
+  let list=res.filter(r=>r[2]>=need);
+  if(!list.length) list=res.filter(r=>r[2]>=Math.max(1,strong-1));
+  if(!list.length) list=res;
+  list.sort((a,b)=> (b[2]-a[2]) || (b[1]-a[1]) || (a[3]-b[3]) || (a[0]-b[0]));
+  const full=list.filter(r=>r[2]>=strong).length;
+  return {cons, list:list.map(r=>r[0]), full, strong, scores:new Map(list.map(r=>[r[0],r[2]]))};
+}
+
+/* Case analysis lives in its own private page (it uses Claude, which link-shared pages cannot). */
+function renderCaseAI(){}
+function caClick(){ return false; }
+
+/* ---------- Repertory tab ---------- */
+function renderRepertory(){
+  R.view = "search";
+  const viewSeg = `<div class="sheet row" style="padding:10px 14px;gap:10px"><span class="grow small">Want a full analysis with remedy differentiation and refining questions?</span><a class="btn primary" href="https://claude.ai/artifact/6kwB1ih43G1uRBxCm3ZUNq" target="_blank" rel="noopener" style="text-decoration:none;padding:7px 12px;border-radius:8px;background:var(--accent);color:#fff;font-weight:600">Open Case analysis ↗</a></div>`;
+  const searchHtml = `<div class="sheet stack" style="padding:16px">
+        <div class="row"><h1 class="grow">Repertory</h1><span class="small muted">Repertorium Publicum (Kent-based) · 74,482 rubrics</span></div>
+        <div class="row">
+          <input id="repq" class="grow" type="search" placeholder="${R.mode==="exact"?"Kent words, e.g. head pain sun":"Describe the symptom, e.g. headache worse in the sun"}" value="${esc(R.q)}" aria-label="Describe the symptom" style="flex:1 1 260px">
+          <select id="repchap" aria-label="Chapter" style="width:auto;flex:0 1 200px"><option value="">All chapters</option>${R.chapters.map(c=>`<option ${R.chap===c?"selected":""}>${esc(c)}</option>`).join("")}</select>
+        </div>
+        <div class="row small" style="gap:8px"><div class="seg" role="tablist" style="flex:1 1 100%"><button type="button" style="flex:1 1 120px" data-rmode="plain" aria-current="${R.mode!=="exact"}">Plain language</button><button type="button" style="flex:1 1 120px" data-rmode="exact" aria-current="${R.mode==="exact"}">Exact Kent words</button></div></div>
+        <p class="small muted">Grades: <span class="rem g3">BOLD</span> highest, <span class="rem g2">Italic</span> middle, <span class="rem g1">plain</span> lowest. Tap a remedy to read about it.</p>
+      </div>
+      <div id="repResults">${R.rep ? "" : `<div class="sheet empty">Loading the repertory…</div>`}</div>`;
+  $("#app").innerHTML = `<div class="rep-layout">
+    <section class="stack" aria-label="Repertory">
+      ${viewSeg}
+      ${R.view==="analysis" ? `<div id="caPane" class="stack">${R.rep?"":`<div class="sheet empty">Loading the repertory…</div>`}</div>` : searchHtml}
+    </section>
+    <aside class="case-pane" id="casePane" aria-label="Case"></aside>
+  </div>`;
+  const run = () => { if(R.view==="analysis") renderCaseAI(); else renderRepResults(); };
+  loadRep().then(()=>{ if(S.tab!=="repertory") return; const sel=$("#repchap"); if(sel && sel.options.length<2) sel.innerHTML=`<option value="">All chapters</option>`+R.chapters.map(c=>`<option ${R.chap===c?"selected":""}>${esc(c)}</option>`).join(""); run(); renderCase(); })
+    .catch(()=>{ const el=$("#repResults")||$("#caPane"); if(el) el.innerHTML=`<div class="sheet empty">The repertory didn't load. Reload the page to try again.</div>`; });
+  if(R.rep){ run(); renderCase(); }
+  ensureCasesSub();
+  let t; const rq=$("#repq"); if(rq) rq.oninput = e => { clearTimeout(t); t=setTimeout(()=>{ R.q=e.target.value; R.shown=200; run(); },120); };
+  const rc=$("#repchap"); if(rc) rc.onchange = e => { R.chap=e.target.value; R.shown=200; run(); };
+  $("#app").onclick = repClick;
+}
+function repMatches(){
+  const terms = R.q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  if(!terms.length && !R.chap) return null;
+  if(R.mode!=="exact" && terms.length){ const p=plainSearch(R.q, R.chap); R.plain=p; return p.list; }
+  R.plain=null;
+  const out=[]; const L=R.lower, chapPref = R.chap ? R.chap.toLowerCase()+"," : null;
+  for(let i=0;i<L.length;i++){
+    const s=L[i];
+    if(chapPref && !s.startsWith(chapPref) && s!==R.chap.toLowerCase()) continue;
+    let ok=true; for(const t of terms){ if(!s.includes(t)){ ok=false; break; } }
+    if(ok) out.push(i);
+  }
+  if(terms.length) out.sort((a,b)=> (L[a].split(",").length - L[b].split(",").length) || (a-b));
+  return out;
+}
+function remsSorted(links){ return parseLinks(links).sort((a,b)=>b[1]-a[1]); }
+function renderRepResults(){
+  const el=$("#repResults"); if(!el || !R.rep) return;
+  const m = repMatches();
+  const tries = R.mode==="exact" ? ["fear death","desire salt","head pain sun","grief","thirstless","sleep position abdomen"] : ["headache worse in the sun","afraid of dying","craves salt","not thirsty with fever","can't sleep from anxiety","joint pain worse cold damp weather","irritable before period","cold sores on lips"];
+  if(!m){ el.innerHTML = `<div class="sheet stack"><h2>Find rubrics</h2><p class="muted">${R.mode==="exact"?"Type words as Kent writes them. Every word must appear in the rubric, in any order.":"Describe the symptom the way the client says it. Everyday words are translated into repertory language (headache → Head, pain; craves → desires; worse → agg.; better → amel.) and the closest rubrics come first."} Narrow with a chapter, then add the best rubrics to the case.</p><div class="row small muted" style="flex-wrap:wrap"><span>Try:</span>${tries.map(x=>`<button type="button" class="chip" data-try="${esc(x)}" style="border:0;cursor:pointer">${esc(x)}</button>`).join("")}</div></div>`; return; }
+  const P = R.plain;
+  const terms = P ? [...new Set(P.cons.flatMap(c=>c.alts.flat()))] : R.q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  const inCase = new Set(R.caseData.rubrics.map(r=>r.path));
+  const interp = P ? `<div class="row small" style="gap:6px;flex-wrap:wrap;margin:0 4px 6px"><span class="muted">Looking for:</span>${P.cons.map(c=>`<span class="chip ${c.w<1?"":"acc"}" title="${esc(c.label)}">${esc(c.alts.map(a=>a.join(" ")).join(" or "))}</span>`).join("")}</div>` : "";
+  const count = P ? (P.full ? `${P.full.toLocaleString()} rubric${P.full===1?"":"s"} match everything${m.length>P.full?` · ${(m.length-P.full).toLocaleString()} close matches below`:""}` : m.length ? `No rubric has every part. Closest matches first.` : `Nothing found. Try fewer words.`) : `${m.length.toLocaleString()} rubric${m.length===1?"":"s"}`;
+  let shownPartialHead=false;
+  el.innerHTML = `${interp}<p class="small muted" style="margin:0 4px 8px">${count}${m.length>R.shown?` · showing ${R.shown}`:""}</p>
+    <div class="rubrics">${m.slice(0,R.shown).map((i,ix)=>{
+      const [path, links] = R.rep.rubrics[i]; const all = links ? remsSorted(links) : []; const n=all.length;
+      const parts = path.split(", "); const open = R.open[i];
+      const show = open ? all : all.slice(0,12);
+      let head="";
+      if(P && P.full && ix>=P.full && !shownPartialHead){ shownPartialHead=true; head=`<div class="small muted" style="padding:10px 12px 4px;border-top:2px solid var(--line)">Close matches (part of the description)</div>`; }
+      return head+`<div class="rubric" data-ri="${i}">
+        <div class="rubric-row">
+          <button type="button" class="rubric-path" data-toggle="${i}" aria-expanded="${!!open}"><b>${hl(parts[0],terms)}</b>${parts.length>1?", "+hl(parts.slice(1).join(", "),terms):""} <span class="chip">${n}</span></button>
+          <button type="button" class="ghost" data-addr="${i}" ${inCase.has(path)?"disabled":""}>${inCase.has(path)?"In case":"+ Case"}</button>
+        </div>
+        ${n ? `<div class="rems">${show.map(([r,g])=>gradeHtml(r,g)).join(" ")}${!open && n>12?` <button type="button" class="linkish small" data-toggle="${i}">+${n-12} more</button>`:open&&n>12?` <button type="button" class="linkish small" data-toggle="${i}">Show fewer</button>`:""}</div>` : ""}
+      </div>`; }).join("")}</div>
+    ${m.length>R.shown?`<div class="row" style="justify-content:center;margin-top:10px"><button type="button" data-more="1">Show more</button></div>`:""}`;
+}
+function repClick(e){
+  const rv=e.target.closest("[data-rview]"); if(rv){ R.view=rv.dataset.rview; store("wfw.repview",R.view); renderRepertory(); return; }
+  if(R.view==="analysis" && !e.target.closest("[data-mm]") && !e.target.closest("#casePane") && caClick(e)) return;
+  const rm=e.target.closest("[data-rmode]"); if(rm){ R.mode=rm.dataset.rmode; store("wfw.repmode",R.mode); R.shown=200; renderRepertory(); return; }
+  const tr=e.target.closest("[data-try]"); if(tr){ R.q=tr.dataset.try; $("#repq").value=R.q; renderRepResults(); return; }
+  const tg=e.target.closest("[data-toggle]"); if(tg){ const i=+tg.dataset.toggle; R.open[i]=!R.open[i]; renderRepResults(); return; }
+  const ad=e.target.closest("[data-addr]"); if(ad){ const path=R.rep.rubrics[+ad.dataset.addr][0]; if(!R.caseData.rubrics.some(r=>r.path===path)){ R.caseData.rubrics.push({path, w:1}); R.caseDirty=true; } renderRepResults(); renderCase(); return; }
+  const mo=e.target.closest("[data-more]"); if(mo){ R.shown+=200; renderRepResults(); return; }
+  const mm=e.target.closest("[data-mm]"); if(mm){ openMM(+mm.dataset.mm); return; }
+  caseClick(e);
+}
+function repertorize(){
+  const score=new Map(), count=new Map(), cells=new Map();
+  R.caseData.rubrics.forEach((r,ci)=>{
+    const i=R.pathIndex.get(r.path); if(i==null) return;
+    parseLinks(R.rep.rubrics[i][1]).forEach(([rem,g])=>{
+      score.set(rem,(score.get(rem)||0)+g*(r.w||1)); count.set(rem,(count.get(rem)||0)+1);
+      if(!cells.has(rem)) cells.set(rem,{}); cells.get(rem)[ci]=g;
+    });
+  });
+  const list=[...score.keys()].map(rem=>({rem, score:score.get(rem), count:count.get(rem), cells:cells.get(rem)}));
+  list.sort(R.sortBy==="count" ? (a,b)=>(b.count-a.count)||(b.score-a.score) : (a,b)=>(b.score-a.score)||(b.count-a.count));
+  return list.slice(0,30);
+}
+function renderCase(){
+  const el=$("#casePane"); if(!el) return;
+  const c=R.caseData;
+  const clientOpts = Object.keys(S.clients).sort((a,b)=>clientName(a).localeCompare(clientName(b))).map(id=>`<option value="${esc(id)}" ${c.clientId===id?"selected":""}>${esc(clientName(id))}</option>`).join("");
+  const res = R.rep && c.rubrics.length ? repertorize() : [];
+  el.innerHTML = `<div class="sheet stack case-sheet">
+    <div class="row"><h2 class="grow">Case</h2>${R.caseDirty&&c.rubrics.length?'<span class="chip warn">Not saved</span>':""}</div>
+    <div class="grid2" style="gap:8px">
+      <label class="field"><span>Case name</span><input id="caseName" value="${esc(c.name)}" placeholder="e.g. Chronic headaches"></label>
+      <label class="field"><span>Client (optional)</span><select id="caseClient"><option value="">None</option>${clientOpts}</select></label>
+    </div>
+    ${c.rubrics.length ? `<ol class="case-rubrics">${c.rubrics.map((r,i)=>`<li><span class="grow small">${esc(r.path)}</span>
+      <select data-w="${i}" aria-label="Weight" title="Weight" style="width:auto;padding:2px 6px">${[1,2,3].map(w=>`<option ${r.w==w?"selected":""} value="${w}">×${w}</option>`).join("")}</select>
+      <button type="button" class="ghost danger" data-rmr="${i}" aria-label="Remove rubric">✕</button></li>`).join("")}</ol>`
+      : `<p class="small muted">Add rubrics from the search results. The remedies that cover them best rank here.</p>`}
+    ${res.length ? `<div class="row small"><span class="grow label">Results</span><span class="muted">Sort</span>
+        <select id="caseSort" style="width:auto;padding:2px 6px"><option value="score" ${R.sortBy==="score"?"selected":""}>Total grade</option><option value="count" ${R.sortBy==="count"?"selected":""}>Rubrics covered</option></select></div>
+      <div class="tablewrap"><table class="rep-table"><thead><tr><th>Remedy</th><th class="num">Total</th><th class="num">Cov.</th>${c.rubrics.map((r,i)=>`<th class="num" title="${esc(r.path)}">${i+1}</th>`).join("")}</tr></thead>
+      <tbody>${res.map(x=>`<tr><td><button type="button" class="linkish" data-mm="${x.rem}">${esc(remName(x.rem))}</button></td><td class="num"><b>${x.score}</b></td><td class="num">${x.count}/${c.rubrics.length}</td>${c.rubrics.map((r,i)=>`<td class="num g-cell g${x.cells[i]||0}">${x.cells[i]||""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+    <details><summary class="small" style="cursor:pointer">Paste rubrics from Case analysis</summary>
+      <textarea id="pasteRub" class="mono small" style="min-height:90px;margin-top:6px" placeholder="One rubric per line, as copied from Case analysis"></textarea>
+      <div class="row" style="margin-top:6px"><button type="button" data-act="pasterub">Add to case</button></div></details>
+    <div class="row">
+      <button type="button" class="primary" data-act="savecase" ${c.rubrics.length?"":"disabled"}>Save case</button>
+      <button type="button" data-act="newcase">New case</button>
+      ${R.caseId?(R.confirmCaseDel?`<button type="button" class="danger" data-act="delcase">Confirm delete</button>`:`<button type="button" class="ghost danger" data-act="askdelcase">Delete</button>`):""}
+    </div>
+    ${R.cases.length?`<div class="stack small"><span class="label">Saved cases</span>${R.cases.map(k=>`<button type="button" class="item" data-loadcase="${esc(k.id)}" aria-current="${k.id===R.caseId}" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px"><b>${esc(k.name||"Untitled case")}</b><span class="meta">${k.clientId&&S.clients[k.clientId]?esc(clientName(k.clientId))+" · ":""}${(k.rubrics||[]).length} rubrics · ${esc(fmtDate(k.updatedAt))}</span></button>`).join("")}</div>`:""}
+  </div>`;
+  const n=$("#caseName"); if(n) n.oninput=()=>{ c.name=n.value; R.caseDirty=true; };
+  const cl=$("#caseClient"); if(cl) cl.onchange=()=>{ c.clientId=cl.value; R.caseDirty=true; };
+  const so=$("#caseSort"); if(so) so.onchange=()=>{ R.sortBy=so.value; renderCase(); };
+  el.querySelectorAll("[data-w]").forEach(s=>s.onchange=()=>{ c.rubrics[+s.dataset.w].w=+s.value; R.caseDirty=true; renderCase(); });
+}
+function ensureCasesSub(){
+  if(R.casesSub) return;
+  R.casesSub = S.db.collection("cases").onSnapshot(snap=>{ R.cases = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")); if(S.tab==="repertory" && !document.activeElement?.closest?.("#casePane")) renderCase(); }, e=>console.warn(e));
+}
+async function caseClick(e){
+  const rm=e.target.closest("[data-rmr]"); if(rm){ R.caseData.rubrics.splice(+rm.dataset.rmr,1); R.caseDirty=true; renderCase(); renderRepResults(); return; }
+  const lc=e.target.closest("[data-loadcase]"); if(lc){ const k=R.cases.find(x=>x.id===lc.dataset.loadcase); if(!k) return; R.caseId=k.id; R.caseData={name:k.name||"", clientId:k.clientId||"", rubrics:JSON.parse(JSON.stringify(k.rubrics||[])), ...(k.analysis?{analysis:k.analysis}:{})}; R.ca=k.analysis?.result||null; R.caText=k.analysis?.text||""; R.caHistory=k.analysis?.answers||[]; R.caAns={}; if(R.view==="analysis") renderCaseAI(); R.caseDirty=false; R.confirmCaseDel=false; renderCase(); renderRepResults(); return; }
+  const a=e.target.closest("[data-act]"); if(!a) return;
+  try{
+    if(a.dataset.act==="savecase"){ a.disabled=true; const ref = R.caseId ? S.db.doc("cases/"+R.caseId) : S.db.collection("cases").doc(); await ref.set({...R.caseData, updatedAt:new Date().toISOString()}); R.caseId=ref.id; R.caseDirty=false; toast("Case saved"); renderCase(); }
+    else if(a.dataset.act==="pasterub"){ const lines=($("#pasteRub").value||"").split("\n").map(x=>x.trim()).filter(Boolean); let n=0, miss=0;
+      lines.forEach(l=>{ const high=/\(High\)\s*$/.test(l); const path=l.replace(/\s*\((High|Moderate|Low)\)\s*$/,""); let i=R.pathIndex?.get(path); if(i==null){ const k=R.lower?.indexOf(path.toLowerCase()); if(k>=0) i=k; } if(i==null){ miss++; return; } const pth=R.rep.rubrics[i][0]; if(!R.caseData.rubrics.some(r=>r.path===pth)){ R.caseData.rubrics.push({path:pth, w:high?2:1}); n++; } });
+      R.caseDirty=true; renderCase(); renderRepResults(); toast(`${n} rubric${n===1?"":"s"} added${miss?` · ${miss} not found`:""}`); }
+    else if(a.dataset.act==="newcase"){ R.caseId=null; R.caseData={name:"",clientId:"",rubrics:[]}; R.ca=null; R.caText=""; R.caAns={}; R.caHistory=[]; if(R.view==="analysis") renderCaseAI(); R.caseDirty=false; renderCase(); renderRepResults(); }
+    else if(a.dataset.act==="askdelcase"){ R.confirmCaseDel=true; renderCase(); }
+    else if(a.dataset.act==="delcase"){ await S.db.doc("cases/"+R.caseId).delete(); R.caseId=null; R.confirmCaseDel=false; R.caseData={name:"",clientId:"",rubrics:[]}; toast("Case deleted"); renderCase(); renderRepResults(); }
+  }catch(err){ console.warn(err); a.disabled=false; toast("That didn't save. Try again."); }
+}
+
+/* ---------- mention index (which notes mention which remedy) ---------- */
+function ensureAliases(){
+  if(R.aliasMap) return;
+  const m=new Map(); R.rep.remedies.forEach((r,i)=>(r[2]||[]).forEach(a=>{ if(!m.has(a)) m.set(a,i); })); R.aliasMap=m;
+}
+/* word-by-word scan: try 3, 2, then 1 word phrases against the alias table */
+function findMentions(text){
+  ensureAliases();
+  const toks=[]; const re=/[A-Za-z]+/g; let m; while((m=re.exec(text))) toks.push([m.index, m.index+m[0].length, m[0]]);
+  const out=[];
+  for(let i=0;i<toks.length;i++){
+    for(let n=3;n>=1;n--){
+      if(i+n>toks.length) continue;
+      if(n>1 && /[^\s.\-]/.test(text.slice(toks[i+n-2][1], toks[i+n-1][0]))) continue;
+      const key=toks.slice(i,i+n).map(t=>t[2].toLowerCase()).join(" ");
+      const rem=R.aliasMap.get(key); if(rem==null) continue;
+      if(n===1 && key.length<=4 && toks[i][2][0]!==toks[i][2][0].toUpperCase()) continue;
+      out.push({start:toks[i][0], end:toks[i+n-1][1], rem}); i+=n-1; break;
+    }
+  }
+  return out;
+}
+function buildIndex(){
+  if(R.idx || !R.rep || !R.books || !S.libLoaded) return R.idx;
+  const idx=new Map(); const add=(rem,key)=>{ if(!idx.has(rem)) idx.set(rem,new Set()); idx.get(rem).add(key); };
+  const scan=(text,key)=>findMentions(text).forEach(x=>add(x.rem,key));
+  R.books.es.forEach((p,i)=>scan(p,"es:"+i));
+  R.books.nar.mixes.forEach((m,i)=>scan(m.name+" "+m.text,"nm:"+i));
+  R.books.notes.forEach((d,di)=>d.paras.forEach((p,pi)=>scan(p,"nt:"+di+":"+pi)));
+  allEntries().forEach(e=>scan(e.title+" "+(e.blocks||[]).map(b=>b.x).join(" "),"pr:"+e.id));
+  S.combos.forEach((c,i)=>scan(c.remedies.replace(/\//g," / "),"cb:"+i));
+  R.idx=idx; return idx;
+}
+function highlightRem(text, rem){
+  const ms=findMentions(text).filter(x=>x.rem===rem); let out="", pos=0;
+  ms.forEach(x=>{ out+=esc(text.slice(pos,x.start))+"<mark>"+esc(text.slice(x.start,x.end))+"</mark>"; pos=x.end; });
+  return out+esc(text.slice(pos));
+}
+
+/* ---------- Materia medica tab ---------- */
+function openMM(i){ R.mmSel=i; R.mmMore={}; S.tab="mm"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
+function renderMM(){
+  $("#app").innerHTML = `<div class="stack">
+    ${targetBanner()}
+    <div class="panes ${R.mmSel!=null?"has-sel":""}">
+      <section class="list-pane" aria-label="Remedies">
+        <div class="head"><h2>Materia medica</h2><input id="mmq" type="search" placeholder="Find a remedy, e.g. nat mur, sepia" value="${esc(R.mmQ)}" aria-label="Find a remedy"></div>
+        <div class="list" id="mmList"><div class="empty">Loading…</div></div>
+      </section>
+      <section class="detail-pane" id="mmDetail"><div class="sheet empty">Loading…</div></section>
+    </div></div>`;
+  Promise.all([loadRep(), loadMM(), loadBooks().catch(()=>null)]).then(()=>{ if(S.tab!=="mm") return; renderMMList(); renderMMDetail(); })
+    .catch(()=>{ const d=$("#mmDetail"); if(d) d.innerHTML=`<div class="sheet empty">The materia medica didn't load. Reload the page to try again.</div>`; });
+  let t; $("#mmq").oninput=e=>{ clearTimeout(t); t=setTimeout(()=>{ R.mmQ=e.target.value; renderMMList(); },100); };
+  $("#app").onclick = mmClick;
+}
+function mmCandidates(){
+  const q=R.mmQ.trim().toLowerCase().replace(/[.\-]+/g," ").replace(/\s+/g," ");
+  const rems=R.rep.remedies;
+  const withMM = new Set(Object.keys(R.mm.remedies).map(Number));
+  const gb = new Set((R.books?.gbot||[]).map(g=>g.idx));
+  if(!q){ return [...new Set([...gb, ...withMM])].filter(i=>i>=0).sort((a,b)=>remName(a).localeCompare(remName(b))).slice(0,400); }
+  const out=[];
+  rems.forEach((r,i)=>{ const hay=(r[1]+" "+r[0]).toLowerCase().replace(/[.\-]+/g," ");
+    const hit = hay.includes(q) || (r[2]||[]).some(a=>a.startsWith(q));
+    if(hit) out.push(i); });
+  out.sort((a,b)=>{ const sa=(withMM.has(a)||gb.has(a))?0:1, sb=(withMM.has(b)||gb.has(b))?0:1; return sa-sb || remName(a).localeCompare(remName(b)); });
+  return out.slice(0,200);
+}
+function renderMMList(){
+  const el=$("#mmList"); if(!el||!R.rep||!R.mm) return;
+  const c=mmCandidates(); const gb=new Set((R.books?.gbot||[]).map(g=>g.idx));
+  el.innerHTML = c.length ? c.map(i=>`<button type="button" class="item" data-mm="${i}" aria-current="${R.mmSel===i}"><b>${esc(remName(i))}</b><span class="meta"><span class="mono">${esc(remAbbr(i))}</span>${R.mm.remedies[i]?'<span class="chip">Boericke</span>':""}${gb.has(i)?'<span class="chip acc">GBOT</span>':""}</span></button>`).join("") : `<div class="empty">No remedy matches.</div>`;
+}
+function renderMMDetail(){
+  const el=$("#mmDetail"); if(!el) return;
+  const i=R.mmSel;
+  if(i==null){ el.innerHTML=`<div class="sheet stack"><h2>Look up a remedy</h2><p class="muted">One page per remedy, pulling together:</p><ul class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>its strongest rubrics in the repertory</li><li>Boericke's Pocket Manual</li><li>your Getting Back on Track notes</li><li>your Extra Strength Homeopathy notes</li><li>your Substack articles and other saved notes</li><li>Narayani and Helios combinations that contain it</li><li>Banerji protocols that use it</li></ul></div>`; return; }
+  if(R.books && !R.idx){ el.innerHTML=`<div class="sheet empty">Indexing your notes…</div>`; setTimeout(()=>{ buildIndex(); renderMMDetail(); },20); return; }
+  const mm=R.mm.remedies[i]; const gbot=(R.books?.gbot||[]).find(g=>g.idx===i);
+  const keys=R.idx?.get(i)||new Set();
+  const es=[...keys].filter(k=>k.startsWith("es:")).map(k=>+k.slice(3)).sort((a,b)=>a-b);
+  const nm=[...keys].filter(k=>k.startsWith("nm:")).map(k=>+k.slice(3));
+  const cb=[...keys].filter(k=>k.startsWith("cb:")).map(k=>+k.slice(3));
+  const pr=[...keys].filter(k=>k.startsWith("pr:")).map(k=>k.slice(3));
+  const nt=[...keys].filter(k=>k.startsWith("nt:")).map(k=>k.slice(3).split(":").map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  // strongest rubrics
+  const strong=[]; R.rep.rubrics.forEach(([p,l])=>{ if(!l) return; const hx=i.toString(16); if((" "+l+" ").includes(" "+hx+".3 ")) strong.push(p); });
+  const hlr = t => highlightRem(t, i);
+  const more=(k,n)=>R.mmMore[k]?Infinity:n;
+  const sec=(id,title,count,body,open=true)=>`<details class="mmsec" ${open?"open":""}><summary><span class="grow">${title}</span>${count!=null?`<span class="chip">${count}</span>`:""}</summary><div class="stack mmbody">${body}</div></details>`;
+  el.innerHTML = `<div class="sheet stack">
+    <button type="button" class="ghost back-btn" data-act="mmback">← Remedies</button>
+    <div class="row"><div class="grow"><p class="label">${esc(remAbbr(i))}</p><h1>${esc(remName(i))}</h1></div>${S.editPlan?`<button type="button" data-addrem="${i}">Add to plan</button>`:""}</div>
+    ${sec("kent","Strongest rubrics (grade 3)",strong.length, strong.length?`<ul class="small strong-list">${strong.slice(0,more("kent",60)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${strong.length>60&&!R.mmMore.kent?`<button type="button" class="ghost" data-more-mm="kent">Show all ${strong.length}</button>`:""}`:`<p class="small muted">No grade 3 rubrics for this remedy.</p>`, strong.length>0)}
+    ${mm?sec("boe","Boericke, Pocket Manual",null, mm.s.map(([h,c])=>`<div><p class="label">${esc(h==="\\N"?"":h)}</p><p class="mmtext">${fmtMM(c)}</p></div>`).join("")):""}
+    ${gbot?sec("gbot","Getting Back on Track (your notes)",null,`<div class="mmtext pre">${esc(gbot.text.slice(0,more("gbot",6000)))}</div>${gbot.text.length>6000&&!R.mmMore.gbot?`<button type="button" class="ghost" data-more-mm="gbot">Show the rest (${Math.round(gbot.text.length/1000)}k characters)</button>`:""}`):""}
+    ${R.books?sec("es","Extra Strength Homeopathy (your notes)",es.length, es.length?es.slice(0,more("es",12)).map(p=>`<p class="mmtext note-para">${hlr(R.books.es[p])}</p>`).join("")+(es.length>12&&!R.mmMore.es?`<button type="button" class="ghost" data-more-mm="es">Show all ${es.length}</button>`:""):`<p class="small muted">Not mentioned.</p>`, es.length>0):""}
+    ${R.books?sec("nt","Your articles and notes",nt.length, nt.length?(()=>{ const shown=nt.slice(0,more("nt",15)); let last=-1; return shown.map(([d,p])=>{ const head = d!==last ? `<p class="label" style="margin-top:6px">${esc(R.books.notes[d].title)}</p>` : ""; last=d; return head+`<p class="mmtext note-para">${hlr(R.books.notes[d].paras[p])}</p>`; }).join("")+(nt.length>15&&!R.mmMore.nt?`<button type="button" class="ghost" data-more-mm="nt">Show all ${nt.length}</button>`:""); })():`<p class="small muted">Not mentioned.</p>`, nt.length>0):""}
+    ${R.books?sec("nar","Narayani & Helios combinations containing it",nm.length+cb.length, (nm.length||cb.length)?`<ul class="small" style="margin:0;padding-left:18px;line-height:1.7">${nm.map(n=>{ const m=R.books.nar.mixes[n]; return `<li><button type="button" class="linkish" data-nar="${n}">${esc(titleCase(m.name))}</button> <span class="muted">${esc(m.potency)} · ${esc(m.code)}</span></li>`; }).join("")}${cb.map(n=>{ const c=S.combos[n]; return `<li><span class="mono">${esc(c.code)}</span> ${esc(c.name)} <span class="muted">${esc(c.potency)}</span></li>`; }).join("")}</ul>`:`<p class="small muted">None found.</p>`, (nm.length+cb.length)>0):""}
+    ${sec("pr","Protocols that use it",pr.length, pr.length?`<ul class="small" style="margin:0;padding-left:18px;line-height:1.7">${pr.map(id=>{ const e=allEntries().find(x=>x.id===id); return e?`<li><button type="button" class="linkish" data-proto="${esc(id)}">${esc(e.title)}</button> <span class="muted">${esc(srcLabel(e))}${e.page?` · pg ${esc(e.page)}`:""}</span></li>`:""; }).join("")}</ul>`:`<p class="small muted">None found.</p>`, pr.length>0)}
+    ${!R.books?`<p class="small muted">Your notes didn't load, so only the repertory and Boericke are shown.</p>`:""}
+  </div>`;
+}
+function fmtMM(c){ return esc(c).replace(/\*([^*]+)\*/g,"<em>$1</em>").replace(/\n/g,"<br>"); }
+function titleCase(s){ return s.toLowerCase().replace(/(^|[\s(\-\/])([a-z])/g,(m,a,b)=>a+b.toUpperCase()); }
+function mmClick(e){
+  const mm=e.target.closest("[data-mm]"); if(mm){ R.mmSel=+mm.dataset.mm; R.mmMore={}; renderMMList(); renderMMDetail(); if(innerWidth<821) window.scrollTo(0,0); return; }
+  const mo=e.target.closest("[data-more-mm]"); if(mo){ R.mmMore[mo.dataset.moreMm]=true; renderMMDetail(); return; }
+  const ar=e.target.closest("[data-addrem]"); if(ar){ addBottle(remName(+ar.dataset.addrem), remName(+ar.dataset.addrem)); return; }
+  const pr=e.target.closest("[data-proto]"); if(pr){ S.libSel=pr.dataset.proto; S.q=""; S.src="all"; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); return; }
+  const nr=e.target.closest("[data-nar]"); if(nr){ R.nsrc="narayani"; R.nq=""; R.narOpen=+nr.dataset.nar; S.tab="combos"; store("wfw.tab",S.tab); renderTabs(); render(); setTimeout(()=>document.getElementById("nar-"+nr.dataset.nar)?.scrollIntoView({block:"start"}),50); return; }
+  const a=e.target.closest("[data-act]"); if(a?.dataset.act==="mmback"){ R.mmSel=null; renderMM(); return; }
+  if(a?.dataset.act==="goplan"){ S.tab="clients"; S.sel=S.editPlan.clientId; S.sub="plans"; store("wfw.tab",S.tab); renderTabs(); render(); }
+}
+
+
+/* ---------- Notes: one search across everything you've written or saved ---------- */
+function noteSources(){
+  const b=R.books; if(!b) return [];
+  const src=[];
+  b.notes.forEach(d=>src.push({title:d.title, paras:d.paras}));
+  if(b.es.length) src.push({title:"Extra Strength Homeopathy (your notes)", paras:b.es});
+  b.gbot.forEach(g=>src.push({title:"Getting Back on Track: "+g.remedy, paras:g.text.split("\n").filter(Boolean)}));
+  if(b.nar.mixes.length) src.push({title:"Narayani remedies", paras:b.nar.mixes.map(m=>titleCase(m.name)+" "+m.potency+" ("+m.code+")\n"+m.text)});
+  b.nar.sections.forEach(s2=>src.push({title:"Narayani: "+s2.title, paras:s2.text.split("\n").filter(Boolean)}));
+  const sh={}; S.lib.filter(e=>e.source.startsWith("Class sheets")).forEach(e=>{ (sh[e.source]=sh[e.source]||[]).push(e.title+"\n"+(e.blocks||[]).map(x=>x.k==="l"?"Line "+x.n+": "+x.x:x.x).join("\n")); });
+  Object.keys(sh).forEach(k=>src.push({title:k, paras:sh[k]}));
+  return src;
+}
+function renderNotes(){
+  R.ntq = R.ntq || ""; R.ntDoc = R.ntDoc || "";
+  $("#app").innerHTML = `<div class="stack" style="max-width:900px">
+    ${targetBanner()}
+    <div class="sheet stack" style="padding:16px">
+      <div class="row"><h1 class="grow">Notes</h1><span class="small muted">Only you can see these</span></div>
+      <div class="row">
+        <input id="ntq" class="grow" type="search" placeholder="Search all your notes, e.g. sticta cough, megapotency, aggravation" value="${esc(R.ntq)}" aria-label="Search notes" style="flex:1 1 260px">
+        <select id="ntdoc" aria-label="Source" style="width:auto;flex:0 1 260px"><option value="">All sources</option></select>
+      </div>
+    </div>
+    <div id="ntResults"><div class="sheet empty">Loading your notes…</div></div>
+  </div>`;
+  loadBooks().then(()=>{ if(S.tab!=="notes") return;
+    const sel=$("#ntdoc"); const srcs=noteSources();
+    sel.innerHTML=`<option value="">All sources (${srcs.length})</option>`+srcs.map(x=>`<option ${R.ntDoc===x.title?"selected":""}>${esc(x.title)}</option>`).join("");
+    renderNoteResults(); }).catch(()=>{ const el=$("#ntResults"); if(el) el.innerHTML=`<div class="sheet empty">Your notes didn't load. Reload the page to try again.</div>`; });
+  let t; $("#ntq").oninput=e=>{ clearTimeout(t); t=setTimeout(()=>{ R.ntq=e.target.value; R.ntShown=60; R.ntOpen=null; renderNoteResults(); },150); };
+  $("#ntdoc").onchange=e=>{ R.ntDoc=e.target.value; R.ntShown=60; R.ntOpen=null; renderNoteResults(); };
+  $("#app").onclick=e=>{ const m=e.target.closest("[data-ntmore]"); if(m){ R.ntShown=(R.ntShown||60)+100; renderNoteResults(); return; }
+    const o=e.target.closest("[data-ntopen]"); if(o){ R.ntBackY=window.scrollY; R.ntOpen={title:o.dataset.ntopen, pi:+o.dataset.pi}; renderNoteResults(); return; }
+    const rd=e.target.closest("[data-ntread]"); if(rd){ R.ntBackY=window.scrollY; R.ntOpen={title:rd.dataset.ntread, pi:-1}; renderNoteResults(); window.scrollTo(0,0); return; }
+    const bk=e.target.closest("[data-ntback]"); if(bk){ R.ntOpen=null; renderNoteResults(); const y=R.ntBackY||0; setTimeout(()=>window.scrollTo(0,y),0); return; }
+    const a=e.target.closest("[data-act]"); if(a?.dataset.act==="goplan"){ S.tab="clients"; S.sel=S.editPlan.clientId; S.sub="plans"; store("wfw.tab",S.tab); renderTabs(); render(); } };
+}
+function renderNoteResults(){
+  const el=$("#ntResults"); if(!el||!R.books) return;
+  const all=noteSources();
+  const terms=R.ntq.toLowerCase().split(/\s+/).filter(Boolean);
+  if(R.ntOpen){
+    const src=all.find(x=>x.title===R.ntOpen.title);
+    if(src){
+      const nhits=terms.length?src.paras.filter(p=>terms.every(t=>p.toLowerCase().includes(t))).length:0;
+      el.innerHTML=`<div class="sheet stack">
+        <div class="row" style="position:sticky;top:0;background:var(--surface,var(--bg));z-index:2;padding:6px 0;border-bottom:1px solid var(--line)">
+          <button type="button" class="ghost" data-ntback="1">← Back to results</button>
+          <span class="grow"></span><span class="small muted">${src.paras.length} paragraphs${terms.length?` · ${nhits} match${nhits===1?"":"es"} highlighted`:""}</span></div>
+        <div><p class="label">Reading the whole source</p><h2>${esc(src.title)}</h2></div>
+        ${src.paras.map((p,i)=>{ const hit=terms.length&&terms.every(t=>p.toLowerCase().includes(t)); return `<p id="np-${i}" class="mmtext note-para" style="white-space:pre-wrap;${hit?"border-left:3px solid var(--accent);padding-left:10px;":""}${i===R.ntOpen.pi?"background:var(--soft);border-radius:6px;padding:8px 10px;":""}">${hl(p,terms)}</p>`; }).join("")}
+        <div class="row"><button type="button" class="ghost" data-ntback="1">← Back to results</button></div></div>`;
+      const tgt=document.getElementById("np-"+R.ntOpen.pi); if(tgt) setTimeout(()=>tgt.scrollIntoView({block:"center"}),0); else window.scrollTo(0,0);
+      return;
+    }
+    R.ntOpen=null;
+  }
+  const srcs=all.filter(x=>!R.ntDoc||x.title===R.ntDoc);
+  if(!terms.length && !R.ntDoc){
+    el.innerHTML=`<div class="sheet stack"><p class="muted">Search across ${srcs.length} sources at once: your Substack articles, Extra Strength and Getting Back on Track notes, the Banerji articles, flower essences, Narayani, your eight class sheets and more. Every word must appear in the same paragraph. Tap any source below to read it from the top.</p>
+      <ul class="small" style="margin:0;padding-left:18px;columns:2 260px;line-height:1.7">${srcs.map(x=>`<li><button type="button" class="linkish" data-ntread="${esc(x.title)}">${esc(x.title)}</button> <span class="muted">(${x.paras.length})</span></li>`).join("")}</ul></div>`; return; }
+  const hits=[]; srcs.forEach(x=>x.paras.forEach((p,pi)=>{ const l=p.toLowerCase(); if(terms.every(t=>l.includes(t))) hits.push([x.title,p,pi]); }));
+  const shown=hits.slice(0,R.ntShown||60); let last="";
+  el.innerHTML = `<p class="small muted" style="margin:0 4px 8px">${hits.length} paragraph${hits.length===1?"":"s"}${R.ntDoc?` in ${esc(R.ntDoc)}`:""}</p><div class="sheet stack">${shown.map(([t,p,pi])=>{ const h=t!==last?`<div class="row" style="margin-top:8px"><p class="label grow" style="margin:0">${esc(t)}</p><button type="button" class="ghost small" data-ntread="${esc(t)}">Read whole source</button></div>`:""; last=t; return h+`<p class="mmtext note-para" style="white-space:pre-wrap">${hl(p,terms)}</p><div class="row" style="margin-top:-4px"><button type="button" class="linkish small" data-ntopen="${esc(t)}" data-pi="${pi}">Open in source ›</button></div>`; }).join("") || `<p class="muted">Nothing found. Try fewer or different words.</p>`}</div>
+    ${hits.length>shown.length?`<div class="row" style="justify-content:center;margin-top:10px"><button type="button" data-ntmore="1">Show more</button></div>`:""}`;
+}
+
+/* ---------- Narayani view inside Combinations ---------- */
+function narayaniHtml(){
+  if(!R.books) return `<div class="sheet empty">Loading Narayani remedies…</div>`;
+  const terms=R.nq.toLowerCase().split(/\s+/).filter(Boolean);
+  const mixes=R.books.nar.mixes.map((m,i)=>({...m,i})).filter(m=>{ const t=(m.name+" "+m.code+" "+m.potency+" "+m.text).toLowerCase(); return terms.every(x=>t.includes(x)); });
+  const secs=R.books.nar.sections.filter(s=>{ const t=(s.title+" "+s.text).toLowerCase(); return terms.every(x=>t.includes(x)); });
+  const body = t => hl(t,terms).replace(/^(Base 10 Rate:|USAGE\s*:?|BREAKDOWN\s*:?|DOSAGE\s*[:-]?|REACTIONS?\s*:?|NB\.?|NOTE:)/gm,"<b>$1</b>");
+  return `<p class="small muted">${mixes.length} remedies. From your Narayani notes; only you can see these.</p>
+    <div class="stack">${mixes.map(m=>`<details class="poly" id="nar-${m.i}" ${R.narOpen===m.i?"open":""}><summary>${hl(titleCase(m.name),terms)} <span class="muted small">· ${esc(m.potency)} · ${esc(m.code)}</span></summary>
+      <div class="mmtext pre small" style="margin-top:8px">${body(m.text)}</div>
+      <div class="row" style="margin-top:8px"><button type="button" class="ghost" data-narplan="${m.i}" ${S.editPlan?"":"disabled"}>Add to plan</button></div></details>`).join("")}</div>
+    ${secs.length?`<h2 style="margin-top:10px">More Narayani remedies</h2><div class="stack">${secs.map(s=>`<details class="poly"><summary>${esc(s.title)}</summary><div class="mmtext pre small" style="margin-top:8px">${hl(s.text,terms)}</div></details>`).join("")}</div>`:""}`;
+}
+
+/* ---------- Settings ---------- */
+function renderSettings(){
+  $("#app").innerHTML = `<div class="sheet stack" style="max-width:760px">
+    <h1>Settings</h1>
+    <label class="field"><span>Default instructions on new remedy plans</span><textarea id="st-instr" style="min-height:120px">${esc(S.settings.instructions||DEFAULT_INSTRUCTIONS)}</textarea></label>
+    <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
+    <div class="formsec stack">
+      <h3>Inviting clients</h3>
+      <p class="small">Send clients the portal address. They type their email, open the sign-in link we email them, and they're in, with no password and no account to set up.</p>
+      <p class="small">To send a client straight to a form, add <span class="mono">#qest</span> (Qest4 pre-scan form) or <span class="mono">#intake</span> (homeopathy intake) to the end of the address, for example <span class="mono">${esc(location.origin+location.pathname)}#intake</span>.</p>
+      <p class="small muted">A client who signs in shows up in your Clients list under their email until they fill in their name.</p>
+    </div>
+    <div class="formsec stack">
+      <h3>What clients see</h3>
+      <p class="small muted">Their own forms and the plans you mark “Shared with client”. Never the library, combinations, other clients, or your private notes.</p>
+    </div>
+    <div class="formsec stack">
+      <h3>Move data in</h3>
+      <p class="small muted">Load the data file Claude prepared (your protocol library, notes, saved cases and client records). Loading it again replaces those items with the file's copy.</p>
+      <div class="row"><label class="btn" for="imp-file" style="cursor:pointer">Choose data file</label><input type="file" id="imp-file" accept=".json,application/json" class="sr"><span id="imp-status" class="small muted">${esc(S.impStatus||"")}</span></div>
+    </div>
+  </div>`;
+  const imp=$("#imp-file"); if(imp) imp.onchange=async()=>{ const f=imp.files[0]; if(!f) return; const st={ set textContent(v){ S.impStatus=v; const el=$("#imp-status"); if(el) el.textContent=v; } };
+    try{ const j=JSON.parse(await f.text()); const items=Array.isArray(j.docs)?j.docs:[]; let done=0, batch=[], size=0;
+      const flush=async()=>{ if(!batch.length) return; const { error } = await SB.from("docs").upsert(batch); if(error) throw error; done+=batch.length; st.textContent=`Loaded ${done} of ${items.length}…`; batch=[]; size=0; };
+      for(const it of items){ const len=JSON.stringify(it.data).length; if(size+len>400000) await flush(); batch.push({path:it.path, parent:parentOf(it.path), id:idOf(it.path), data:it.data, updated_at:new Date().toISOString()}); size+=len; }
+      await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary(); }
+    catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
+  $("#app").onclick = async e => { const a=e.target.closest("[data-act]"); if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").set({instructions:$("#st-instr").value}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
+}
+
+/* =========================================================
+   CLIENT
+   ========================================================= */
+function startClient(){
+  $("#sub").textContent = "Client portal";
+  S.myRec = null; S.myPlans = []; S.myPhoto = ""; S.recLoaded=false;
+  const h = (location.hash||"").toLowerCase();
+  S.cview = (h==="#qest"||h==="#intake") ? "forms" : "plans";
+  S.form = h==="#qest" ? "qest" : "homeo";
+  if(!S.me){ renderClient(); return; }
+  const editing = () => document.activeElement?.closest?.("#ci-form, #cs-form");
+  S.db.doc("clients/"+S.me).onSnapshot(s => { S.myRec = s.exists ? s.data() : null; S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); });
+  S.db.collection("clients/"+S.me+"/plans").onSnapshot(s => { S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e));
+  S.db.doc(`clients/${S.me}/media/photo`).onSnapshot(s => { S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e));
+  renderClient();
+}
+function renderClient(){
+  if(S.prac) return;
+  if(!S.me){ $("#app").innerHTML = `<div class="sheet stack"><h1>Welcome</h1><p class="muted">Please sign in to see your forms and remedy plans.</p>${contactBlock()}</div>`; return; }
+  const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.name || "";
+  const first = name.split(" ")[0];
+  const t = $("#tabs"); t.hidden=false;
+  t.innerHTML = [["plans","My remedy plans"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
+  t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
+  const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
+  let body;
+  if(S.cview==="plans"){
+    body = !S.myPlans.length ? `<div class="sheet stack"><h2>No plans yet</h2><p class="muted">After your session, Dawn adds your remedy plan here.${homeoIn||qestIn ? " Your form is in." : " In the meantime, you can fill in your form."}</p>${homeoIn||qestIn?"":`<div class="row"><button type="button" class="primary" data-cv2="forms">Open my forms</button></div>`}</div>`
+      : S.myPlans.map(planCard).join("");
+  } else {
+    const denied = S.clientWrite==="denied"?`<div class="notice">Your portal access lets you view your plans but not save forms here. Please email your answers and photo to ${esc(PRACTICE.email)}, or ask Dawn for Contributor access.</div>`:"";
+    const seg = `<div class="seg" role="tablist" aria-label="Which form">
+      <button type="button" role="tab" data-form="qest" aria-current="${S.form==="qest"}">Qest4 pre-scan form${qestIn?" ✓":""}</button>
+      <button type="button" role="tab" data-form="homeo" aria-current="${S.form==="homeo"}">Homeopathy intake${homeoIn?" ✓":""}</button></div>`;
+    if(S.form==="qest"){
+      body = `${seg}<div class="sheet stack">
+        <div><h2>Pre-scan wellness form</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
+        ${qestIn?`<div class="notice ok">Your form is in. Returning for another scan? Update anything that's changed and send it again.</div>`:""}
+        ${denied}
+        ${photoBlock("cp", S.myPhoto, true, true)}
+        ${intakeForm(S.myRec?.qest||{}, "cs", false, QEST)}
+        <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>
+      </div>`;
+    } else {
+      body = `${seg}<div class="sheet stack">
+        <div><h2>Homeopathy intake</h2><p class="small muted">Take your time. Save as you go and come back later. Only you and Dawn can see your answers.</p></div>
+        ${homeoIn?`<div class="notice ok">Your intake is in. You can still update it before your session.</div>`:""}
+        ${denied}
+        ${intakeForm(S.myRec?.intake||{}, "ci")}
+        <div class="row"><button type="button" data-act="cdraft">Save and finish later</button><button type="button" class="primary" data-act="csubmit">Send to Dawn</button></div>
+      </div>`;
+    }
+  }
+  $("#app").innerHTML = `<div class="stack" style="max-width:820px;margin:0 auto">
+    <div><p class="label">Wellness From Within</p><h1>${first?`Hello, ${esc(first)}`:"Welcome"}</h1></div>
+    ${body}
+    <div class="sheet stack"><h3>Questions?</h3>${contactBlock()}</div>
+  </div>`;
+  bindPhoto("cp", () => S.me);
+  $("#app").onclick = async e => {
+    const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); return; }
+    const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
+    const a=e.target.closest("[data-act]"); if(!a) return;
+    const act=a.dataset.act;
+    if(!["cdraft","csubmit","qdraft","qsubmit"].includes(act)) return;
+    const isQ = act[0]==="q", submit = act.endsWith("submit");
+    const def = isQ ? QEST : INTAKE, pre = isQ ? "cs" : "ci";
+    const vals = readIntake(pre, def);
+    if(submit){
+      const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id]);
+      if(isQ && !S.myPhoto){ toast("Please add a recent photo of yourself"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
+      if(miss.length){ toast(miss.some(f=>f.type==="check") ? "Please check the acknowledgement and sign at the end" : `Please fill in: ${miss.map(f=>f.label).join(", ")}`); const el=document.getElementById(pre+"-"+miss[0].id); if(el){ el.focus(); el.scrollIntoView({block:"center"}); } return; }
+    }
+    a.disabled=true;
+    const now=new Date().toISOString();
+    const key = isQ ? "qest" : "intake", stKey = isQ ? "qestStatus" : "intakeStatus";
+    const patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
+    try{
+      if(S.myRec) await S.db.doc("clients/"+S.me).update(patch);
+      else await S.db.doc("clients/"+S.me).set({...patch, createdAt:now, source:"portal"});
+      if(isQ && submit) await S.db.collection(`clients/${S.me}/qestForms`).doc().set({form:vals, submittedAt:now});
+      S.clientWrite="ok"; toast(submit?"Sent to Dawn. Thank you!":"Saved");
+      if(submit) S.cview="plans";
+      renderClient(); window.scrollTo(0,0);
+    }catch(err){ console.warn(err); a.disabled=false; if(err?.code==="invalid_argument"){ S.clientWrite="denied"; renderClient(); window.scrollTo(0,0); } else toast("That didn't save. Check your connection and try again."); }
+  };
+}
+function planCard(p){
+  return `<article class="sheet planview">
+    <div><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(p.title||"Remedy plan")}</h2></div>
+    ${(p.bottles||[]).map((b,i)=>`<div class="bottle">
+      <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
+      ${b.remedies?`<p class="rx">${esc(b.remedies)}</p>`:""}
+      <div class="grid2">
+        ${b.freq?`<div><p class="label">How often</p><p class="freq">${esc(plainFreq(b.freq)||b.freq)}${plainFreq(b.freq)?` <span class="mono muted">${esc(b.freq)}</span>`:""}</p></div>`:""}
+        ${b.duration?`<div><p class="label">How long</p><p>${esc(b.duration)}</p></div>`:""}
+      </div>
+      ${b.notes?`<p class="small">${esc(b.notes)}</p>`:""}
+    </div>`).join("")}
+    ${p.instructions?`<div><p class="label">How to take your remedies</p><p style="white-space:pre-wrap">${esc(p.instructions)}</p></div>`:""}
+  </article>`;
+}
+function contactBlock(){
+  return `<div class="contact"><span>${esc(PRACTICE.name)}</span><span>${esc(PRACTICE.phone)}</span><span>${esc(PRACTICE.email)}</span><a href="https://${PRACTICE.site}" target="_blank" rel="noopener">${esc(PRACTICE.site)}</a></div>`;
+}
+</script>
+</body>
+</html>
