@@ -583,11 +583,12 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Remedy plans"],["notes","Private notes"],["details","Details"]];
+  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Remedy plans"],["files","Reports & files"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
+  if(S.sub==="files") body = filesPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
     body = hist.length ? `<div class="stack">${hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""}</summary><div style="margin-top:8px">${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")}</div>`
       : `<div class="empty"><p>No follow-up forms yet.</p><p class="small">Send this client <span class="mono">https://portal.dawnspain.com/#followup</span> before their next session.</p></div>`; }
@@ -629,6 +630,52 @@ function qestHistory(id){
       ${q.anythingElse?`<p><b>Also shared:</b> ${esc(q.anythingElse)}</p>`:""}
     </div></details>`; }).join("")}</div>`;
 }
+
+/* ---------- Reports & files (Supabase Storage, bucket "client-files") ---------- */
+const FILE_BUCKET = "client-files";
+function fmtSize(n){ return n>1048576 ? (n/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(n/1024))+" KB"; }
+function fileRow(f, prac){
+  return `<div class="row" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;gap:10px;align-items:center">
+    <div class="grow" style="min-width:0"><b style="overflow-wrap:anywhere">${esc(f.title||f.name)}</b><div class="small muted">${esc(fmtDate(f.uploadedAt))} · ${esc(fmtSize(f.size||0))}${prac?(f.status==="shared"?' · <span class="chip ok">Visible to client</span>':' · <span class="chip">Only you</span>'):""}</div></div>
+    <button type="button" data-fopen="${esc(f.id)}">Open</button>
+    ${prac?`<button type="button" class="ghost" data-fshare="${esc(f.id)}">${f.status==="shared"?"Hide from client":"Share with client"}</button>
+    ${S.confirmFileDel===f.id?`<button type="button" class="danger" data-fdel="${esc(f.id)}">Confirm delete</button>`:`<button type="button" class="ghost danger" data-faskdel="${esc(f.id)}">Delete</button>`}`:""}
+  </div>`;
+}
+function filesPane(id){
+  const files=(S.filesFor===id?S.files:[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
+  return `<div class="stack">
+    <p class="small muted">Upload Qest4 reports, wellness reports or anything else for this client (PDF or images, up to 50 MB each). Files stay private until you press “Share with client”; then they appear under “My reports” in the client's portal.</p>
+    ${id.startsWith("c-")?`<div class="notice warn">You added this client yourself, so they don't have a portal sign-in. Files here are kept for you, but the client can't see them. To share reports, use the client record that shows <b>Portal account</b>; it appears once they sign in at portal.dawnspain.com.</div>`:""}
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <label class="btn primary" for="file-up" style="cursor:pointer">Upload files</label><input type="file" id="file-up" class="sr" multiple accept=".pdf,image/*,.doc,.docx">
+      <label class="check small"><input type="checkbox" id="file-share-now" checked> Share with client right away</label>
+    </div>
+    <div id="file-status" class="small muted"></div>
+    <div class="stack" style="gap:8px">${!S.filesLoaded&&S.filesFor===id?`<div class="empty">Loading…</div>`:files.length?files.map(f=>fileRow(f,true)).join(""):`<div class="empty small">No files yet.</div>`}</div>
+  </div>`;
+}
+async function openClientFile(f){
+  const w = window.open("", "_blank");
+  const { data, error } = await SB.storage.from(FILE_BUCKET).createSignedUrl(f.path, 300);
+  if(error || !data?.signedUrl){ if(w) w.close(); toast("Couldn't open that file. Try again."); return; }
+  if(w) w.location.href = data.signedUrl; else location.href = data.signedUrl;
+}
+async function uploadClientFiles(id, fileList, share){
+  const st=$("#file-status"); const list=[...fileList]; let ok=0;
+  for(const [i,file] of list.entries()){
+    if(file.size>50*1048576){ toast(`${file.name} is over 50 MB`); continue; }
+    if(st) st.textContent=`Uploading ${i+1} of ${list.length}: ${file.name}…`;
+    const fid=genId(); const safe=file.name.replace(/[^\w.\- ]+/g,"_"); const path=`${id}/${fid}-${safe}`;
+    const { error } = await SB.storage.from(FILE_BUCKET).upload(path, file, { contentType:file.type||"application/octet-stream", upsert:false });
+    if(error){ console.warn(error); toast(`${file.name} didn't upload: ${error.message}`); continue; }
+    await S.db.doc(`clients/${id}/files/${fid}`).set({ name:file.name, title:file.name.replace(/\.[^.]+$/,""), path, size:file.size, type:file.type, status: share?"shared":"private", uploadedAt:new Date().toISOString() });
+    ok++;
+  }
+  if(st) st.textContent = ok ? `${ok} file${ok===1?"":"s"} uploaded.` : "";
+  if(ok) toast(`${ok} file${ok===1?"":"s"} uploaded`);
+}
+
 function ensureClientSubs(id){
   if(S.photoFor!==id){
     S.photoUnsub && S.photoUnsub(); S.photoFor=id; S.photo="";
@@ -637,6 +684,10 @@ function ensureClientSubs(id){
   if(S.qhistFor!==id){
     S.qhistUnsub && S.qhistUnsub(); S.qhistFor=id; S.qhist=[];
     S.qhistUnsub = S.db.collection(`clients/${id}/qestForms`).onSnapshot(s => { S.qhist = s.docs.map(d=>d.data()).sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||"")); if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
+  }
+  if(S.filesFor!==id){
+    S.filesUnsub && S.filesUnsub(); S.filesFor=id; S.files=[]; S.filesLoaded=false;
+    S.filesUnsub = S.db.collection(`clients/${id}/files`).onSnapshot(snap => { S.files = snap.docs.map(d=>({id:d.id,...d.data()})); S.filesLoaded=true; if(S.tab==="clients" && S.sel===id && S.sub==="files" && !document.activeElement?.closest?.("#notesBox")) render(); }, e=>console.warn(e));
   }
   if(S.plansFor!==id){
     S.plansUnsub && S.plansUnsub(); S.plansFor=id; S.plans=[]; S.plansLoaded=false;
@@ -712,11 +763,16 @@ function planText(p, name){
 function bindClients(){
   const app = $("#app");
   bindPhoto("pp", () => S.sel);
+  const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
   ["pl-title","pl-date","pl-status","pl-instr"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
+    const fs = e.target.closest("[data-fshare]"); if(fs){ const f=S.files.find(x=>x.id===fs.dataset.fshare); if(f){ await S.db.doc(`clients/${S.sel}/files/${f.id}`).update({status:f.status==="shared"?"private":"shared"}); toast(f.status==="shared"?"Hidden from client":"Shared with client"); } return; }
+    const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }
+    const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:p.instructions||"",bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
@@ -1700,6 +1756,7 @@ function startClient(){
   const editing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form");
   S.db.doc("clients/"+S.me).onSnapshot(s => { S.myRec = s.exists ? s.data() : null; S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); });
   S.db.collection("clients/"+S.me+"/plans").onSnapshot(s => { S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e));
+  S.db.collection(`clients/${S.me}/files`).onSnapshot(s => { S.myFiles = s.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.status==="shared"); if(editing()) return; renderClient(); }, e=>console.warn(e));
   S.db.doc(`clients/${S.me}/media/photo`).onSnapshot(s => { S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e));
   renderClient();
 }
@@ -1709,11 +1766,15 @@ function renderClient(){
   const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.followup?.fullName || S.myRec?.name || "";
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
-  t.innerHTML = [["plans","My remedy plans"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
+  t.innerHTML = [["plans","My remedy plans"],["reports","My reports"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
-  if(S.cview==="plans"){
+  if(S.cview==="reports"){
+    const fl=(S.myFiles||[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
+    body = `<div class="sheet stack"><h2>My reports</h2><p class="small muted">Your Qest4 and wellness reports from Dawn. Tap Open to view or save a copy.</p>
+      ${fl.length?fl.map(f=>fileRow(f,false)).join(""):`<div class="empty small">No reports yet. Dawn adds them here after your session.</div>`}</div>`;
+  } else if(S.cview==="plans"){
     body = !S.myPlans.length ? `<div class="sheet stack"><h2>No plans yet</h2><p class="muted">After your session, Dawn adds your remedy plan here.${homeoIn||qestIn ? " Your form is in." : " In the meantime, you can fill in your form."}</p>${homeoIn||qestIn?"":`<div class="row"><button type="button" class="primary" data-cv2="forms">Open my forms</button></div>`}</div>`
       : S.myPlans.map(planCard).join("");
   } else {
@@ -1757,6 +1818,7 @@ function renderClient(){
   </div>`;
   bindPhoto("cp", () => S.me);
   $("#app").onclick = async e => {
+    const fo=e.target.closest("[data-fopen]"); if(fo){ const f=(S.myFiles||[]).find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); return; }
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
