@@ -528,7 +528,7 @@ function addBottle(issue, remedies){
 
 /* ---------- Clients ---------- */
 function renderClients(){
-  const ids = Object.keys(S.clients).sort((a,b)=>clientName(a).localeCompare(clientName(b)));
+  const ids = Object.keys(S.clients).sort((a,b)=>(isNewForm(S.clients[b])-isNewForm(S.clients[a])) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
   const shown = ids.filter(id => !f || clientName(id).toLowerCase().includes(f));
   const sel = S.sel && S.clients[S.sel] ? S.sel : null;
@@ -550,8 +550,11 @@ function renderClients(){
   </div>`;
   bindClients();
 }
+function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||""].sort().pop(); }
+function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
 function intakeChip(c){
   const out = [];
+  if(isNewForm(c)) out.push(`<span class="chip warn" style="font-weight:700">New form</span>`);
   if(c.intakeStatus==="submitted") out.push(`<span class="chip ok">Intake in</span>`);
   else if(c.intake && Object.keys(c.intake).length) out.push(`<span class="chip warn">Intake started</span>`);
   if(c.qestStatus==="submitted") out.push(`<span class="chip ok">Qest4 form in</span>`);
@@ -690,7 +693,7 @@ function bindClients(){
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
   ["pl-title","pl-date","pl-status","pl-instr"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
-    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; S.confirmDel=null; renderClients(); return; }
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ if(rec.qestSubmittedAt && rec.qestSubmittedAt>=(rec.intakeSubmittedAt||"")) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:p.instructions||"",bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
@@ -1738,6 +1741,7 @@ function renderClient(){
     const now=new Date().toISOString();
     const key = isQ ? "qest" : "intake", stKey = isQ ? "qestStatus" : "intakeStatus";
     const patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
+    if(submit) patch[key+"SubmittedAt"] = now;
     try{
       if(S.myRec) await S.db.doc("clients/"+S.me).update(patch);
       else await S.db.doc("clients/"+S.me).set({...patch, createdAt:now, source:"portal"});
