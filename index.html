@@ -178,6 +178,7 @@ details.poly summary{cursor:pointer;font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 #signout{font-size:13px;padding:4px 10px;white-space:nowrap}
 .signin{max-width:520px;margin:0 auto}
+.rxlist{list-style:none;margin:6px 0 10px;padding:0}.rxlist li{position:relative;padding:3px 0 3px 18px;font-size:1.02rem}.rxlist li::before{content:"";position:absolute;left:4px;top:.75em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
@@ -430,7 +431,7 @@ function renderSignIn(note){
   $("#app").innerHTML = `<div class="sheet stack signin">
     <h1>Welcome</h1>
     <div class="seg" role="tablist"><button type="button" data-sim="link" aria-current="${!pw}">Email me a link</button><button type="button" data-sim="password" aria-current="${pw}">Use a password</button></div>
-    <p class="muted">${pw ? "Sign in with your email and password." : "Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and remedy plans stay together."}</p>
+    <p class="muted">${pw ? "Sign in with your email and password." : "Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and treatment plans stay together."}</p>
     <label class="field"><span>Email</span><input id="si-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(recall("wfw.email",""))}"></label>
     ${pw ? `<label class="field"><span>Password</span><input id="si-pass" type="password" autocomplete="current-password"></label>` : ""}
     <div class="row"><button type="button" class="primary" id="si-go">${pw ? "Sign in" : "Email me a sign-in link"}</button></div>
@@ -533,7 +534,7 @@ function render(){
 
 /* ---------- working-plan banner (shared by library & combos) ---------- */
 function targetBanner(){
-  if(!S.editPlan) return `<div class="target"><span>To add protocol lines to a remedy plan, open a client's plan first (Clients → Remedy plans).</span></div>`;
+  if(!S.editPlan) return `<div class="target"><span>To add protocol lines to a treatment plan, open a client's plan first (Clients → Treatment plans).</span></div>`;
   const bs=S.editPlan.data.bottles, t=S.editPlan.target;
   const opts=`<option value="new" ${t==null||!bs[t]?"selected":""}>A new bottle</option>`+bs.map((b,i)=>`<option value="${i}" ${t===i?"selected":""}>Bottle ${i+1}${b.issue?": "+esc(b.issue):""}</option>`).join("");
   return `<div class="target"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")}
@@ -577,7 +578,7 @@ function renderClients(){
       </div>
       <div class="list">${list}</div>
     </section>
-    <section class="detail-pane">${sel ? clientDetail(sel) : `<div class="sheet empty"><h2>Pick a client</h2><p class="small">Their intake, private notes and remedy plans open here.</p></div>`}</section>
+    <section class="detail-pane">${sel ? clientDetail(sel) : `<div class="sheet empty"><h2>Pick a client</h2><p class="small">Their intake, private notes and treatment plans open here.</p></div>`}</section>
   </div>`;
   bindClients();
 }
@@ -595,7 +596,7 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Remedy plans"],["files","Reports & files"],["notes","Private notes"],["details","Details"]];
+  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Treatment plans"],["files","Reports & files"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
@@ -628,7 +629,7 @@ function detailsPane(id,c){
       ${others.length ? `<div class="row"><select id="mergeTo" class="grow" aria-label="Portal record">${others.map(o=>`<option value="${esc(o)}">${esc(clientName(o))}</option>`).join("")}</select><button type="button" data-act="merge">Merge into this record</button></div>` : `<p class="small muted">No portal accounts yet.</p>`}
     </div>` : `<p class="small muted">This client has a portal account. Plans you mark “Shared” appear for them when they open the portal.</p>`}
     <div class="formsec stack"><h3>Remove client</h3>
-      ${S.confirmDel===id ? `<p class="small">This deletes the record, intake and private notes. Remedy plans are deleted too.</p><div class="row"><button type="button" class="danger" data-act="delclient">Yes, delete ${esc(clientName(id))}</button><button type="button" data-act="canceldel">Keep</button></div>` : `<div class="row"><button type="button" class="danger" data-act="askdel">Delete client…</button></div>`}
+      ${S.confirmDel===id ? `<p class="small">This deletes the record, intake and private notes. Treatment plans are deleted too.</p><div class="row"><button type="button" class="danger" data-act="delclient">Yes, delete ${esc(clientName(id))}</button><button type="button" data-act="canceldel">Keep</button></div>` : `<div class="row"><button type="button" class="danger" data-act="askdel">Delete client…</button></div>`}
     </div></div>`;
 }
 function qestHistory(id){
@@ -717,7 +718,7 @@ function ensureClientSubs(id){
 function plansPane(id){
   const ep = S.editPlan && S.editPlan.clientId===id ? S.editPlan : null;
   if(ep) return planEditor(ep);
-  const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No remedy plans yet.</p></div>` :
+  const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No treatment plans yet.</p></div>` :
     S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.status==="shared"?'<span class="chip ok">Shared with client</span>':'<span class="chip">Draft</span>'}<span>${(p.bottles||[]).length} bottle${(p.bottles||[]).length===1?"":"s"}</span></span></button>`).join("");
   return `<div class="stack"><div class="row"><p class="grow small muted">One bottle per issue. Remedies that share a frequency go in the same bottle.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
 }
@@ -788,7 +789,7 @@ function readPlanForm(){
     el.querySelectorAll("[data-bf]").forEach(inp => b[inp.dataset.bf] = inp.value); });
 }
 function planText(p, name){
-  const lines = [`${p.title||"Remedy plan"} — ${name}`, fmtDate(p.date), ""];
+  const lines = [`${p.title||"Treatment plan"} — ${name}`, fmtDate(p.date), ""];
   (p.bottles||[]).forEach((b,i)=>{
     lines.push(`Bottle ${i+1}: ${b.issue||""}`.trim());
     if(b.remedies) lines.push(`  ${b.remedies}`);
@@ -837,7 +838,7 @@ function bindClients(){
         S.jotNew=false; S.sel=id; S.sub=key; S.jotOpen=true; S.jotLast=r; toast(`${r.vals.fullName||"Client"} added from the ${kind==="qest"?"Qest4":"intake"} form`); renderClients(); setTimeout(()=>{ const rp=$("#jot-report"); if(rp) rp.innerHTML=jotReport(r); },80); }
       else if(act==="jotnewopen"){ S.jotNew=!S.jotNew; renderClients(); }
       else if(act==="pdfplan"){ readPlanForm(); const p=S.editPlan.data; const nm=clientName(S.editPlan.clientId); a.disabled=true; a.textContent="Making PDF…";
-        try{ const blob=await planPdf(p, nm); const dl=null; const fname=`Remedy plan - ${nm} - ${p.date||today()}.pdf`.replace(/[\/:*?"<>|]/g,"");
+        try{ const blob=await planPdf(p, nm); const dl=null; const fname=`Treatment plan - ${nm} - ${p.date||today()}.pdf`.replace(/[\/:*?"<>|]/g,"");
           if(dl){ try{ await dl.save({filename:fname, data:blob}); }catch(e2){ if(e2?.code!=="cancelled" && e2?.code!=="declined") toast("The PDF wasn't saved."); } }
           else { const u=URL.createObjectURL(blob); const l=document.createElement("a"); l.href=u; l.download=fname; l.click(); setTimeout(()=>URL.revokeObjectURL(u),4000); } }
         catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); }
@@ -850,7 +851,7 @@ function bindClients(){
       else if(act==="canceldel"){ S.confirmDel=null; renderClients(); }
       else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
       else if(act==="merge"){ await mergeClient(S.sel, $("#mergeTo").value); }
-      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Remedy plan",date:today(),status:"draft",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
+      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
       else if(act==="rmbottle"){ readPlanForm(); { const ri=+a.dataset.i, t=S.editPlan.target; if(t===ri) S.editPlan.target=null; else if(t!=null && t>ri) S.editPlan.target=t-1; } S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
@@ -971,7 +972,7 @@ function jotReport(r){
   return `<div class="notice ${r.count?"ok":"warn"}"><b>${r.count} of ${r.total} answers filled in.</b>${r.odd.length?` These didn't match a choice, so add them by hand:<ul style="margin:6px 0 0;padding-left:18px">${r.odd.map(([l,v])=>`<li><b>${esc(l)}</b>: ${esc(v)}</li>`).join("")}</ul>`:""}${r.count?"":" Check that you copied the whole submission, and that the form's questions use the exact wording from your setup guide."}</div>`;
 }
 
-/* ---------- Remedy plan PDF handout ---------- */
+/* ---------- Treatment plan PDF handout ---------- */
 let JSPDF_P=null;
 function loadJsPDF(){ if(window.jspdf) return Promise.resolve(window.jspdf); if(!JSPDF_P) JSPDF_P=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"; sc.onload=()=>res(window.jspdf); sc.onerror=()=>{ JSPDF_P=null; rej(new Error("load")); }; document.head.appendChild(sc); }); return JSPDF_P; }
 function pdfSafe(t){ return String(t||"").replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,"-").replace(/\u2026/g,"...").replace(/\u00bd/g,"1/2").replace(/[^\x00-\xFF]/g,""); }
@@ -992,12 +993,12 @@ async function planPdf(p, clientLabel){
       doc.setFillColor(...gold); doc.rect(0,104,W,3,"F");
       font(SERIF,25,[255,255,255]); doc.text("Wellness From Within", M, 50);
       font(SERIFI,12.5,[206,229,225]); doc.text(pdfSafe(PRACTICE.name), M, 72);
-      font(SANSB,8.5,[206,229,225]); doc.setCharSpace(1.6); doc.text("REMEDY PLAN", W-M, 40, {align:"right"}); doc.setCharSpace(0);
+      font(SANSB,8.5,[206,229,225]); doc.setCharSpace(1.6); doc.text("TREATMENT PLAN", W-M, 40, {align:"right"}); doc.setCharSpace(0);
       font(SANSB,13,[255,255,255]); doc.text(pdfSafe(clientLabel||""), W-M, 59, {align:"right"});
       font(SANS,10,[206,229,225]); doc.text(pdfSafe(fmtDate(p.date)||""), W-M, 75, {align:"right"});
       y=140;
       const t=(p.title||"").trim();
-      if(t && !/^remedy plan$/i.test(t)){ const ls=wrap(t,CW,SERIF,17); font(SERIF,17,deep); ls.forEach(l=>{ doc.text(l,M,y); y+=21; }); y+=6; }
+      if(t && !/^(remedy|treatment) plan$/i.test(t)){ const ls=wrap(t,CW,SERIF,17); font(SERIF,17,deep); ls.forEach(l=>{ doc.text(l,M,y); y+=21; }); y+=6; }
     } else {
       doc.setFillColor(...teal); doc.rect(0,0,W,6,"F");
       font(SERIF,11,teal); doc.text("Wellness From Within", M, 34);
@@ -1850,7 +1851,7 @@ function narayaniHtml(){
 function renderSettings(){
   $("#app").innerHTML = `<div class="sheet stack" style="max-width:760px">
     <h1>Settings</h1>
-    <label class="field"><span>Default instructions on new remedy plans</span><textarea id="st-instr" style="min-height:120px">${esc(cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS)}</textarea></label>
+    <label class="field"><span>Default instructions on new treatment plans</span><textarea id="st-instr" style="min-height:120px">${esc(cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS)}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     <div class="formsec stack">
       <h3>Inviting clients</h3>
@@ -1903,11 +1904,11 @@ function startClient(){
 }
 function renderClient(){
   if(S.prac) return;
-  if(!S.me){ $("#app").innerHTML = `<div class="sheet stack"><h1>Welcome</h1><p class="muted">Please sign in to see your forms and remedy plans.</p>${contactBlock()}</div>`; return; }
+  if(!S.me){ $("#app").innerHTML = `<div class="sheet stack"><h1>Welcome</h1><p class="muted">Please sign in to see your forms and treatment plans.</p>${contactBlock()}</div>`; return; }
   const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.followup?.fullName || S.myRec?.name || "";
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
-  t.innerHTML = [["plans","My remedy plans"],["reports","My reports"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
+  t.innerHTML = [["plans","My treatment plans"],["reports","My reports"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
@@ -1916,7 +1917,7 @@ function renderClient(){
     body = `<div class="sheet stack"><h2>My reports</h2><p class="small muted">Your Qest4 and wellness reports from Dawn. Tap Open to view or save a copy.</p>
       ${fl.length?fl.map(f=>fileRow(f,false)).join(""):`<div class="empty small">No reports yet. Dawn adds them here after your session.</div>`}</div>`;
   } else if(S.cview==="plans"){
-    body = !S.myPlans.length ? `<div class="sheet stack"><h2>No plans yet</h2><p class="muted">After your session, Dawn adds your remedy plan here.${homeoIn||qestIn ? " Your form is in." : " In the meantime, you can fill in your form."}</p>${homeoIn||qestIn?"":`<div class="row"><button type="button" class="primary" data-cv2="forms">Open my forms</button></div>`}</div>`
+    body = !S.myPlans.length ? `<div class="sheet stack"><h2>No plans yet</h2><p class="muted">After your session, Dawn adds your treatment plan here.${homeoIn||qestIn ? " Your form is in." : " In the meantime, you can fill in your form."}</p>${homeoIn||qestIn?"":`<div class="row"><button type="button" class="primary" data-cv2="forms">Open my forms</button></div>`}</div>`
       : S.myPlans.map(planCard).join("");
   } else {
     const denied = S.clientWrite==="denied"?`<div class="notice">Your portal access lets you view your plans but not save forms here. Please email your answers and photo to ${esc(PRACTICE.email)}, or ask Dawn for Contributor access.</div>`:"";
@@ -1991,10 +1992,10 @@ function renderClient(){
 }
 function planCard(p){
   return `<article class="sheet planview">
-    <div><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(p.title||"Remedy plan")}</h2></div>
+    <div><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div>
     ${(p.bottles||[]).map((b,i)=>`<div class="bottle">
       <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
-      ${b.remedies?`<p class="rx">${esc(b.remedies)}</p>`:""}
+      ${b.remedies?`<ul class="rxlist">${remedyLines(b.remedies).map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
       <div class="grid2">
         ${b.freq?`<div><p class="label">How often</p><p class="freq">${esc(plainFreq(b.freq)||b.freq)}${plainFreq(b.freq)?` <span class="mono muted">${esc(b.freq)}</span>`:""}</p></div>`:""}
         ${b.duration?`<div><p class="label">How long</p><p>${esc(b.duration)}</p></div>`:""}
