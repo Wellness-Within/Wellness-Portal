@@ -25,7 +25,7 @@ begin
   perform net.http_post(
     url     := 'https://ntfy.sh',
     body    := jsonb_build_object(
-                 'topic',   'wfw-f97122f052ea62a1',
+                 'topic',   'YOUR-PRIVATE-TOPIC',
                  'title',   'New ' || which,
                  'message', who || ' sent their ' || which || '. Open your portal to read it.',
                  'click',   'https://portal.dawnspain.com',
