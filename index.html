@@ -48,7 +48,7 @@ p{margin:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grow{flex:1 1 auto;min-width:0}
 button,.btn{font:600 14px var(--f-body);border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
-button.primary{background:var(--brand);color:var(--brand-ink);border-color:#4FD3DD}
+button.primary,.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:#4FD3DD}
 button.primary:hover{background:#5ED9E2}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.primary{background:#75E3EB;color:#06262B}}
 button.ghost{border-color:transparent;background:none;color:var(--accent);padding:6px 8px}
@@ -520,6 +520,16 @@ async function resolveNames(){
   S.profiles = await S.user.profiles(ids);
   if(S.tab==="clients") render();
 }
+function clientEmail(id){ const c=S.clients[id]||{}; return c.email || c.intake?.email || c.qest?.email || c.followup?.email || ""; }
+function clientFirst(id){ const c=S.clients[id]||{}; return (c.intake?.nickname || c.intake?.preferredName || clientName(id) || "").split(/\s+/)[0].replace(/.*@.*/,"") || ""; }
+function notifyMail(id, kind){
+  const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return; }
+  const first=clientFirst(id); const what = kind==="files" ? "new report" : "treatment plan";
+  const where = kind==="files" ? "\u201cMy reports\u201d" : "\u201cMy treatment plans\u201d";
+  const subject = kind==="files" ? "Your new report is ready" : "Your treatment plan is ready";
+  const body = `Hi ${first && first!=="Unnamed"?first:"there"},\n\nYour ${what} is ready in your Wellness From Within portal.\n\nTo see it, go to https://portal.dawnspain.com and sign in with this email address (${to}). You'll find it under ${where}.\n\nPlease reach out if you have any questions.\n\nWarmly,\n${PRACTICE.name}\n${PRACTICE.phone}\n${PRACTICE.site}`;
+  location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 function clientName(id){
   const c = S.clients[id] || {};
   return c.name || c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
@@ -666,6 +676,7 @@ function filesPane(id){
     <div class="row" style="gap:8px;flex-wrap:wrap">
       <label class="btn primary" for="file-up" style="cursor:pointer">Upload files</label><input type="file" id="file-up" class="sr" multiple accept=".pdf,image/*,.doc,.docx">
       <label class="check small"><input type="checkbox" id="file-share-now" checked> Share with client right away</label>
+      ${!id.startsWith("c-") && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto">Let client know</button>` : ""}
     </div>
     <div id="file-status" class="small muted"></div>
     <div class="stack" style="gap:8px">${!S.filesLoaded&&S.filesFor===id?`<div class="empty">Loading…</div>`:files.length?files.map(f=>fileRow(f,true)).join(""):`<div class="empty small">No files yet.</div>`}</div>
@@ -723,7 +734,7 @@ function plansPane(id){
   if(ep) return planEditor(ep);
   const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No treatment plans yet.</p></div>` :
     S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.status==="shared"?'<span class="chip ok">Shared with client</span>':'<span class="chip">Draft</span>'}<span>${(p.bottles||[]).length} bottle${(p.bottles||[]).length===1?"":"s"}</span></span></button>`).join("");
-  return `<div class="stack"><div class="row"><p class="grow small muted">One bottle per issue. Remedies that share a frequency go in the same bottle.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
+  return `<div class="stack"><div class="row"><p class="grow small muted">Each bottle holds the remedies you choose to combine.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
 }
 function planEditor(ep){
   const p = ep.data;
@@ -753,7 +764,7 @@ function planEditor(ep){
     ${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px">${esc(p.instructions)}</textarea></label>
-    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id && p.status==="shared" && !ep.dirty && !ep.clientId.startsWith("c-") ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
   </div>`;
@@ -867,6 +878,8 @@ function bindClients(){
       else if(act==="bottlelib"){ readPlanForm(); S.editPlan.target=+a.dataset.i; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); toast(`Pick a protocol line to add to Bottle ${+a.dataset.i+1}`); }
       else if(act==="tolibrary"){ readPlanForm(); S.editPlan.target=null; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
       else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id; ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
+      else if(act==="notifyfiles"){ notifyMail(a.dataset.id,"files"); }
+      else if(act==="notifyplan"){ notifyMail(S.editPlan.clientId,"plan"); }
       else if(act==="askdelplan"){ S.confirmPlanDel=true; readPlanForm(); renderClients(); }
       else if(act==="delplan"){ await S.db.doc(`clients/${S.editPlan.clientId}/plans/${S.editPlan.id}`).delete(); S.editPlan=null; S.confirmPlanDel=false; toast("Plan deleted"); renderClients(); }
       else if(act==="copyplan"){ readPlanForm(); const txt=planText(S.editPlan.data, clientName(S.editPlan.clientId));
