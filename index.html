@@ -314,6 +314,25 @@ const QEST = [
     {id:"signature",label:"Signature (type your full name)",type:"text",req:true},{id:"sigDate",label:"Date",type:"date",req:true}]}
 ];
 
+
+const FOLLOWUP = [
+  {sec:"About you", fields:[
+    {id:"fullName",label:"Full name",type:"text",req:true},
+    {id:"lastVisit",label:"About when was your last visit?",type:"text"}]},
+  {sec:"Since your last visit", note:"Short answers are fine. Dawn will go through the details with you in your session.", fields:[
+    {id:"overall",label:"Overall, how are you feeling compared with your last visit?",type:"choice",options:["Much better","A little better","About the same","A little worse","Much worse"]},
+    {id:"mainNow",label:"How much your main concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
+    {id:"changes",label:"What has changed since your last visit?",type:"textarea",wide:true,hint:"Better, worse, different, or anything you've noticed"},
+    {id:"remedies",label:"Which remedies have you been taking, and how often?",type:"textarea",wide:true},
+    {id:"response",label:"How did you feel after starting them?",type:"textarea",wide:true,hint:"Did anything get stronger for a short time and then ease? Any changes in sleep, energy or mood?"},
+    {id:"missed",label:"Any doses missed or remedies stopped? Why?",type:"textarea",wide:true},
+    {id:"newSymptoms",label:"Any new symptoms, or old ones that came back?",type:"textarea",wide:true},
+    {id:"lifeEvents",label:"Any illness, stress, big events, or new medications or supplements since your last visit?",type:"textarea",wide:true}]},
+  {sec:"Anything else", fields:[
+    {id:"focus",label:"What would you most like to focus on in this session?",type:"textarea",wide:true},
+    {id:"questions",label:"Questions for Dawn",type:"textarea",wide:true}]}
+];
+
 /* Photo: resized in the browser and kept in the client's own private record */
 function resizePhoto(file){
   return new Promise((res, rej) => {
@@ -499,7 +518,7 @@ async function resolveNames(){
 }
 function clientName(id){
   const c = S.clients[id] || {};
-  return c.name || c.intake?.fullName || c.qest?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
+  return c.name || c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
 }
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
@@ -550,7 +569,7 @@ function renderClients(){
   </div>`;
   bindClients();
 }
-function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||""].sort().pop(); }
+function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||"", c.followupSubmittedAt||""].sort().pop(); }
 function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
 function intakeChip(c){
   const out = [];
@@ -558,16 +577,20 @@ function intakeChip(c){
   if(c.intakeStatus==="submitted") out.push(`<span class="chip ok">Intake in</span>`);
   else if(c.intake && Object.keys(c.intake).length) out.push(`<span class="chip warn">Intake started</span>`);
   if(c.qestStatus==="submitted") out.push(`<span class="chip ok">Qest4 form in</span>`);
+  if((c.followupHistory||[]).length) out.push(`<span class="chip ok">Follow-up ${esc(fmtDate(c.followupSubmittedAt))}</span>`);
   else if(c.qest && Object.keys(c.qest).length) out.push(`<span class="chip warn">Qest4 form started</span>`);
   return out.join("") || `<span class="chip">No forms yet</span>`;
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["intake","Homeopathy intake"],["qest","Qest4 form"],["plans","Remedy plans"],["notes","Private notes"],["details","Details"]];
+  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Remedy plans"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
+  if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
+    body = hist.length ? `<div class="stack">${hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""}</summary><div style="margin-top:8px">${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")}</div>`
+      : `<div class="empty"><p>No follow-up forms yet.</p><p class="small">Send this client <span class="mono">https://portal.dawnspain.com/#followup</span> before their next session.</p></div>`; }
   if(S.sub==="notes") body = `<div class="stack"><p class="small muted">Only you can see these notes. Clients never see this tab.</p><textarea id="notesBox" style="min-height:260px" placeholder="Case notes, Qest4 session observations, follow-up ideas">${esc(S.notesFor===id?S.notes:"")}</textarea><div class="row"><button type="button" class="primary" data-act="savenotes">Save notes</button></div></div>`;
   if(S.sub==="details") body = detailsPane(id, c);
   ensureClientSubs(id);
@@ -693,7 +716,7 @@ function bindClients(){
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
   ["pl-title","pl-date","pl-status","pl-instr"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
-    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ if(rec.qestSubmittedAt && rec.qestSubmittedAt>=(rec.intakeSubmittedAt||"")) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:p.instructions||"",bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
@@ -1671,10 +1694,10 @@ function startClient(){
   $("#sub").textContent = "Client portal";
   S.myRec = null; S.myPlans = []; S.myPhoto = ""; S.recLoaded=false;
   const h = (location.hash||"").toLowerCase();
-  S.cview = (h==="#qest"||h==="#intake") ? "forms" : "plans";
-  S.form = h==="#qest" ? "qest" : "homeo";
+  S.cview = (h==="#qest"||h==="#intake"||h==="#followup") ? "forms" : "plans";
+  S.form = h==="#qest" ? "qest" : h==="#followup" ? "followup" : "homeo";
   if(!S.me){ renderClient(); return; }
-  const editing = () => document.activeElement?.closest?.("#ci-form, #cs-form");
+  const editing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form");
   S.db.doc("clients/"+S.me).onSnapshot(s => { S.myRec = s.exists ? s.data() : null; S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); });
   S.db.collection("clients/"+S.me+"/plans").onSnapshot(s => { S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e));
   S.db.doc(`clients/${S.me}/media/photo`).onSnapshot(s => { S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e));
@@ -1683,7 +1706,7 @@ function startClient(){
 function renderClient(){
   if(S.prac) return;
   if(!S.me){ $("#app").innerHTML = `<div class="sheet stack"><h1>Welcome</h1><p class="muted">Please sign in to see your forms and remedy plans.</p>${contactBlock()}</div>`; return; }
-  const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.name || "";
+  const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.followup?.fullName || S.myRec?.name || "";
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
   t.innerHTML = [["plans","My remedy plans"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
@@ -1697,7 +1720,8 @@ function renderClient(){
     const denied = S.clientWrite==="denied"?`<div class="notice">Your portal access lets you view your plans but not save forms here. Please email your answers and photo to ${esc(PRACTICE.email)}, or ask Dawn for Contributor access.</div>`:"";
     const seg = `<div class="seg" role="tablist" aria-label="Which form">
       <button type="button" role="tab" data-form="qest" aria-current="${S.form==="qest"}">Qest4 pre-scan form${qestIn?" ✓":""}</button>
-      <button type="button" role="tab" data-form="homeo" aria-current="${S.form==="homeo"}">Homeopathy intake${homeoIn?" ✓":""}</button></div>`;
+      <button type="button" role="tab" data-form="homeo" aria-current="${S.form==="homeo"}">Homeopathy intake${homeoIn?" ✓":""}</button>
+      <button type="button" role="tab" data-form="followup" aria-current="${S.form==="followup"}">Homeopathy follow-up</button></div>`;
     if(S.form==="qest"){
       body = `${seg}<div class="sheet stack">
         <div><h2>Pre-scan wellness form</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
@@ -1706,6 +1730,15 @@ function renderClient(){
         ${photoBlock("cp", S.myPhoto, true, true)}
         ${intakeForm(S.myRec?.qest||{}, "cs", false, QEST)}
         <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>
+      </div>`;
+    } else if(S.form==="followup"){
+      const lastFu=(S.myRec?.followupHistory||[]).slice(-1)[0];
+      body = `${seg}<div class="sheet stack">
+        <div><h2>Homeopathy follow-up</h2><p class="small muted">A quick update before your follow-up session. Only you and Dawn can see your answers.</p></div>
+        ${lastFu?`<div class="notice ok">Your last follow-up was sent ${esc(fmtDate(lastFu.submittedAt))}. Update your answers for this visit and send it again.</div>`:""}
+        ${denied}
+        ${intakeForm(S.myRec?.followup||{fullName:S.myRec?.intake?.fullName||S.myRec?.qest?.fullName||""}, "cf", false, FOLLOWUP)}
+        <div class="row"><button type="button" data-act="fdraft">Save and finish later</button><button type="button" class="primary" data-act="fsubmit">Send to Dawn</button></div>
       </div>`;
     } else {
       body = `${seg}<div class="sheet stack">
@@ -1728,9 +1761,9 @@ function renderClient(){
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
     const act=a.dataset.act;
-    if(!["cdraft","csubmit","qdraft","qsubmit"].includes(act)) return;
-    const isQ = act[0]==="q", submit = act.endsWith("submit");
-    const def = isQ ? QEST : INTAKE, pre = isQ ? "cs" : "ci";
+    if(!["cdraft","csubmit","qdraft","qsubmit","fdraft","fsubmit"].includes(act)) return;
+    const isQ = act[0]==="q", isF = act[0]==="f", submit = act.endsWith("submit");
+    const def = isQ ? QEST : isF ? FOLLOWUP : INTAKE, pre = isQ ? "cs" : isF ? "cf" : "ci";
     const vals = readIntake(pre, def);
     if(submit){
       const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id]);
@@ -1739,9 +1772,10 @@ function renderClient(){
     }
     a.disabled=true;
     const now=new Date().toISOString();
-    const key = isQ ? "qest" : "intake", stKey = isQ ? "qestStatus" : "intakeStatus";
+    const key = isQ ? "qest" : isF ? "followup" : "intake", stKey = key + "Status";
     const patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
     if(submit) patch[key+"SubmittedAt"] = now;
+    if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now}].slice(-60);
     try{
       if(S.myRec) await S.db.doc("clients/"+S.me).update(patch);
       else await S.db.doc("clients/"+S.me).set({...patch, createdAt:now, source:"portal"});
