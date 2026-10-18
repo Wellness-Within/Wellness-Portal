@@ -10,24 +10,25 @@
 <style>
 /* Layout: a quiet apothecary ledger. Sticky header, then a two-pane workspace (list | record) that stacks on phones. */
 :root{
-  --bg:#EEF4F3; --surface:#FFFFFF; --sunk:#E3EDEB; --ink:#12302F; --muted:#4D6967; --line:#CFDFDC;
-  --accent:#0E7470; --accent-ink:#FFFFFF; --soft:#D4ECE8; --amber:#9A5B00; --amber-soft:#FBEBD0; --ok:#1F6B3A; --ok-soft:#DCEFE1; --danger:#A3312B;
+  --bg:#F1FAFB; --surface:#FFFFFF; --sunk:#E4F4F6; --ink:#173A41; --muted:#4F6C72; --line:#CBE7EA;
+  --accent:#0A7F89; --accent-ink:#FFFFFF; --soft:#D3F4F7; --brand:#75E3EB; --brand-ink:#0F333A; --amber:#9A5B00; --amber-soft:#FBEBD0; --ok:#1F6B3A; --ok-soft:#DCEFE1; --danger:#A3312B;
   --f-display:"Young Serif", Georgia, "Times New Roman", serif;
   --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --r:10px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0C1A1A; --surface:#132525; --sunk:#0F2020; --ink:#E2EFED; --muted:#93AEAB; --line:#244140;
-  --accent:#4CC3B9; --accent-ink:#06201E; --soft:#17393A; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}}
+  --bg:#0A191C; --surface:#11262A; --sunk:#0D1F23; --ink:#E0F2F4; --muted:#93B2B7; --line:#21414A;
+  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0C1A1A; --surface:#132525; --sunk:#0F2020; --ink:#E2EFED; --muted:#93AEAB; --line:#244140;
-  --accent:#4CC3B9; --accent-ink:#06201E; --soft:#17393A; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}
+  --bg:#0A191C; --surface:#11262A; --sunk:#0D1F23; --ink:#E0F2F4; --muted:#93B2B7; --line:#21414A;
+  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#F0B45A; --amber-soft:#3A2C13; --ok:#7FD39A; --ok-soft:#173424; --danger:#F08C84; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--brand)}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1240px;margin:0 auto}
-header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--brand);color:var(--brand-ink);border-bottom:1px solid var(--line)}
+header.top .brand span,header.top nav.tabs button{color:var(--brand-ink)}header.top nav.tabs button{opacity:.85}header.top nav.tabs button[aria-current="true"]{background:var(--surface);color:var(--ink);opacity:1}header.top #signout{color:var(--brand-ink)}
 header.top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:12px}
 .brand{display:flex;flex-direction:column;line-height:1.1;margin-right:auto}
 .brand b{font-family:var(--f-display);font-weight:400;font-size:20px;letter-spacing:.2px}
@@ -982,25 +983,25 @@ function remedyLines(t){ return String(t||"").split(/\s*(?:\n|;|\s\/\s)\s*/).map
 async function planPdf(p, clientLabel){
   const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=50, CW=W-2*M, FOOT=70;
-  const teal=[22,92,88], deep=[14,62,60], ink=[30,42,42], muted=[104,118,116], line=[214,226,223], card=[248,251,250], gold=[190,154,92], cream=[251,247,239];
+  const aqua=[117,227,235], teal=[10,127,137], deep=[19,66,74], ink=[33,47,51], muted=[98,118,123], line=[203,231,234], card=[246,252,253], gold=[10,127,137], cream=[234,249,250], hdr=[15,51,58], hdr2=[22,86,96];
   const font=(style,size,color)=>{ doc.setFont(style[0],style[1]); doc.setFontSize(size); doc.setTextColor(...color); };
   const wrap=(t,w,style,size)=>{ doc.setFont(style[0],style[1]); doc.setFontSize(size); return doc.splitTextToSize(pdfSafe(t), w); };
   const SANS=["helvetica","normal"], SANSB=["helvetica","bold"], SANSI=["helvetica","italic"], SERIF=["times","bold"], SERIFI=["times","italic"];
   let y=0;
   const header=first=>{
     if(first){
-      doc.setFillColor(...teal); doc.rect(0,0,W,104,"F");
-      doc.setFillColor(...gold); doc.rect(0,104,W,3,"F");
-      font(SERIF,25,[255,255,255]); doc.text("Wellness From Within", M, 50);
-      font(SERIFI,12.5,[206,229,225]); doc.text(pdfSafe(PRACTICE.name), M, 72);
-      font(SANSB,8.5,[206,229,225]); doc.setCharSpace(1.6); doc.text("TREATMENT PLAN", W-M, 40, {align:"right"}); doc.setCharSpace(0);
-      font(SANSB,13,[255,255,255]); doc.text(pdfSafe(clientLabel||""), W-M, 59, {align:"right"});
-      font(SANS,10,[206,229,225]); doc.text(pdfSafe(fmtDate(p.date)||""), W-M, 75, {align:"right"});
+      doc.setFillColor(...aqua); doc.rect(0,0,W,104,"F");
+      doc.setFillColor(...teal); doc.rect(0,104,W,3,"F");
+      font(SERIF,25,hdr); doc.text("Wellness From Within", M, 50);
+      font(SERIFI,12.5,hdr2); doc.text(pdfSafe(PRACTICE.name), M, 72);
+      font(SANSB,8.5,hdr2); doc.setCharSpace(1.6); doc.text("TREATMENT PLAN", W-M, 40, {align:"right"}); doc.setCharSpace(0);
+      font(SANSB,13,hdr); doc.text(pdfSafe(clientLabel||""), W-M, 59, {align:"right"});
+      font(SANS,10,hdr2); doc.text(pdfSafe(fmtDate(p.date)||""), W-M, 75, {align:"right"});
       y=140;
       const t=(p.title||"").trim();
       if(t && !/^(remedy|treatment) plan$/i.test(t)){ const ls=wrap(t,CW,SERIF,17); font(SERIF,17,deep); ls.forEach(l=>{ doc.text(l,M,y); y+=21; }); y+=6; }
     } else {
-      doc.setFillColor(...teal); doc.rect(0,0,W,6,"F");
+      doc.setFillColor(...aqua); doc.rect(0,0,W,6,"F");
       font(SERIF,11,teal); doc.text("Wellness From Within", M, 34);
       font(SANS,9,muted); doc.text(pdfSafe([clientLabel, fmtDate(p.date)].filter(Boolean).join("  |  ")), W-M, 34, {align:"right"});
       doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(M,44,W-M,44); y=68;
@@ -1048,7 +1049,7 @@ async function planPdf(p, clientLabel){
     const paras=instr.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>wrap(s, CW-36, SANS, 10.5));
     const h=18+16+paras.reduce((s,ls)=>s+ls.length*14+5,0)+12;
     room(h+10); y+=4; const top=y;
-    doc.setFillColor(...cream); doc.setDrawColor(232,220,196); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
+    doc.setFillColor(...cream); doc.setDrawColor(...line); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
     let cy=top+26; font(SERIF,13,deep); doc.text("How to take your remedies", M+18, cy); cy+=18;
     font(SANS,10.5,ink); paras.forEach(ls=>{ ls.forEach(l=>{ doc.text(l,M+18,cy); cy+=14; }); cy+=5; });
     y=top+h+10;
