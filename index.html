@@ -1600,16 +1600,18 @@ function openMM(i){ R.mmSel=i; R.mmMore={}; S.tab="mm"; store("wfw.tab",S.tab); 
 function renderMM(){
   $("#app").innerHTML = `<div class="stack">
     ${targetBanner()}
-    <div class="panes ${R.mmSel!=null?"has-sel":""}">
-      <section class="list-pane" aria-label="Remedies">
-        <div class="head"><h2>Materia medica</h2><input id="mmq" type="search" placeholder="Find a remedy, e.g. nat mur, sepia" value="${esc(R.mmQ)}" aria-label="Find a remedy"></div>
+    <div class="panes ${(R.mmMode==="fe"?R.feSel:R.mmSel)!=null?"has-sel":""}">
+      <section class="list-pane ${R.mmMode==="fe"&&R.feSel?"":""}" aria-label="Remedies">
+        <div class="head"><h2>Materia medica</h2>
+          <div class="seg" role="tablist"><button type="button" data-femode="rem" aria-current="${R.mmMode!=="fe"}">Remedies</button><button type="button" data-femode="fe" aria-current="${R.mmMode==="fe"}">Flower essences</button></div>
+          <input id="mmq" type="search" placeholder="${R.mmMode==="fe"?"Find an essence, e.g. waratah, crab apple":"Find a remedy, e.g. nat mur, sepia"}" value="${esc(R.mmMode==="fe"?(R.feQ||""):R.mmQ)}" aria-label="Find"></div>
         <div class="list" id="mmList"><div class="empty">Loading…</div></div>
       </section>
       <section class="detail-pane" id="mmDetail"><div class="sheet empty">Loading…</div></section>
     </div></div>`;
   Promise.all([loadRep(), loadMM(), loadBooks().catch(()=>null)]).then(()=>{ if(S.tab!=="mm") return; renderMMList(); renderMMDetail(); })
     .catch(()=>{ const d=$("#mmDetail"); if(d) d.innerHTML=`<div class="sheet empty">The materia medica didn't load. Reload the page to try again.</div>`; });
-  let t; $("#mmq").oninput=e=>{ clearTimeout(t); t=setTimeout(()=>{ R.mmQ=e.target.value; renderMMList(); },100); };
+  let t; $("#mmq").oninput=e=>{ clearTimeout(t); t=setTimeout(()=>{ if(R.mmMode==="fe") R.feQ=e.target.value; else R.mmQ=e.target.value; renderMMList(); },100); };
   $("#app").onclick = mmClick;
 }
 function mmCandidates(){
@@ -1625,12 +1627,38 @@ function mmCandidates(){
   out.sort((a,b)=>{ const sa=(withMM.has(a)||gb.has(a))?0:1, sb=(withMM.has(b)||gb.has(b))?0:1; return sa-sb || remName(a).localeCompare(remName(b)); });
   return out.slice(0,200);
 }
+function feParas(){ if(!R.books) return []; const out=[]; noteSources().filter(x=>/flower essence/i.test(x.title)).forEach(x=>x.paras.forEach((p,pi)=>out.push({title:x.title,p,pi}))); return out; }
+function feRx(name){ return new RegExp("\\b"+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/\s+/g,"[\\s-]+")+"\\b","i"); }
+function renderFEList(){
+  const el=$("#mmList"); if(!el) return;
+  const q=(R.feQ||"").trim().toLowerCase();
+  const list=ESSENCES.filter(([n])=>!q||n.toLowerCase().includes(q));
+  el.innerHTML = list.length ? list.map(([n,src])=>`<button type="button" class="item" data-fe="${esc(n)}" aria-current="${R.feSel===n}"><b>${esc(n)}</b><span class="meta"><span class="chip ${src.startsWith("Bach")?"":"acc"}">${src.startsWith("Bach")?"Bach":"Feel Good"}</span></span></button>`).join("") : `<div class="empty">No essence matches.</div>`;
+}
+function renderFEDetail(){
+  const el=$("#mmDetail"); if(!el) return;
+  const n=R.feSel;
+  if(!n){ el.innerHTML=`<div class="sheet stack"><h2>Flower essences</h2><p class="muted">Pick an essence to see every passage about it in your Feel Good Flower Essences notes, then add it to a client's bottle.</p></div>`; return; }
+  if(!R.books){ el.innerHTML=`<div class="sheet empty">Loading your notes…</div>`; return; }
+  const src=(ESSENCES.find(x=>x[0]===n)||[])[1]||"";
+  const rx=feRx(n); const hits=feParas().filter(x=>rx.test(x.p));
+  hits.sort((a,b)=>(b.p.toUpperCase().includes(n.toUpperCase()+" ")&&/[A-Z]{4}/.test(b.p.slice(0,40))?1:0)-(a.p.toUpperCase().includes(n.toUpperCase()+" ")&&/[A-Z]{4}/.test(a.p.slice(0,40))?1:0) || a.pi-b.pi);
+  const label = n+(src.startsWith("Bach")?" (Bach)":" (flower essence)");
+  el.innerHTML=`<div class="sheet stack">
+    <button type="button" class="ghost back-btn" data-act="feback">← All essences</button>
+    <div class="row"><div class="grow"><p class="label">${esc(src==="Flower essence"?"Feel Good Flower Essences":src)}</p><h1>${esc(n)}</h1></div>${S.editPlan?`<button type="button" data-feadd="${esc(label)}">Add to plan</button>`:""}</div>
+    <p class="small muted">${hits.length} passage${hits.length===1?"":"s"} in your flower essence notes.</p>
+    ${hits.slice(0,40).map(h=>`<div class="stack" style="gap:2px"><p class="mmtext note-para" style="white-space:pre-wrap;margin:0">${hl(h.p,[n.toLowerCase()])}</p><div class="row"><button type="button" class="linkish small" data-feopen="${esc(h.title)}" data-pi="${h.pi}">Open in notes ›</button></div></div>`).join("") || `<p class="muted">No passages found in your notes for this essence.</p>`}
+  </div>`;
+}
 function renderMMList(){
+  if(R.mmMode==="fe") return renderFEList();
   const el=$("#mmList"); if(!el||!R.rep||!R.mm) return;
   const c=mmCandidates(); const gb=new Set((R.books?.gbot||[]).map(g=>g.idx));
   el.innerHTML = c.length ? c.map(i=>`<button type="button" class="item" data-mm="${i}" aria-current="${R.mmSel===i}"><b>${esc(remName(i))}</b><span class="meta"><span class="mono">${esc(remAbbr(i))}</span>${R.mm.remedies[i]?'<span class="chip">Boericke</span>':""}${gb.has(i)?'<span class="chip acc">GBOT</span>':""}</span></button>`).join("") : `<div class="empty">No remedy matches.</div>`;
 }
 function renderMMDetail(){
+  if(R.mmMode==="fe") return renderFEDetail();
   const el=$("#mmDetail"); if(!el) return;
   const i=R.mmSel;
   if(i==null){ el.innerHTML=`<div class="sheet stack"><h2>Look up a remedy</h2><p class="muted">One page per remedy, pulling together:</p><ul class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>its strongest rubrics in the repertory</li><li>Boericke's Pocket Manual</li><li>your Getting Back on Track notes</li><li>your Extra Strength Homeopathy notes</li><li>your Substack articles and other saved notes</li><li>Narayani and Helios combinations that contain it</li><li>Banerji protocols that use it</li></ul></div>`; return; }
@@ -1663,6 +1691,11 @@ function renderMMDetail(){
 function fmtMM(c){ return esc(c).replace(/\*([^*]+)\*/g,"<em>$1</em>").replace(/\n/g,"<br>"); }
 function titleCase(s){ return s.toLowerCase().replace(/(^|[\s(\-\/])([a-z])/g,(m,a,b)=>a+b.toUpperCase()); }
 function mmClick(e){
+  const fm=e.target.closest("[data-femode]"); if(fm){ R.mmMode=fm.dataset.femode; renderMM(); return; }
+  const fe=e.target.closest("[data-fe]"); if(fe){ R.feSel=fe.dataset.fe; renderFEList(); renderFEDetail(); $(".panes")?.classList.add("has-sel"); if(innerWidth<821) window.scrollTo(0,0); return; }
+  const fa=e.target.closest("[data-feadd]"); if(fa){ addBottle(R.feSel, fa.dataset.feadd); return; }
+  const fo=e.target.closest("[data-feopen]"); if(fo){ R.ntq=""; R.ntDoc=""; R.ntOpen={title:fo.dataset.feopen, pi:+fo.dataset.pi}; S.tab="notes"; store("wfw.tab",S.tab); renderTabs(); render(); return; }
+  const fb=e.target.closest("[data-act]"); if(fb?.dataset.act==="feback"){ R.feSel=null; renderMM(); return; }
   const mm=e.target.closest("[data-mm]"); if(mm){ R.mmSel=+mm.dataset.mm; R.mmMore={}; renderMMList(); renderMMDetail(); if(innerWidth<821) window.scrollTo(0,0); return; }
   const mo=e.target.closest("[data-more-mm]"); if(mo){ R.mmMore[mo.dataset.moreMm]=true; renderMMDetail(); return; }
   const ar=e.target.closest("[data-addrem]"); if(ar){ addBottle(remName(+ar.dataset.addrem), remName(+ar.dataset.addrem)); return; }
