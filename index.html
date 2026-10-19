@@ -105,6 +105,17 @@ legend{font-family:var(--f-display);font-size:17px;padding:0;margin-bottom:8px}
 .legend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);padding:10px 12px;background:var(--sunk);border-radius:8px}
 .legend code{font-family:var(--f-mono);color:var(--ink);font-weight:500}
 .proto{display:flex;flex-direction:column;gap:10px}
+.scan-bar{position:sticky;top:0;z-index:2;background:var(--bg);padding:6px 0}
+.scanview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;align-items:start}
+.scan-pane{max-height:calc(100dvh - 190px);overflow:auto;overscroll-behavior:contain}
+.scan-pane.right{display:flex;flex-direction:column;gap:16px}
+.scan-form .field textarea{min-height:90px}
+.scan-h{font-size:15px;margin:10px 0 0;padding-bottom:4px;border-bottom:1px solid var(--line);color:var(--accent)}
+.scan-grid{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:10px}
+.scan-row{display:grid;grid-template-columns:var(--tpl);gap:10px}
+.scan-checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px}
+@media (max-width:960px){.scanview{grid-template-columns:1fr}.scan-pane{max-height:none;overflow:visible}.scan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.scan-grid,.scan-row{grid-template-columns:1fr}}
 .pline{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .pline .n{font-family:var(--f-mono);font-size:12px;color:var(--accent);padding-top:2px;min-width:64px}
 .pline .x{font-family:var(--f-mono);font-size:13.5px;line-height:1.55;min-width:0;overflow-wrap:anywhere}
@@ -205,7 +216,7 @@ details.poly summary{cursor:pointer;font-weight:600}
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 const fmtDate = d => { if(!d) return ""; const x = new Date(d.length===10 ? d+"T12:00:00" : d); return isNaN(x) ? d : x.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}); };
 let toastT; function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2600); }
 const rid = p => p + Math.random().toString(36).slice(2,10);
@@ -583,6 +594,7 @@ document.addEventListener("change", e => { if(e.target && e.target.id==="plan-ta
 
 /* ---------- Clients ---------- */
 function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
+  if(S.scan){ if(!document.getElementById("scan-root")) renderScan(); return; }
   const ids = Object.keys(S.clients).sort((a,b)=>(isNewForm(S.clients[b])-isNewForm(S.clients[a])) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
   const shown = ids.filter(id => !f || clientName(id).toLowerCase().includes(f));
@@ -619,12 +631,13 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Treatment plans"],["files","Reports & files"],["notes","Private notes"],["details","Details"]];
+  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Treatment plans"],["files","Reports & files"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
+  if(S.sub==="scans") body = scansPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
     body = hist.length ? `<div class="stack">${hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""}</summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")}</div>`
       : `<div class="empty"><p>No follow-up forms yet.</p><p class="small">Send this client <span class="mono">https://portal.dawnspain.com/#followup</span> before their next session.</p></div>`; }
@@ -715,6 +728,10 @@ async function uploadClientFiles(id, fileList, share){
 }
 
 function ensureClientSubs(id){
+  if(S.scansFor!==id){
+    S.scansUnsub && S.scansUnsub(); S.scansFor=id; S.scans=[]; S.scansLoaded=false;
+    S.scansUnsub = S.db.collection(`clients/${id}/scans`).onSnapshot(snap => { S.scans = snap.docs.map(d=>({id:d.id,...d.data()})); S.scansLoaded=true; if(S.tab==="clients" && S.sel===id && S.sub==="scans" && !S.scan) render(); }, e=>console.warn(e));
+  }
   if(S.photoFor!==id){
     S.photoUnsub && S.photoUnsub(); S.photoFor=id; S.photo="";
     S.photoUnsub = S.db.doc(`clients/${id}/media/photo`).onSnapshot(s => { S.photo = s.exists ? (s.data().dataUrl||"") : ""; if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
@@ -843,6 +860,7 @@ function bindClients(){
     const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
+    const scn = e.target.closest("[data-scan]"); if(scn){ const x=S.scans.find(v=>v.id===scn.dataset.scan); if(x){ const {id:sid,...data}=x; openScan(S.sel, sid, data); } return; }
     const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
@@ -886,6 +904,7 @@ function bindClients(){
       else if(act==="canceldel"){ S.confirmDel=null; renderClients(); }
       else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
       else if(act==="merge"){ await mergeClient(S.sel, $("#mergeTo").value); }
+      else if(act==="newscan"){ a.disabled=true; try{ await newScan(S.sel); }catch(err){ console.warn(err); toast("Couldn't start the session. Try again."); a.disabled=false; } }
       else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
@@ -1178,6 +1197,242 @@ async function formPdf(def, vals, {kind, who, date, photo}){
     font(SANS,7.5,muted); doc.text("Confidential client information", M, fy+30); doc.text(`Page ${i} of ${n}`, W-M, fy+30, {align:"right"});
   }
   return doc.output("blob");
+}
+
+/* ---------- Scan sessions (practitioner only; stored at clients/{id}/scans, which clients can never read) ---------- */
+const STD_SCANS = [["rtht","RTHT — Retest Hold Tank"],["c","C — Comprehensive"],["st","ST — Strep Tilch"],["gs","gs — General Support"],["in","in — Information"],["hc","hc — Homeopathic Causal"],["n","n — Narayani"],["g","g — Grandmother"],["l","l — Lanthodines"],["em","em — Emotions"]];
+const IMP_METHODS = ["Individual & Multi-Chord","Individual","Multi-Chord","Other"], CARRIERS = ["Alcohol tincture","Water","Glycerin","Sugar pellets","Other"], DONE_OPTS = ["Yes","Pending"];
+const INTO_OPTS = [["drops","Drops"],["pellets","Pellets"],["crystal","Crystal"],["jewelry","Jewelry"],["other","Other"]];
+const getP = (o,p) => p.split(".").reduce((a,k)=>a==null?undefined:a[k], o);
+function setP(o,p,v){ const ks=p.split("."); let a=o; ks.slice(0,-1).forEach((k,i)=>{ if(a[k]==null||typeof a[k]!=="object") a[k]=/^\d+$/.test(ks[i+1])?[]:{}; a=a[k]; }); a[ks[ks.length-1]]=v; }
+const usTime = v => { const m=/^(\d{1,2}):(\d{2})$/.exec(v||""); if(!m) return v||""; const h=+m[1]; return `${(h%12)||12}:${m[2]} ${h<12?"AM":"PM"}`; };
+window.addEventListener("beforeunload", () => { if(S.scan && SCAN_T) saveScan(); });
+const usDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v||"") ? `${v.slice(5,7)}/${v.slice(8,10)}/${v.slice(0,4)}` : (v||"");
+
+/* form widgets bound by data-k path */
+function sf(d, k, label, {type="text", wide=false, ph=""}={}){
+  const v=getP(d,k)??""; const id="sx-"+k.replace(/\./g,"-");
+  return `<label class="field"${wide?' style="grid-column:1/-1"':""}><span>${esc(label)}</span>${type==="textarea"
+    ? `<textarea id="${id}" data-k="${k}" placeholder="${esc(ph)}">${esc(v)}</textarea>`
+    : `<input id="${id}" data-k="${k}" type="${type}" value="${esc(v)}" placeholder="${esc(ph)}">`}</label>`;
+}
+function sc(d, k, label){ return `<label class="check"><input type="checkbox" data-k="${k}" ${getP(d,k)?"checked":""}><span>${esc(label)}</span></label>`; }
+function ss(d, k, label, opts){ const v=getP(d,k)||""; return `<label class="field"><span>${esc(label)}</span><select data-k="${k}"><option value=""></option>${opts.map(o=>`<option ${o===v?"selected":""}>${esc(o)}</option>`).join("")}</select></label>`; }
+const sh = (t, note) => `<h3 class="scan-h">${esc(t)}</h3>${note?`<p class="small muted" style="margin-top:-6px">${esc(note)}</p>`:""}`;
+const grid = (cols, html) => `<div class="scan-grid" style="--cols:${cols}">${html}</div>`;
+
+function scanHeader(d){
+  return grid(4, sf(d,"clientName","Client name")+sf(d,"caseId","QCIS Case ID")+sf(d,"scanDate","Scan date",{type:"date"})+sf(d,"sessionNo","Session #"));
+}
+function consultForm(d){
+  return `<div class="stack scan-form">
+    <div><p class="label">Practitioner only</p><h2>Pre-Scan Consult Notes</h2><p class="small muted">Use while talking with the client before the scan.</p></div>
+    ${sh("Session")}${scanHeader(d)}
+    ${sh("Consult notes")}${sf(d,"cNotes","Notes",{type:"textarea",wide:true})}
+    ${sh("Target searches")}${grid(2, [0,1,2,3,4,5,6,7].map(i=>sf(d,`cSearch.${i}`,"Search keyword")).join(""))}
+    ${sh("Scans & remedies")}${grid(2, [0,1,2].map(i=>sf(d,`cScanrem.${i}.scans`,"Full scans requested / needed")+sf(d,`cScanrem.${i}.rems`,"Remedies to test against")).join(""))}
+    ${sh("Imprint & delivery")}
+    <div><p class="small" style="margin:0 0 4px;font-weight:600;color:var(--muted)">Imprint into</p><div class="row">${INTO_OPTS.map(([k,l])=>sc(d,`cInto.${k}`,l)).join("")}</div></div>
+    <div><p class="small" style="margin:0 0 4px;font-weight:600;color:var(--muted)">Delivery</p><div class="row">${sc(d,"cDel.shipping","Shipping")}${sc(d,"cDel.remote","Remote imprinting")}</div></div>
+    ${grid(2, sf(d,"cItem","Describe item (crystal, jewelry or other)",{type:"textarea"})+sf(d,"cShip","Shipping address (if shipping)",{type:"textarea"}))}
+  </div>`;
+}
+function recordForm(d){
+  return `<div class="stack scan-form">
+    <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">Practitioner only</p><h2>Scan Session Record</h2><p class="small muted">Quick notes while scanning. Findings come from the scan export.</p></div>
+      <button type="button" class="ghost" data-sact="fromconsult" title="Copy target searches and remedies from the consult notes">Copy from consult notes</button></div>
+    ${sh("Session")}${scanHeader(d)}${grid(3, sf(d,"startTime","Start time",{type:"time"})+sf(d,"amp","Amplification"))}
+    ${sh("Standard session scans performed")}<div class="scan-checks">${STD_SCANS.map(([k,l])=>sc(d,`std.${k}`,l)).join("")}</div>
+    ${sf(d,"special","Special scan circumstances (interruptions, re-runs, client state, equipment)",{type:"textarea",wide:true})}
+    ${sh("Strep Tilch")}${grid(3, sf(d,"stPotency","Potency chosen by Qest"))}
+    ${sh("Next test needed (QEST-directed)","Check when run.")}
+    ${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr auto 2fr">${sf(d,`next.${i}.test`,"Next test requested")}<label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-k="next.${i}.run" ${getP(d,`next.${i}.run`)?"checked":""}><span>Run</span></label>${sf(d,`next.${i}.notes`,"Notes")}</div>`).join("")}
+    ${sh("Scans I initiated")}${[0,1,2,3].map(i=>`<div class="scan-row" style="--tpl:1fr 2fr">${sf(d,`init.${i}.scan`,"Scan")}${sf(d,`init.${i}.reason`,"Reason")}</div>`).join("")}
+    ${sh("Target searches I initiated")}${grid(2, [0,1,2,3,4,5,6,7].map(i=>sf(d,`search.${i}`,"Search keyword")).join(""))}
+    ${sh("Remedies tested against")}${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr 1fr 2fr">${sf(d,`rem.${i}.name`,"Remedy / product")}${sf(d,`rem.${i}.pot`,"Potency")}${sf(d,`rem.${i}.notes`,"Notes")}</div>`).join("")}
+    ${sh("Imprint information")}${grid(3, ss(d,"impMethod","Imprint method",IMP_METHODS)+ss(d,"carrier","Carrier",CARRIERS)+sf(d,"impItems","Items imprinted (#)")+sf(d,"impDate","Imprint date",{type:"date"})+ss(d,"impDone","Completed",DONE_OPTS))}
+    ${sf(d,"impNotes","Imprint notes",{type:"textarea",wide:true})}
+    ${sh("Dosage")}${grid(3, sf(d,"drops","Drops per dose")+sf(d,"perDay","Times per day")+sf(d,"weeks","Duration (weeks)")+sf(d,"startDate","Start date",{type:"date"})+sf(d,"nextScan","Next scan / re-test"))}
+    ${sf(d,"notes","Session notes / follow-up",{type:"textarea",wide:true})}
+  </div>`;
+}
+
+/* list of sessions on the client's record */
+function scansPane(id){
+  const list=(S.scansFor===id?S.scans:[]).slice().sort((a,b)=>(b.scanDate||b.createdAt||"").localeCompare(a.scanDate||a.createdAt||""));
+  return `<div class="stack">
+    <div class="row"><p class="grow small muted">Only you see scan sessions. Open one for a split screen: the client's Qest4 form or your pre-scan consult notes on one side, the Scan Session Record on the other. Everything saves as you type.</p>
+      <button type="button" class="primary" data-act="newscan">New scan session</button></div>
+    ${!S.scansLoaded&&S.scansFor===id?`<div class="empty">Loading…</div>`:list.length?list.map(s=>`<button type="button" class="item" data-scan="${esc(s.id)}" style="border:1px solid var(--line);border-radius:8px"><b>Session ${esc(s.sessionNo||"")} · ${esc(fmtDate(s.scanDate)||"No date")}</b><span class="meta">${s.csv?'<span class="chip ok">Scan file added</span>':'<span class="chip">No scan file yet</span>'}${s.cNotes?'<span class="chip acc">Consult notes</span>':""}</span></button>`).join(""):`<div class="empty small">No scan sessions yet.</div>`}
+  </div>`;
+}
+async function newScan(id){
+  const c=S.clients[id]||{}; const n=(S.scansFor===id?S.scans.length:0)+1;
+  const now=new Date(); const hh=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  const data={clientName:clientName(id), caseId:c.caseId||"", scanDate:today(), sessionNo:String(n), startTime:hh, createdAt:now.toISOString(), updatedAt:now.toISOString()};
+  const ref=S.db.collection(`clients/${id}/scans`).doc(); await ref.set(data);
+  openScan(id, ref.id, data);
+}
+function openScan(id, sid, data){
+  const c=S.clients[id]||{};
+  S.scan={clientId:id, id:sid, data:JSON.parse(JSON.stringify(data)), status:"Saved"};
+  S.scanLeft = data.cNotes || (data.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) ? "consult" : (c.qest && Object.keys(c.qest).length ? "qest" : "consult");
+  renderScan(); window.scrollTo(0,0);
+}
+
+function scanLeftPane(){
+  const c=S.clients[S.scan.clientId]||{}, d=S.scan.data;
+  const tabs=`<div class="subtabs" role="tablist"><button type="button" role="tab" data-left="qest" aria-current="${S.scanLeft==="qest"}">Client's Qest4 form</button><button type="button" role="tab" data-left="consult" aria-current="${S.scanLeft==="consult"}">Pre-scan consult notes</button></div>`;
+  if(S.scanLeft==="consult") return tabs+consultForm(d);
+  const q=c.qest||{}; const photo=S.photoFor===S.scan.clientId?S.photo:"";
+  if(!Object.keys(q).length) return tabs+`<div class="empty"><p>This client hasn't filled in the Qest4 pre-scan form.</p><p class="small">Use the pre-scan consult notes instead.</p></div>`;
+  return tabs+`<div class="stack"><div><p class="label">${esc(c.qestSubmittedAt?"Sent "+fmtDate(c.qestSubmittedAt):"Qest4 pre-scan form")}</p><h2>${esc(q.fullName||clientName(S.scan.clientId))}</h2></div>
+    ${q.photoOnFile?`<div class="notice">Returning client: asked you to use the photo already on file.</div>`:""}
+    ${photo?`<div class="row" style="align-items:flex-start"><img src="${photo}" alt="Client photo" class="photo" style="width:160px;height:auto;max-height:220px"><button type="button" data-sact="dlphoto">Download photo</button></div>`:""}
+    ${intakeForm(q, "sq", true, QEST)}</div>`;
+}
+function scanFilesBox(){
+  const d=S.scan.data, c=S.clients[S.scan.clientId]||{}; const hasQ=c.qest&&Object.keys(c.qest).length;
+  return `<div class="sheet stack scan-files">
+    ${sh("Scan file & package")}
+    <div class="row"><label class="btn ${d.csv?"":"primary"}" for="scan-csv" style="cursor:pointer">${d.csv?"Replace scan CSV":"Add scan CSV"}</label><input type="file" id="scan-csv" class="sr" accept=".csv,text/csv">
+      <span class="small muted" id="scan-csv-st">${d.csv?`${esc(d.csv.name)} · ${esc(fmtSize(d.csv.size||0))}`:"Drop in the Qest4 export when the scan is done."}</span></div>
+    <div class="row" style="gap:8px">
+      <button type="button" class="primary" data-sact="package">Download scan package</button>
+      <button type="button" data-sact="dlrecord">Session Record PDF</button>
+      <button type="button" data-sact="dlconsult">Consult Notes PDF</button>
+      ${hasQ?`<button type="button" data-sact="dlqest">Qest4 form PDF</button>`:""}
+      ${d.csv?`<button type="button" data-sact="dlcsv">Scan CSV</button>`:""}
+    </div>
+    <p class="small muted">The package saves the filled Scan Session Record PDF, the scan CSV, and the consult notes or Qest4 form, ready to drop into a Claude chat with your Scan Analyzer. Upload the finished reports under Reports &amp; files.</p>
+  </div>`;
+}
+function renderScan(){
+  const sc=S.scan; if(!sc) return renderClients();
+  $("#app").innerHTML = `<div class="stack">
+    <div class="row scan-bar"><button type="button" class="ghost" data-sact="close">← Back to ${esc(clientName(sc.clientId))}</button>
+      <b class="grow" style="text-align:center">Scan session ${esc(sc.data.sessionNo||"")} · ${esc(fmtDate(sc.data.scanDate)||"")}</b>
+      <span class="small muted" id="scan-st">${esc(sc.status)}</span>
+      ${S.confirmScanDel?`<button type="button" class="danger" data-sact="del">Confirm delete</button>`:`<button type="button" class="ghost danger" data-sact="askdel">Delete</button>`}</div>
+    <div class="scanview" id="scan-root">
+      <section class="sheet scan-pane" aria-label="Client information">${scanLeftPane()}</section>
+      <section class="scan-pane right" aria-label="Scan session record"><div class="sheet">${recordForm(sc.data)}</div>${scanFilesBox()}</section>
+    </div></div>`;
+  bindScan();
+}
+function readScanForm(){
+  const sc=S.scan; if(!sc) return;
+  document.querySelectorAll("#scan-root [data-k]").forEach(el=>{ setP(sc.data, el.dataset.k, el.type==="checkbox" ? el.checked : el.value); });
+}
+let SCAN_T=null;
+function scanDirty(){
+  readScanForm();
+  const st=$("#scan-st"); if(st) st.textContent="Saving…"; if(S.scan) S.scan.status="Saving…";
+  clearTimeout(SCAN_T); SCAN_T=setTimeout(saveScan, 1200);
+}
+async function saveScan(){
+  const sc=S.scan; if(!sc) return; clearTimeout(SCAN_T); readScanForm();
+  sc.data.updatedAt=new Date().toISOString();
+  try{
+    await S.db.doc(`clients/${sc.clientId}/scans/${sc.id}`).set(sc.data);
+    if(sc.data.caseId && sc.data.caseId!==(S.clients[sc.clientId]||{}).caseId) S.db.doc("clients/"+sc.clientId).update({caseId:sc.data.caseId}).catch(()=>{});
+    sc.status="Saved "+new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+  }catch(e){ console.warn(e); sc.status="Not saved. Check your connection."; }
+  const st=$("#scan-st"); if(st && S.scan===sc) st.textContent=sc.status;
+}
+function scanFileBase(){ const d=S.scan.data; return `${d.clientName||clientName(S.scan.clientId)} - ${d.scanDate||today()} - session ${d.sessionNo||""}`.replace(/[\/:*?"<>|]/g,"").trim(); }
+
+/* fill Dawn's own PDF forms so the Scan Analyzer reads the same field values */
+let PDFLIB_P=null;
+function loadPdfLib(){ if(window.PDFLib) return Promise.resolve(window.PDFLib); if(!PDFLIB_P) PDFLIB_P=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="vendor/pdf-lib.min.js"; s.onload=()=>res(window.PDFLib); s.onerror=()=>{ PDFLIB_P=null; rej(new Error("load")); }; document.head.appendChild(s); }); return PDFLIB_P; }
+function recordFields(d){
+  const o=[]; let n=1; const T=(nm,v)=>o.push([`${nm}_${n++}`,"t",v]), C=(nm,v)=>o.push([`${nm}_${n++}`,"c",v]), D=(nm,v)=>o.push([`${nm}_${n++}`,"d",v]);
+  T("Client_name",d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Start_time",usTime(d.startTime)); T("Session_#",d.sessionNo); T("Amplification",d.amp);
+  STD_SCANS.forEach(([k,l])=>C("std_"+l.replace(/ /g,"_"), getP(d,`std.${k}`)));
+  T("Special_scan_circumstances_(interruptions,_re-runs,_client_state,_equipment)",d.special); T("Potency_chosen_by_Qest",d.stPotency);
+  for(let i=0;i<5;i++){ T(`ntn_r${i+1}_Next_Test_requested`,getP(d,`next.${i}.test`)); C(`ntn_r${i+1}_Run`,getP(d,`next.${i}.run`)); T(`ntn_r${i+1}_Notes`,getP(d,`next.${i}.notes`)); }
+  for(let i=0;i<4;i++){ T(`init_r${i+1}_Scan`,getP(d,`init.${i}.scan`)); T(`init_r${i+1}_Reason`,getP(d,`init.${i}.reason`)); }
+  for(let i=0;i<4;i++){ T(`search_r${i+1}_Search_keyword`,getP(d,`search.${i*2}`)); T(`search_r${i+1}_Search_keyword`,getP(d,`search.${i*2+1}`)); }
+  for(let i=0;i<5;i++){ T(`remedy_r${i+1}_Remedy_/_product`,getP(d,`rem.${i}.name`)); T(`remedy_r${i+1}_Potency`,getP(d,`rem.${i}.pot`)); T(`remedy_r${i+1}_Notes`,getP(d,`rem.${i}.notes`)); }
+  D("Imprint_method",d.impMethod); D("Carrier",d.carrier); T("Items_imprinted_(#)",d.impItems); T("Imprint_date",usDate(d.impDate)); D("Completed",d.impDone); T("Imprint_notes",d.impNotes);
+  T("Drops_per_dose",d.drops); T("Times_per_day",d.perDay); T("Duration_(weeks)",d.weeks); T("Start_date",usDate(d.startDate)); T("Next_scan_/_re-test",d.nextScan); T("Session_notes_/_follow-up",d.notes);
+  return o;
+}
+function consultFields(d){
+  const o=[]; let n=1; const T=(nm,v)=>o.push([`${nm}_${n++}`,"t",v]), C=(nm,v)=>o.push([`${nm}_${n++}`,"c",v]);
+  T("Client_name",d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Session_#",d.sessionNo); T("Notes_(box_scrolls_as_you_type)",d.cNotes);
+  for(let i=0;i<4;i++){ T(`search_r${i+1}_Search_keyword`,getP(d,`cSearch.${i*2}`)); T(`search_r${i+1}_Search_keyword`,getP(d,`cSearch.${i*2+1}`)); }
+  for(let i=0;i<3;i++){ T(`scanrem_r${i+1}_Full_scans_requested_/_needed`,getP(d,`cScanrem.${i}.scans`)); T(`scanrem_r${i+1}_Remedies_to_test_against`,getP(d,`cScanrem.${i}.rems`)); }
+  INTO_OPTS.forEach(([k,l])=>C("form_"+l, getP(d,`cInto.${k}`)));
+  C("delivery_Shipping",getP(d,"cDel.shipping")); C("delivery_Remote_imprinting",getP(d,"cDel.remote"));
+  T("Describe_item_(crystal,_jewelry_or_other)",d.cItem); T("Shipping_address_(if_shipping)",d.cShip);
+  return o;
+}
+async function fillForm(url, fields){
+  const L=await loadPdfLib(); const bytes=await (await fetch(url)).arrayBuffer();
+  const pdf=await L.PDFDocument.load(bytes); const form=pdf.getForm(); const missing=[];
+  for(const [name,kind,v] of fields){
+    try{
+      if(kind==="c"){ const f=form.getCheckBox(name); v ? f.check() : f.uncheck(); }
+      else if(kind==="d"){ const f=form.getDropdown(name); f.select(v ? pdfSafe(v) : " "); }
+      else form.getTextField(name).setText(v ? pdfSafe(v) : "");
+    }catch(e){ missing.push(name); }
+  }
+  if(missing.length) console.warn("PDF fields not filled:", missing);
+  return new Blob([await pdf.save()], {type:"application/pdf"});
+}
+const recordPdf = () => fillForm("forms/scan-session-record.pdf", recordFields(S.scan.data));
+const consultPdf = () => fillForm("forms/pre-scan-consult-notes.pdf", consultFields(S.scan.data));
+async function scanCsvBlob(){ const d=S.scan.data; if(!d.csv) return null; const { data, error } = await SB.storage.from(FILE_BUCKET).download(d.csv.path); if(error) throw error; return data; }
+function qestPdfForScan(){ const id=S.scan.clientId, c=S.clients[id]||{}; return formPdf(QEST, c.qest||{}, {kind:"Qest4 pre-scan form", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:""}); }
+function hasConsult(d){ return !!(d.cNotes || (d.cSearch||[]).some(Boolean) || (d.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) || d.cItem || d.cShip || Object.values(d.cInto||{}).some(Boolean) || Object.values(d.cDel||{}).some(Boolean)); }
+
+async function uploadScanCsv(file){
+  const sc=S.scan; if(!file) return; const st=$("#scan-csv-st");
+  if(file.size>50*1048576){ toast("That file is over 50 MB"); return; }
+  if(st) st.textContent="Uploading…";
+  const safe=file.name.replace(/[^\w.\- ]+/g,"_"); const path=`${sc.clientId}/scans/${sc.id}/${genId()}-${safe}`;
+  const { error } = await SB.storage.from(FILE_BUCKET).upload(path, file, { contentType:"text/csv", upsert:false });
+  if(error){ console.warn(error); toast("The scan file didn't upload: "+error.message); if(st) st.textContent=""; return; }
+  const old=sc.data.csv; readScanForm(); sc.data.csv={name:file.name, path, size:file.size, uploadedAt:new Date().toISOString()};
+  await saveScan(); if(old?.path) SB.storage.from(FILE_BUCKET).remove([old.path]).catch(()=>{});
+  toast("Scan file added"); renderScan();
+}
+function bindScan(){
+  const root=$("#scan-root");
+  root.addEventListener("input", e=>{ if(e.target.closest("[data-k]")) scanDirty(); });
+  root.addEventListener("change", e=>{ if(e.target.closest("[data-k]")) scanDirty(); });
+  const csv=$("#scan-csv"); if(csv) csv.onchange=()=>uploadScanCsv(csv.files[0]);
+  $("#app").onclick = async e => {
+    const lt=e.target.closest("[data-left]"); if(lt){ readScanForm(); S.scanLeft=lt.dataset.left; renderScan(); return; }
+    const a=e.target.closest("[data-sact]"); if(!a) return; const act=a.dataset.sact, sc=S.scan;
+    if(act==="close"){ await saveScan(); S.scan=null; S.confirmScanDel=false; S.sub="scans"; renderClients(); window.scrollTo(0,0); return; }
+    if(act==="askdel"){ readScanForm(); S.confirmScanDel=true; renderScan(); return; }
+    if(act==="del"){ clearTimeout(SCAN_T); if(sc.data.csv?.path) SB.storage.from(FILE_BUCKET).remove([sc.data.csv.path]).catch(()=>{}); await S.db.doc(`clients/${sc.clientId}/scans/${sc.id}`).delete(); S.scan=null; S.confirmScanDel=false; S.sub="scans"; toast("Scan session deleted"); renderClients(); return; }
+    if(act==="fromconsult"){ readScanForm(); const d=sc.data; let n=0;
+      const ks=(d.cSearch||[]).filter(Boolean); d.search=d.search||[]; ks.forEach(k=>{ if(d.search.includes(k)) return; const i=[0,1,2,3,4,5,6,7].find(j=>!d.search[j]); if(i!=null){ d.search[i]=k; n++; } });
+      const rems=(d.cScanrem||[]).flatMap(r=>String(r?.rems||"").split(/\s*[,;\n]\s*/)).filter(Boolean); d.rem=d.rem||[];
+      rems.forEach(r=>{ if(d.rem.some(x=>x&&x.name===r)) return; const i=[0,1,2,3,4].find(j=>!(d.rem[j]&&d.rem[j].name)); if(i!=null){ d.rem[i]={...(d.rem[i]||{}), name:r}; n++; } });
+      renderScan(); scanDirty(); toast(n?`Copied ${n} item${n===1?"":"s"} from the consult notes`:"Nothing new to copy"); return; }
+    if(act==="dlphoto"){ const ph=S.photoFor===sc.clientId?S.photo:""; if(ph) fetch(ph).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(sc.clientId)} - photo.jpg`)); return; }
+    const lbl=a.textContent; a.disabled=true; a.textContent="Preparing…";
+    try{
+      await saveScan(); const base=scanFileBase();
+      if(act==="dlrecord") saveBlob(await recordPdf(), `Scan Session Record - ${base}.pdf`);
+      else if(act==="dlconsult") saveBlob(await consultPdf(), `Pre-Scan Consult Notes - ${base}.pdf`);
+      else if(act==="dlqest") saveBlob(await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`);
+      else if(act==="dlcsv"){ const b=await scanCsvBlob(); if(b) saveBlob(b, sc.data.csv.name); }
+      else if(act==="package"){
+        const files=[[await recordPdf(), `Scan Session Record - ${base}.pdf`]];
+        const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, sc.data.csv.name]); else toast("No scan CSV yet. Add it, then download again.");
+        if(hasConsult(sc.data)) files.push([await consultPdf(), `Pre-Scan Consult Notes - ${base}.pdf`]);
+        const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`]);
+        for(const [b,n] of files){ saveBlob(b,n); await new Promise(r=>setTimeout(r,700)); }
+        toast(`${files.length} files saved to your Downloads`);
+      }
+    }catch(err){ console.warn(err); toast("That didn't work. Check your connection and try again."); }
+    a.disabled=false; a.textContent=lbl;
+  };
 }
 
 /* ---------- Library ---------- */
