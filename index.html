@@ -616,7 +616,7 @@ function clientDetail(id){
   const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Treatment plans"],["files","Reports & files"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
-  if(S.sub==="qest") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
+  if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
@@ -873,7 +873,7 @@ function bindClients(){
         catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent="Download PDF"; }
       else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
-      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
+      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
       else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
       else if(act==="savedetails"){ await S.db.doc("clients/"+S.sel).update({name:$("#d-name").value.trim(), nextVisit:$("#d-next").value}); toast("Details saved"); }
       else if(act==="askdel"){ S.confirmDel=S.sel; renderClients(); }
@@ -1131,6 +1131,7 @@ async function formPdf(def, vals, {kind, who, date, photo}){
   const room=h=>{ if(y+h>H-FOOT){ doc.addPage(); header(false); } };
   header(true);
   const sections=def.map(s=>({sec:s.sec, rows:s.fields.map(f=>({f, a:fmtAnswer(f, vals[f.id])})).filter(r=>r.a)})).filter(s=>s.rows.length);
+  if(vals.photoOnFile) sections.unshift({sec:"Photo", rows:[{f:{label:"Photo",type:"text"}, a:"Returning client: use the photo already on file"}]});
   const drawSection=(s, x, w)=>{
     room(46);
     font(SERIF,13.5,deep); doc.text(pdfSafe(s.sec), x, y); y+=7;
@@ -2042,6 +2043,7 @@ function renderClient(){
         ${qestIn?`<div class="notice ok">Your form is in. Returning for another scan? Update anything that's changed and send it again.</div>`:""}
         ${denied}
         ${photoBlock("cp", S.myPhoto, true, true)}
+        <label class="check" style="margin-top:-4px"><input type="checkbox" id="cs-photoOnFile" ${S.myRec?.qest?.photoOnFile?"checked":""}><span>I'm a returning client. Please use the photo Dawn already has on file.</span></label>
         ${intakeForm(S.myRec?.qest||{}, "cs", false, QEST)}
         <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>
       </div>`;
@@ -2084,7 +2086,8 @@ function renderClient(){
     const vals = readIntake(pre, def);
     if(submit){
       const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id]);
-      if(isQ && !S.myPhoto){ toast("Please add a recent photo of yourself"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
+      if(isQ) vals.photoOnFile = !!document.getElementById("cs-photoOnFile")?.checked || undefined;
+      if(isQ && !S.myPhoto && !vals.photoOnFile){ toast("Please add a recent photo of yourself, or tick the box to use the photo on file"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
       if(miss.length){ toast(miss.some(f=>f.type==="check") ? "Please check the acknowledgement and sign at the end" : `Please fill in: ${miss.map(f=>f.label).join(", ")}`); const el=document.getElementById(pre+"-"+miss[0].id); if(el){ el.focus(); el.scrollIntoView({block:"center"}); } return; }
     }
     a.disabled=true;
