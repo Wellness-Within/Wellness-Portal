@@ -489,7 +489,7 @@ function addSignOut(){
    ========================================================= */
 function startPractitioner(){
   $("#sub").textContent = "Practitioner workspace";
-  S.tab = recall("wfw.tab","clients");
+  S.tab = recall("wfw.tab","clients"); S.editPlan = recall("wfw.editPlan", null);
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
@@ -545,6 +545,7 @@ function renderTabs(){
 }
 function render(){
   if(!S.prac) return renderClient();
+  store("wfw.editPlan", S.editPlan||undefined);
   (({clients:renderClients, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
 }
 
@@ -575,7 +576,7 @@ function addBottle(issue, remedies){
 document.addEventListener("change", e => { if(e.target && e.target.id==="plan-target" && S.editPlan){ const v=e.target.value; S.editPlan.target = v==="new" ? null : +v; } });
 
 /* ---------- Clients ---------- */
-function renderClients(){
+function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   const ids = Object.keys(S.clients).sort((a,b)=>(isNewForm(S.clients[b])-isNewForm(S.clients[a])) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
   const shown = ids.filter(id => !f || clientName(id).toLowerCase().includes(f));
@@ -1220,10 +1221,10 @@ function legend(){
 }
 function protoDetail(e, terms){
   const blocks = (e.blocks||[]).map(b => b.k==="o"
-    ? `<div class="pline" style="background:none"><span class="n">${esc(b.lab||"")}</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":"disabled"}>Add to plan</button></div>`
+    ? `<div class="pline" style="background:none"><span class="n">${esc(b.lab||"")}</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":`disabled title="Open a client's treatment plan first"`}>Add to plan</button></div>`
     : b.k==="m" ? `<p class="small muted" style="margin-top:6px">${esc(b.x)}</p>` : b.k==="l"
-    ? `<div class="pline"><span class="n">Line ${b.n}</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":"disabled"}>Add to plan</button></div>`
-    : POTENCY_RX.test(b.x) ? `<div class="pline" style="background:none"><span class="n">·</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":"disabled"}>Add to plan</button></div>`
+    ? `<div class="pline"><span class="n">Line ${b.n}</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":`disabled title="Open a client's treatment plan first"`}>Add to plan</button></div>`
+    : POTENCY_RX.test(b.x) ? `<div class="pline" style="background:none"><span class="n">·</span><span class="x">${hl(b.x,terms)}</span><button type="button" class="ghost" data-add="${esc(b.x)}" ${S.editPlan?"":`disabled title="Open a client's treatment plan first"`}>Add to plan</button></div>`
     : `<p class="ptext">${hl(b.x,terms)}</p>`).join("");
   return `<div class="sheet stack">
     <button type="button" class="ghost back-btn" data-act="libback">← All protocols</button>
@@ -1282,7 +1283,7 @@ function renderCombos(){
     <input id="cq" type="search" placeholder="${R.nsrc==="narayani"?"Search Narayani, e.g. sinus, Mix 8, ignatia":"Search, e.g. sinus, arnica, C-Trau"}" value="${esc(R.nsrc==="narayani"?R.nq:S.cq)}" aria-label="Search combinations">
     ${R.nsrc==="narayani" ? narayaniHtml() : !S.libLoaded ? `<div class="empty">Loading…</div>` : `
     <div class="tablewrap"><table><thead><tr><th>Code</th><th>Contains</th><th>For</th><th>Potencies</th><th><span class="sr">Add</span></th></tr></thead><tbody>
-      ${rows.map((c,i)=>`<tr><td class="code">${hl(c.code,terms)}</td><td>${hl(c.remedies,terms)}</td><td>${hl(c.name.replace(/^Comb(ination|\.)\s*(remedy|Remedy|Rx\.)?\s*-?\s*/,""),terms)}</td><td class="mono" style="white-space:nowrap">${esc(c.potency)}${c.lm?`<br><span class="muted">LM ${esc(c.lm)}</span>`:""}</td><td><button type="button" class="ghost" data-combo="${S.combos.indexOf(c)}" ${S.editPlan?"":"disabled"}>Add</button></td></tr>`).join("") || `<tr><td colspan="5" class="empty">No combination matches.</td></tr>`}
+      ${rows.map((c,i)=>`<tr><td class="code">${hl(c.code,terms)}</td><td>${hl(c.remedies,terms)}</td><td>${hl(c.name.replace(/^Comb(ination|\.)\s*(remedy|Remedy|Rx\.)?\s*-?\s*/,""),terms)}</td><td class="mono" style="white-space:nowrap">${esc(c.potency)}${c.lm?`<br><span class="muted">LM ${esc(c.lm)}</span>`:""}</td><td><button type="button" class="ghost" data-combo="${S.combos.indexOf(c)}" ${S.editPlan?"":`disabled title="Open a client's treatment plan first"`}>Add</button></td></tr>`).join("") || `<tr><td colspan="5" class="empty">No combination matches.</td></tr>`}
     </tbody></table></div>
     <h2>Helios poly-combinations</h2>
     <p class="small muted">Sold in 30, 200, 1M and 10M, solid forms only. Order by phone or email from Helios.</p>
@@ -1953,7 +1954,7 @@ function narayaniHtml(){
   return `<p class="small muted">${mixes.length} remedies. From your Narayani notes; only you can see these.</p>
     <div class="stack">${mixes.map(m=>`<details class="poly" id="nar-${m.i}" ${R.narOpen===m.i?"open":""}><summary>${hl(titleCase(m.name),terms)} <span class="muted small">· ${esc(m.potency)} · ${esc(m.code)}</span></summary>
       <div class="mmtext pre small" style="margin-top:8px">${body(m.text)}</div>
-      <div class="row" style="margin-top:8px"><button type="button" class="ghost" data-narplan="${m.i}" ${S.editPlan?"":"disabled"}>Add to plan</button></div></details>`).join("")}</div>
+      <div class="row" style="margin-top:8px"><button type="button" class="ghost" data-narplan="${m.i}" ${S.editPlan?"":`disabled title="Open a client's treatment plan first"`}>Add to plan</button></div></details>`).join("")}</div>
     ${secs.length?`<h2 style="margin-top:10px">More Narayani remedies</h2><div class="stack">${secs.map(s=>`<details class="poly"><summary>${esc(s.title)}</summary><div class="mmtext pre small" style="margin-top:8px">${hl(s.text,terms)}</div></details>`).join("")}</div>`:""}`;
 }
 
