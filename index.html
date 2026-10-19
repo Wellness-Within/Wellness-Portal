@@ -1299,13 +1299,14 @@ function scanFilesBox(){
     <div class="row"><label class="btn ${d.csv?"":"primary"}" for="scan-csv" style="cursor:pointer">${d.csv?"Replace scan CSV":"Add scan CSV"}</label><input type="file" id="scan-csv" class="sr" accept=".csv,text/csv">
       <span class="small muted" id="scan-csv-st">${d.csv?`${esc(d.csv.name)} · ${esc(fmtSize(d.csv.size||0))}`:"Drop in the Qest4 export when the scan is done."}</span></div>
     <div class="row" style="gap:8px">
-      <button type="button" class="primary" data-sact="package">Download scan package</button>
+      <button type="button" class="primary" data-sact="qcis">Analyze with QCIS ↗</button>
+      <button type="button" data-sact="package">Download scan package</button>
       <button type="button" data-sact="dlrecord">Session Record PDF</button>
       <button type="button" data-sact="dlconsult">Consult Notes PDF</button>
       ${hasQ?`<button type="button" data-sact="dlqest">Qest4 form PDF</button>`:""}
       ${d.csv?`<button type="button" data-sact="dlcsv">Scan CSV</button>`:""}
     </div>
-    <p class="small muted">The package saves the filled Scan Session Record PDF, the scan CSV, and the consult notes or Qest4 form, ready to drop into a Claude chat with your Scan Analyzer. Upload the finished reports under Reports &amp; files.</p>
+    <p class="small muted">“Analyze with QCIS” saves the scan package to your Downloads (the filled Scan Session Record, the scan CSV, and the consult notes or Qest4 form), copies a ready-made request, and opens Claude. Drag the files into the chat, paste, and send. Upload the finished reports under Reports &amp; files.</p>
   </div>`;
 }
 function renderScan(){
@@ -1416,6 +1417,16 @@ function bindScan(){
       rems.forEach(r=>{ if(d.rem.some(x=>x&&x.name===r)) return; const i=[0,1,2,3,4].find(j=>!(d.rem[j]&&d.rem[j].name)); if(i!=null){ d.rem[i]={...(d.rem[i]||{}), name:r}; n++; } });
       renderScan(); scanDirty(); toast(n?`Copied ${n} item${n===1?"":"s"} from the consult notes`:"Nothing new to copy"); return; }
     if(act==="dlphoto"){ const ph=S.photoFor===sc.clientId?S.photo:""; if(ph) fetch(ph).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(sc.clientId)} - photo.jpg`)); return; }
+    let qWin=null;
+    if(act==="qcis"){
+      readScanForm(); const d=sc.data, c=S.clients[sc.clientId]||{};
+      const parts=["the filled Scan Session Record PDF","the Qest4 scan CSV"]; if(hasConsult(d)) parts.push("my Pre-Scan Consult Notes PDF"); if(c.qest && Object.keys(c.qest).length) parts.push("the client's Qest4 pre-scan form PDF");
+      const prompt=`Please run my QCIS Scan Report (qcis-scan-report) on the attached files: ${parts.join(", ")}. Case ID ${d.caseId||"(not entered)"}, session ${d.sessionNo||"?"}, scanned ${usDate(d.scanDate)||"(date not entered)"}. Produce the Practitioner Analysis, the Client Wellness Report and the Follow-Up Check-In Form.`;
+      try{ navigator.clipboard.writeText(prompt); }catch(e){}
+      const base=(S.settings.qcisUrl||"").trim() || "https://claude.ai/new";
+      qWin=window.open(base, "_blank");
+      if(!d.csv) toast("No scan CSV yet. Add it under “Add scan CSV” first.");
+    }
     const lbl=a.textContent; a.disabled=true; a.textContent="Preparing…";
     try{
       await saveScan(); const base=scanFileBase();
@@ -1423,13 +1434,13 @@ function bindScan(){
       else if(act==="dlconsult") saveBlob(await consultPdf(), `Pre-Scan Consult Notes - ${base}.pdf`);
       else if(act==="dlqest") saveBlob(await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`);
       else if(act==="dlcsv"){ const b=await scanCsvBlob(); if(b) saveBlob(b, sc.data.csv.name); }
-      else if(act==="package"){
+      else if(act==="package"||act==="qcis"){
         const files=[[await recordPdf(), `Scan Session Record - ${base}.pdf`]];
         const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, sc.data.csv.name]); else toast("No scan CSV yet. Add it, then download again.");
         if(hasConsult(sc.data)) files.push([await consultPdf(), `Pre-Scan Consult Notes - ${base}.pdf`]);
         const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`]);
         for(const [b,n] of files){ saveBlob(b,n); await new Promise(r=>setTimeout(r,700)); }
-        toast(`${files.length} files saved to your Downloads`);
+        toast(act==="qcis" ? `${files.length} files saved to Downloads and the request is copied. Drag the files into Claude, then paste.` : `${files.length} files saved to your Downloads`);
       }
     }catch(err){ console.warn(err); toast("That didn't work. Check your connection and try again."); }
     a.disabled=false; a.textContent=lbl;
@@ -2226,6 +2237,8 @@ function renderSettings(){
   $("#app").innerHTML = `<div class="sheet stack" style="max-width:760px">
     <h1>Settings</h1>
     <label class="field"><span>Default instructions on new treatment plans</span><textarea id="st-instr" style="min-height:120px">${esc(cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS)}</textarea></label>
+    <label class="field"><span>Scan Analyzer (QCIS) chat link</span><input id="st-qcis" type="url" placeholder="https://claude.ai/new" value="${esc(S.settings.qcisUrl||"")}"></label>
+    <p class="small muted" style="margin-top:-6px">Where “Analyze with QCIS” opens. Leave blank for a new Claude chat, or paste the link of the Claude project you use for scan analysis.</p>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     <div class="formsec stack">
       <h3>Inviting clients</h3>
@@ -2256,7 +2269,7 @@ function renderSettings(){
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   $("#app").onclick = async e => { const a=e.target.closest("[data-act]");
     if(a?.dataset.act==="setpw"){ const v=$("#pw-new").value; if(v.length<8){ toast("Use at least 8 characters"); return; } a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false; if(error) toast("Couldn't save the password: "+error.message); else { $("#pw-new").value=""; toast("Password saved"); } return; }
-    if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").update({instructions:$("#st-instr").value}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
+    if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").update({instructions:$("#st-instr").value, qcisUrl:($("#st-qcis")?.value||"").trim()}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
 }
 
 /* =========================================================
