@@ -2007,11 +2007,12 @@ function startClient(){
   let h = (location.hash||"").toLowerCase();
   if(!/^#(qest|intake|followup)$/.test(h)){ const w=recall("wfw.wantForm",null); if(w && Date.now()-w.t < 7*864e5) h=w.h; }
   if(S.me) store("wfw.wantForm", undefined);
-  S.cview = (h==="#qest"||h==="#intake"||h==="#followup") ? "forms" : "plans";
-  S.form = h==="#qest" ? "qest" : h==="#followup" ? "followup" : "homeo";
+  S.cviewAuto = !/^#(qest|intake|followup)$/.test(h);
+  S.cview = S.cviewAuto ? "plans" : "forms";
+  S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest";
   if(!S.me){ renderClient(); return; }
   const editing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form");
-  S.db.doc("clients/"+S.me).onSnapshot(s => { S.myRec = s.exists ? s.data() : null; S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); });
+  S.db.doc("clients/"+S.me).onSnapshot(s => { S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); });
   S.db.collection("clients/"+S.me+"/plans").onSnapshot(s => { S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e));
   S.db.collection(`clients/${S.me}/files`).onSnapshot(s => { S.myFiles = s.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.status==="shared"); if(editing()) return; renderClient(); }, e=>console.warn(e));
   S.db.doc(`clients/${S.me}/media/photo`).onSnapshot(s => { S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e));
