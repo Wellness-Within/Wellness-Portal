@@ -453,7 +453,7 @@ function renderSignIn(note){
       else location.replace(location.pathname);
       return;
     }
-    const { error } = await SB.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+    const { error } = await SB.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname + (()=>{ const w=recall("wfw.wantForm",null); return w ? "?f="+w.h.slice(1) : ""; })() } });
     b.disabled = false; b.textContent = "Email me a sign-in link";
     $("#si-note").innerHTML = error
       ? `<p class="notice warn">${/rate|seconds|limit/i.test(error.message) ? "Too many sign-in emails were sent just now. Please wait a while and try again, or contact Dawn." : "That didn't send. Check the address and try again."}</p>`
@@ -472,6 +472,7 @@ function addSignOut(){
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
+  { const h0=(location.hash||"").toLowerCase(); const q0=new URLSearchParams(location.search).get("f"); if(/^#(qest|intake|followup)$/.test(h0)) store("wfw.wantForm", {h:h0, t:Date.now()}); else if(/^(qest|intake|followup)$/.test(q0||"")) store("wfw.wantForm", {h:"#"+q0, t:Date.now()}); }
   const hashErr = /error_code=otp_expired|error=access_denied/.test(location.hash);
   const { data:{ session } } = await SB.auth.getSession();
   if(!session){ renderSignIn(hashErr?`<p class="notice warn">That sign-in link has expired or was already used. Enter your email for a new one.</p>`:""); SB.auth.onAuthStateChange((ev,sess)=>{ if(sess) location.replace(location.pathname); }); return; }
@@ -2003,7 +2004,9 @@ function renderSettings(){
 function startClient(){
   $("#sub").textContent = "Client portal";
   S.myRec = null; S.myPlans = []; S.myPhoto = ""; S.recLoaded=false;
-  const h = (location.hash||"").toLowerCase();
+  let h = (location.hash||"").toLowerCase();
+  if(!/^#(qest|intake|followup)$/.test(h)){ const w=recall("wfw.wantForm",null); if(w && Date.now()-w.t < 7*864e5) h=w.h; }
+  if(S.me) store("wfw.wantForm", undefined);
   S.cview = (h==="#qest"||h==="#intake"||h==="#followup") ? "forms" : "plans";
   S.form = h==="#qest" ? "qest" : h==="#followup" ? "followup" : "homeo";
   if(!S.me){ renderClient(); return; }
