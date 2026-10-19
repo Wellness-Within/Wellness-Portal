@@ -469,6 +469,11 @@ function addSignOut(){
   $("header.top .wrap").appendChild(btn);
 }
 
+window.addEventListener("hashchange", () => {
+  const h=(location.hash||"").toLowerCase(); if(!/^#(qest|intake|followup)$/.test(h)) return;
+  store("wfw.wantForm", {h, t:Date.now()});
+  if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; renderClient(); window.scrollTo(0,0); }
+});
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
