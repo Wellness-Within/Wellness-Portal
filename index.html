@@ -1442,10 +1442,10 @@ function bindScan(){
       else if(act==="dlcsv"){ const b=await scanCsvBlob(); if(b) saveBlob(b, sc.data.csv.name); }
       else if(act==="package"||act==="qcis"){
         const cid=(sc.data.caseId||"No Case ID").replace(/[\/:*?"<>|]/g,""), abase=`${cid} - ${sc.data.scanDate||today()} - session ${sc.data.sessionNo||""}`.trim();
-        const files=[[await recordPdf(true), `Scan Session Record - ${abase}.pdf`]];
-        const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, `Qest4 scan - ${abase}.csv`]); else toast("No scan CSV yet. Add it, then download again.");
-        if(hasConsult(sc.data)) files.push([await consultPdf(true), `Pre-Scan Consult Notes - ${abase}.pdf`]);
-        const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(true), `Qest4 pre-scan form - ${abase}.pdf`]);
+        const files=[[await recordPdf(true), `${abase} - 1 Scan Session Record.pdf`]];
+        const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, `${abase} - 2 Qest4 scan.csv`]); else toast("No scan CSV yet. Add it, then download again.");
+        if(hasConsult(sc.data)) files.push([await consultPdf(true), `${abase} - 3 Pre-Scan Consult Notes.pdf`]);
+        const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(true), `${abase} - 4 Qest4 pre-scan form.pdf`]);
         for(const [b,n] of files){ saveBlob(b,n); await new Promise(r=>setTimeout(r,700)); }
         toast(act==="qcis" ? `${files.length} files saved to Downloads and the request is copied. Drag the files into Claude, then paste.` : `${files.length} files saved to your Downloads`);
       }
