@@ -1306,7 +1306,7 @@ function scanFilesBox(){
       ${hasQ?`<button type="button" data-sact="dlqest">Qest4 form PDF</button>`:""}
       ${d.csv?`<button type="button" data-sact="dlcsv">Scan CSV</button>`:""}
     </div>
-    <p class="small muted">“Analyze with QCIS” saves the scan package to your Downloads (the filled Scan Session Record, the scan CSV, and the consult notes or Qest4 form), copies a ready-made request, and opens Claude. Drag the files into the chat, paste, and send. Upload the finished reports under Reports &amp; files.</p>
+    <p class="small muted">“Analyze with QCIS” saves the scan package to your Downloads, copies a ready-made request, and opens Claude. The package uses the Case ID only: no name, contact details, address or photo (the Qest4 form shows age instead of birth date). Drag the files into the chat, paste, and send. Upload the finished reports under Reports &amp; files.</p>
   </div>`;
 }
 function renderScan(){
@@ -1347,9 +1347,9 @@ function scanFileBase(){ const d=S.scan.data; return `${d.clientName||clientName
 /* fill Dawn's own PDF forms so the Scan Analyzer reads the same field values */
 let PDFLIB_P=null;
 function loadPdfLib(){ if(window.PDFLib) return Promise.resolve(window.PDFLib); if(!PDFLIB_P) PDFLIB_P=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="vendor/pdf-lib.min.js"; s.onload=()=>res(window.PDFLib); s.onerror=()=>{ PDFLIB_P=null; rej(new Error("load")); }; document.head.appendChild(s); }); return PDFLIB_P; }
-function recordFields(d){
+function recordFields(d, anon){
   const o=[]; let n=1; const T=(nm,v)=>o.push([`${nm}_${n++}`,"t",v]), C=(nm,v)=>o.push([`${nm}_${n++}`,"c",v]), D=(nm,v)=>o.push([`${nm}_${n++}`,"d",v]);
-  T("Client_name",d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Start_time",usTime(d.startTime)); T("Session_#",d.sessionNo); T("Amplification",d.amp);
+  T("Client_name",anon?"":d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Start_time",usTime(d.startTime)); T("Session_#",d.sessionNo); T("Amplification",d.amp);
   STD_SCANS.forEach(([k,l])=>C("std_"+l.replace(/ /g,"_"), getP(d,`std.${k}`)));
   T("Special_scan_circumstances_(interruptions,_re-runs,_client_state,_equipment)",d.special); T("Potency_chosen_by_Qest",d.stPotency);
   for(let i=0;i<5;i++){ T(`ntn_r${i+1}_Next_Test_requested`,getP(d,`next.${i}.test`)); C(`ntn_r${i+1}_Run`,getP(d,`next.${i}.run`)); T(`ntn_r${i+1}_Notes`,getP(d,`next.${i}.notes`)); }
@@ -1360,9 +1360,10 @@ function recordFields(d){
   T("Drops_per_dose",d.drops); T("Times_per_day",d.perDay); T("Duration_(weeks)",d.weeks); T("Start_date",usDate(d.startDate)); T("Next_scan_/_re-test",d.nextScan); T("Session_notes_/_follow-up",d.notes);
   return o;
 }
-function consultFields(d){
+function consultFields(d, anon){
   const o=[]; let n=1; const T=(nm,v)=>o.push([`${nm}_${n++}`,"t",v]), C=(nm,v)=>o.push([`${nm}_${n++}`,"c",v]);
-  T("Client_name",d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Session_#",d.sessionNo); T("Notes_(box_scrolls_as_you_type)",d.cNotes);
+  T("Client_name",anon?"":d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Session_#",d.sessionNo); T("Notes_(box_scrolls_as_you_type)",d.cNotes);
+  if(anon) o.push(["Shipping_address_(if_shipping)_28","t",""]);
   for(let i=0;i<4;i++){ T(`search_r${i+1}_Search_keyword`,getP(d,`cSearch.${i*2}`)); T(`search_r${i+1}_Search_keyword`,getP(d,`cSearch.${i*2+1}`)); }
   for(let i=0;i<3;i++){ T(`scanrem_r${i+1}_Full_scans_requested_/_needed`,getP(d,`cScanrem.${i}.scans`)); T(`scanrem_r${i+1}_Remedies_to_test_against`,getP(d,`cScanrem.${i}.rems`)); }
   INTO_OPTS.forEach(([k,l])=>C("form_"+l, getP(d,`cInto.${k}`)));
@@ -1383,10 +1384,14 @@ async function fillForm(url, fields){
   if(missing.length) console.warn("PDF fields not filled:", missing);
   return new Blob([await pdf.save()], {type:"application/pdf"});
 }
-const recordPdf = () => fillForm("forms/scan-session-record.pdf", recordFields(S.scan.data));
-const consultPdf = () => fillForm("forms/pre-scan-consult-notes.pdf", consultFields(S.scan.data));
+const recordPdf = anon => fillForm("forms/scan-session-record.pdf", recordFields(S.scan.data, anon));
+const consultPdf = anon => fillForm("forms/pre-scan-consult-notes.pdf", consultFields(S.scan.data, anon).filter((x,i,arr)=>!(anon && x[0]==="Shipping_address_(if_shipping)_28" && arr.findIndex(y=>y[0]===x[0])!==i)));
+function ageFrom(dob){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dob||""); if(!m) return ""; const t=new Date(); let a=t.getFullYear()-m[1]; if(t.getMonth()+1<+m[2]||(t.getMonth()+1===+m[2]&&t.getDate()<+m[3])) a--; return a>0&&a<120?String(a):""; }
+const QEST_ANON = [{sec:"About the client", fields:[{id:"age",label:"Age",type:"text"},{id:"firstScan",label:"First scan with Dawn?",type:"text"}]}, ...QEST.slice(1).map(sec=>({...sec, fields:sec.fields.filter(f=>!["signature","sigDate"].includes(f.id))}))];
 async function scanCsvBlob(){ const d=S.scan.data; if(!d.csv) return null; const { data, error } = await SB.storage.from(FILE_BUCKET).download(d.csv.path); if(error) throw error; return data; }
-function qestPdfForScan(){ const id=S.scan.clientId, c=S.clients[id]||{}; return formPdf(QEST, c.qest||{}, {kind:"Qest4 pre-scan form", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:""}); }
+function qestPdfForScan(anon){ const id=S.scan.clientId, c=S.clients[id]||{};
+  if(anon){ const q=c.qest||{}; return formPdf(QEST_ANON, {...q, age:ageFrom(q.dob)}, {kind:"Qest4 pre-scan form", who:S.scan.data.caseId||"Case ID not entered", date:c.qestSubmittedAt||q.sigDate, photo:""}); }
+  return formPdf(QEST, c.qest||{}, {kind:"Qest4 pre-scan form", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:""}); }
 function hasConsult(d){ return !!(d.cNotes || (d.cSearch||[]).some(Boolean) || (d.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) || d.cItem || d.cShip || Object.values(d.cInto||{}).some(Boolean) || Object.values(d.cDel||{}).some(Boolean)); }
 
 async function uploadScanCsv(file){
@@ -1426,6 +1431,7 @@ function bindScan(){
       const base=(S.settings.qcisUrl||"").trim() || "https://claude.ai/new";
       qWin=window.open(base, "_blank");
       if(!d.csv) toast("No scan CSV yet. Add it under “Add scan CSV” first.");
+      else if(!d.caseId) toast("Tip: enter the QCIS Case ID so the reports are labelled.");
     }
     const lbl=a.textContent; a.disabled=true; a.textContent="Preparing…";
     try{
@@ -1435,10 +1441,11 @@ function bindScan(){
       else if(act==="dlqest") saveBlob(await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`);
       else if(act==="dlcsv"){ const b=await scanCsvBlob(); if(b) saveBlob(b, sc.data.csv.name); }
       else if(act==="package"||act==="qcis"){
-        const files=[[await recordPdf(), `Scan Session Record - ${base}.pdf`]];
-        const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, sc.data.csv.name]); else toast("No scan CSV yet. Add it, then download again.");
-        if(hasConsult(sc.data)) files.push([await consultPdf(), `Pre-Scan Consult Notes - ${base}.pdf`]);
-        const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`]);
+        const cid=(sc.data.caseId||"No Case ID").replace(/[\/:*?"<>|]/g,""), abase=`${cid} - ${sc.data.scanDate||today()} - session ${sc.data.sessionNo||""}`.trim();
+        const files=[[await recordPdf(true), `Scan Session Record - ${abase}.pdf`]];
+        const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, `Qest4 scan - ${abase}.csv`]); else toast("No scan CSV yet. Add it, then download again.");
+        if(hasConsult(sc.data)) files.push([await consultPdf(true), `Pre-Scan Consult Notes - ${abase}.pdf`]);
+        const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(true), `Qest4 pre-scan form - ${abase}.pdf`]);
         for(const [b,n] of files){ saveBlob(b,n); await new Promise(r=>setTimeout(r,700)); }
         toast(act==="qcis" ? `${files.length} files saved to Downloads and the request is copied. Drag the files into Claude, then paste.` : `${files.length} files saved to your Downloads`);
       }
