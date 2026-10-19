@@ -485,6 +485,7 @@ window.addEventListener("hashchange", () => {
   store("wfw.wantForm", {h, t:Date.now()});
   if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; renderClient(); window.scrollTo(0,0); }
 });
+function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
@@ -2304,18 +2305,21 @@ function renderClient(){
     if(S.form==="qest"){
       body = `${seg}<div class="sheet stack">
         <div><h2>Pre-scan wellness form</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
-        ${qestIn?`<div class="notice ok">Your form is in. Returning for another scan? Update anything that's changed and send it again.</div>`:""}
         ${denied}
+        ${qestIn && !S.myRec?.qestDraft && !S.qestNew ? `<div class="notice ok"><b>Thank you! Your pre-scan form was sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}.</b> Dawn has everything she needs for this scan.</div>
+          <div class="row"><button type="button" class="primary" data-act="qnew">Start a new form for my next scan</button></div>
+          <p class="small muted">Only start a new form when Dawn has scheduled your next scan. Your contact details carry over, so you only answer the questions about how you are now.</p>` : `
+        ${qestIn ? `<div class="notice">${S.myRec?.qestDraft?"You've started your form for your next scan. Pick up where you left off.":"New form for your next scan. Your details are filled in; please answer the rest for how you are now."}</div>` : ""}
         ${photoBlock("cp", S.myPhoto, true, true)}
         <label class="check" style="margin-top:-4px"><input type="checkbox" id="cs-photoOnFile" ${S.myRec?.qest?.photoOnFile?"checked":""}><span>I'm a returning client. Please use the photo Dawn already has on file.</span></label>
-        ${intakeForm(S.myRec?.qest||{}, "cs", false, QEST)}
-        <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>
+        ${intakeForm(qestIn ? (S.myRec?.qestDraft || qestCarry(S.myRec?.qest)) : (S.myRec?.qest||{}), "cs", false, QEST)}
+        <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>`}
       </div>`;
     } else if(S.form==="followup"){
       const lastFu=(S.myRec?.followupHistory||[]).slice(-1)[0];
       body = `${seg}<div class="sheet stack">
         <div><h2>Homeopathy follow-up</h2><p class="small muted">A quick update before your follow-up session. Only you and Dawn can see your answers.</p></div>
-        ${lastFu?`<div class="notice ok">Your last follow-up was sent ${esc(fmtDate(lastFu.submittedAt))}. Update your answers for this visit and send it again.</div>`:""}
+        ${lastFu?`<div class="notice ok">Your last follow-up was sent ${esc(fmtDate(lastFu.submittedAt))}. Thank you! Before your next visit, fill this in again with how you are now.</div>`:""}
         ${denied}
         ${intakeForm(S.myRec?.followup||{fullName:S.myRec?.intake?.fullName||S.myRec?.qest?.fullName||""}, "cf", false, FOLLOWUP)}
         <div class="row"><button type="button" data-act="fdraft">Save and finish later</button><button type="button" class="primary" data-act="fsubmit">Send to Dawn</button></div>
@@ -2344,6 +2348,7 @@ function renderClient(){
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
     const act=a.dataset.act;
+    if(act==="qnew"){ S.qestNew=true; renderClient(); window.scrollTo(0,0); return; }
     if(!["cdraft","csubmit","qdraft","qsubmit","fdraft","fsubmit"].includes(act)) return;
     const isQ = act[0]==="q", isF = act[0]==="f", submit = act.endsWith("submit");
     const def = isQ ? QEST : isF ? FOLLOWUP : INTAKE, pre = isQ ? "cs" : isF ? "cf" : "ci";
@@ -2357,13 +2362,17 @@ function renderClient(){
     a.disabled=true;
     const now=new Date().toISOString();
     const key = isQ ? "qest" : isF ? "followup" : "intake", stKey = key + "Status";
-    const patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
+    let patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
+    if(isQ && !submit && S.myRec?.qestStatus==="submitted") patch = {qestDraft:vals, qestUpdatedAt:now};
+    if(isQ && submit){ patch.qestDraft = null; S.qestNew = false; }
+    if(isF && submit) patch.followup = {fullName: vals.fullName||""};
     if(submit) patch[key+"SubmittedAt"] = now;
     if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now}].slice(-60);
     try{
       if(S.myRec) await S.db.doc("clients/"+S.me).update(patch);
       else await S.db.doc("clients/"+S.me).set({...patch, createdAt:now, source:"portal"});
       if(isQ && submit) await S.db.collection(`clients/${S.me}/qestForms`).doc().set({form:vals, submittedAt:now});
+      S.myRec = {...(S.myRec||{}), ...patch}; if(S.myRec.qestDraft===null) delete S.myRec.qestDraft;
       S.clientWrite="ok"; toast(submit?"Sent to Dawn. Thank you!":"Saved");
       if(submit) S.cview="plans";
       renderClient(); window.scrollTo(0,0);
