@@ -1445,8 +1445,11 @@ async function uploadScanCsv(file){
 }
 function bindScan(){
   const root=$("#scan-root");
-  root.addEventListener("input", e=>{ if(e.target.closest("[data-k]")) scanDirty(); });
-  root.addEventListener("change", e=>{ if(e.target.closest("[data-k]")) scanDirty(); });
+  // Session details (name, Case ID, date, Session #) show on both the consult notes and the record.
+  // Keep every copy of a field in step, so whichever one Dawn edits is the one that's saved.
+  const mirror = el => { const k=el.dataset.k; root.querySelectorAll(`[data-k="${CSS.escape(k)}"]`).forEach(o=>{ if(o===el) return; if(o.type==="checkbox") o.checked=el.checked; else if(o.value!==el.value) o.value=el.value; }); };
+  root.addEventListener("input", e=>{ const el=e.target.closest("[data-k]"); if(el){ mirror(el); scanDirty(); } });
+  root.addEventListener("change", e=>{ const el=e.target.closest("[data-k]"); if(el){ mirror(el); scanDirty(); } });
   const csv=$("#scan-csv"); if(csv) csv.onchange=()=>uploadScanCsv(csv.files[0]);
   $("#app").onclick = async e => {
     const lt=e.target.closest("[data-left]"); if(lt){ readScanForm(); S.scanLeft=lt.dataset.left; renderScan(); return; }
