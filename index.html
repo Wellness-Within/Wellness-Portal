@@ -851,6 +851,7 @@ function planEditor(ep){
     </div>`
     : `${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>`}
+    <label class="field"><span>Other recommendations</span><textarea id="pl-extra" style="min-height:80px" placeholder="Type anything here: a remedy, supplement, essence or product that isn't in the list. The client sees it exactly as you write it.">${esc(p.extra||"")}</textarea></label>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px" placeholder="${pel?"How to take the pellets":""}">${esc(p.instructions)}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
@@ -888,6 +889,7 @@ function readPlanForm(){
   if(v("pl-status")) ep.data.status = v("pl-status").value;
   if(v("pl-form")) ep.data.form = v("pl-form").value;
   if(v("pl-instr")) ep.data.instructions = v("pl-instr").value;
+  if(v("pl-extra")) ep.data.extra = v("pl-extra").value;
   document.querySelectorAll(".bottle").forEach(el => { const b = ep.data.bottles[+el.dataset.b]; if(!b) return;
     el.querySelectorAll("[data-bf]").forEach(inp => b[inp.dataset.bf] = inp.value); });
 }
@@ -902,6 +904,7 @@ function planText(p, name){
     if(b.notes) lines.push(`  Note: ${b.notes}`);
     lines.push("");
   });
+  if((p.extra||"").trim()) lines.push("Also recommended:", p.extra.trim(), "");
   if(cleanInstr(p.instructions)) lines.push(cleanInstr(p.instructions), "");
   lines.push(`${PRACTICE.name} · ${PRACTICE.phone} · ${PRACTICE.email}`);
   return lines.join("\n");
@@ -923,7 +926,7 @@ function bindClients(){
       if(!instr || instr===wetDefault.trim() || /wet dose/i.test(instr)) ep.data.instructions = pelDefault;
     } else if(!instr || instr===pelDefault.trim()) ep.data.instructions = wetDefault;
     ep.target=null; ep.dirty=true; renderClients(); };
-  ["pl-title","pl-date","pl-status","pl-instr"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
+  ["pl-title","pl-date","pl-status","pl-instr","pl-extra"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
@@ -932,7 +935,7 @@ function bindClients(){
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const scn = e.target.closest("[data-scan]"); if(scn){ const x=S.scans.find(v=>v.id===scn.dataset.scan); if(x){ const {id:sid,...data}=x; openScan(S.sel, sid, data); } return; }
-    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
+    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",extra:p.extra||"",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
@@ -1188,16 +1191,18 @@ async function planPdf(p, clientLabel){
     if(note.length){ cy+=6; font(SANSI,10,muted); note.forEach(l=>{ doc.text(l,IX,cy); cy+=13; }); }
     y=top+h+14;
   });
-  const instr=cleanInstr(p.instructions);
-  if(instr){
-    const paras=instr.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>wrap(s, CW-36, SANS, 10.5));
+  const textBox=(title, txt)=>{
+    const paras=txt.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>wrap(s, CW-36, SANS, 10.5));
     const h=18+16+paras.reduce((s,ls)=>s+ls.length*14+5,0)+12;
     room(h+10); y+=4; const top=y;
     doc.setFillColor(...cream); doc.setDrawColor(...line); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
-    let cy=top+26; font(SERIF,13,deep); doc.text("How to take your remedies", M+18, cy); cy+=18;
+    let cy=top+26; font(SERIF,13,deep); doc.text(title, M+18, cy); cy+=18;
     font(SANS,10.5,ink); paras.forEach(ls=>{ ls.forEach(l=>{ doc.text(l,M+18,cy); cy+=14; }); cy+=5; });
     y=top+h+10;
-  }
+  };
+  if((p.extra||"").trim()) textBox("Also recommended", p.extra.trim());
+  const instr=cleanInstr(p.instructions);
+  if(instr) textBox("How to take your remedies", instr);
   const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){
     doc.setPage(i); const fy=H-FOOT+18;
@@ -2503,6 +2508,7 @@ function planCard(p){
       </div>
       ${b.notes?`<p class="small">${esc(b.notes)}</p>`:""}
     </div>`).join("")}
+    ${(p.extra||"").trim()?`<div><p class="label">Also recommended</p><p style="white-space:pre-wrap">${esc(p.extra.trim())}</p></div>`:""}
     ${cleanInstr(p.instructions)?`<div><p class="label">How to take your remedies</p><p style="white-space:pre-wrap">${esc(cleanInstr(p.instructions))}</p></div>`:""}
   </article>`;
 }
