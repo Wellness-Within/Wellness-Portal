@@ -576,6 +576,7 @@ function render(){
 function targetBanner(){
   if(!S.editPlan) return `<div class="target"><span>To add protocol lines to a treatment plan, open a client's plan first (Clients → Treatment plans).</span></div>`;
   const bs=S.editPlan.data.bottles, t=S.editPlan.target;
+  if(isPellets(S.editPlan.data)) return `<div class="target"><span class="grow">Adding remedies to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")} <span class="chip acc">Pellets</span></span><button type="button" class="ghost" data-act="goplan">Back to plan</button></div>`;
   const opts=`<option value="new" ${t==null||!bs[t]?"selected":""}>A new bottle</option>`+bs.map((b,i)=>`<option value="${i}" ${t===i?"selected":""}>Bottle ${i+1}${b.issue?": "+esc(b.issue):""}</option>`).join("");
   return `<div class="target"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")}
     <label style="display:inline-flex;align-items:center;gap:6px;margin-left:6px">→ <select id="plan-target" aria-label="Add protocols to" style="width:auto;padding:3px 8px">${opts}</select></label></span>
@@ -584,6 +585,11 @@ function targetBanner(){
 function addBottle(issue, remedies){
   if(!S.editPlan){ toast("Open a client's plan first"); return; }
   const bs=S.editPlan.data.bottles, t=S.editPlan.target;
+  if(isPellets(S.editPlan.data)){
+    const rs=remedyLines(remedies); rs.forEach(r=>bs.push({issue:issue||"", remedies:r, freq:"", duration:"", notes:""}));
+    toast(rs.length ? `Added ${rs.length} remed${rs.length===1?"y":"ies"}. Save the plan to keep it.` : "Nothing to add");
+    S.editPlan.dirty = true; render(); return;
+  }
   if(t!=null && bs[t]){
     const b=bs[t]; b.remedies = b.remedies ? b.remedies.replace(/\s+$/,"") + "\n" + (remedies||"") : (remedies||"");
     if(!b.issue && issue) b.issue = issue;
@@ -797,12 +803,22 @@ function plansPane(id){
   const ep = S.editPlan && S.editPlan.clientId===id ? S.editPlan : null;
   if(ep) return planEditor(ep);
   const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No treatment plans yet.</p></div>` :
-    S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.status==="shared"?'<span class="chip ok">Shared with client</span>':'<span class="chip">Draft</span>'}<span>${(p.bottles||[]).length} bottle${(p.bottles||[]).length===1?"":"s"}</span></span></button>`).join("");
+    S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.status==="shared"?'<span class="chip ok">Shared with client</span>':'<span class="chip">Draft</span>'}<span>${esc(itemCount(p))}</span></span></button>`).join("");
   return `<div class="stack"><div class="row"><p class="grow small muted">Each bottle holds the remedies you choose to combine.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
 }
 function planEditor(ep){
   const p = ep.data;
-  const bottles = p.bottles.map((b,i) => `<div class="bottle" data-b="${i}">
+  const pel = isPellets(p);
+  const pellets = p.bottles.map((b,i) => `<div class="bottle" data-b="${i}">
+      <div class="bottle-head"><span class="bottle-num">Remedy ${i+1}</span><input class="grow mono" data-bf="remedies" value="${esc(remedyLines(b.remedies).join(", "))}" placeholder="Arnica 30C" aria-label="Remedy ${i+1}"><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove remedy ${i+1}">Remove</button></div>
+      <div class="grid2">
+        <label class="field"><span>What it's for (optional)</span><input data-bf="issue" value="${esc(b.issue)}" placeholder="Bruising"></label>
+        <label class="field"><span>Frequency</span><input data-bf="freq" list="freqs" value="${esc(b.freq)}" placeholder="2D"><small class="muted">${esc(plainFreq(b.freq))}</small></label>
+        <label class="field"><span>How long</span><input data-bf="duration" value="${esc(b.duration)}" placeholder="3 weeks"></label>
+      </div>
+      <label class="field"><span>Note for client</span><input data-bf="notes" value="${esc(b.notes)}" placeholder="Take 15 minutes before food"></label>
+    </div>`).join("");
+  const bottles = pel ? "" : p.bottles.map((b,i) => `<div class="bottle" data-b="${i}">
       <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for bottle ${i+1}"><button type="button" class="ghost" data-act="bottlelib" data-i="${i}" title="Find a protocol in the library and add it to this bottle">+ Add protocol</button><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove bottle ${i+1}">Remove</button></div>
       <label class="field"><span>Remedies</span><textarea data-bf="remedies" class="mono" style="min-height:58px" placeholder="Sanguinaria 200 + Belladonna 3C">${esc(b.remedies)}</textarea></label>
       <div class="row" style="gap:6px;flex-wrap:wrap">
@@ -821,13 +837,21 @@ function planEditor(ep){
     <div class="grid2">
       <label class="field"><span>Plan title</span><input id="pl-title" value="${esc(p.title)}"></label>
       <label class="field"><span>Date</span><input id="pl-date" type="date" value="${esc(p.date)}"></label>
+      <label class="field"><span>Remedies taken as</span><select id="pl-form"><option value="wet" ${pel?"":"selected"}>Wet dose bottles</option><option value="pellets" ${pel?"selected":""}>Pellets (list of remedies)</option></select></label>
       <label class="field"><span>Visibility</span><select id="pl-status"><option value="draft" ${p.status!=="shared"?"selected":""}>Draft (only you)</option><option value="shared" ${p.status==="shared"?"selected":""}>Shared with client</option></select></label>
     </div>
     <datalist id="remlist"></datalist>
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
-    ${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
-    <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>
-    <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px">${esc(p.instructions)}</textarea></label>
+    ${pel ? `${pellets || `<div class="empty small">No remedies yet. Add one below, or add a protocol from the library; each of its remedies becomes its own line.</div>`}
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      <input data-remname="p" list="remlist" placeholder="Add a remedy, e.g. Arnica" aria-label="Remedy to add" style="flex:1 1 220px">
+      <select data-rempot="p" aria-label="Potency" style="width:auto">${POTENCIES.map(x=>`<option value="${x}">${x||"Potency"}</option>`).join("")}</select>
+      <button type="button" data-act="addremedy" data-i="p">Add remedy</button>
+      <button type="button" class="ghost" data-act="tolibrary">Add from protocol library</button>
+    </div>`
+    : `${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
+    <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>`}
+    <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px" placeholder="${pel?"How to take the pellets":""}">${esc(p.instructions)}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
@@ -862,14 +886,16 @@ function readPlanForm(){
   if(v("pl-title")) ep.data.title = v("pl-title").value;
   if(v("pl-date")) ep.data.date = v("pl-date").value;
   if(v("pl-status")) ep.data.status = v("pl-status").value;
+  if(v("pl-form")) ep.data.form = v("pl-form").value;
   if(v("pl-instr")) ep.data.instructions = v("pl-instr").value;
   document.querySelectorAll(".bottle").forEach(el => { const b = ep.data.bottles[+el.dataset.b]; if(!b) return;
     el.querySelectorAll("[data-bf]").forEach(inp => b[inp.dataset.bf] = inp.value); });
 }
 function planText(p, name){
   const lines = [`${p.title||"Treatment plan"} — ${name}`, fmtDate(p.date), ""];
-  (p.bottles||[]).forEach((b,i)=>{
-    lines.push(`Bottle ${i+1}: ${b.issue||""}`.trim());
+  if(isPellets(p)) lines.push("Pellets", "");
+  displayItems(p).forEach((b,i)=>{
+    lines.push(`${itemLabel(p,i)}: ${b.issue||""}`.trim());
     if(b.remedies) lines.push(`  ${b.remedies}`);
     if(b.freq) lines.push(`  How often: ${b.freq}${plainFreq(b.freq)?` (${plainFreq(b.freq)})`:""}`);
     if(b.duration) lines.push(`  How long: ${b.duration}`);
@@ -888,6 +914,15 @@ function bindClients(){
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
+  const pf=$("#pl-form"); if(pf) pf.onchange=()=>{ const ep=S.editPlan; if(!ep) return; const was=ep.data.form||"wet"; readPlanForm(); const now=ep.data.form; if(now===was) return;
+    const wetDefault=cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS, pelDefault=S.settings.pelletInstructions||"";
+    const instr=(ep.data.instructions||"").trim();
+    if(now==="pellets"){
+      // one remedy per line; a bottle with several remedies becomes several lines with the same schedule
+      ep.data.bottles = ep.data.bottles.flatMap(b=>{ const rs=remedyLines(b.remedies); return rs.length ? rs.map(r=>({...b, remedies:r})) : (b.issue||b.freq||b.duration||b.notes ? [b] : []); });
+      if(!instr || instr===wetDefault.trim() || /wet dose/i.test(instr)) ep.data.instructions = pelDefault;
+    } else if(!instr || instr===pelDefault.trim()) ep.data.instructions = wetDefault;
+    ep.target=null; ep.dirty=true; renderClients(); };
   ["pl-title","pl-date","pl-status","pl-instr"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
@@ -897,7 +932,7 @@ function bindClients(){
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const scn = e.target.closest("[data-scan]"); if(scn){ const x=S.scans.find(v=>v.id===scn.dataset.scan); if(x){ const {id:sid,...data}=x; openScan(S.sel, sid, data); } return; }
-    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
+    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
@@ -943,19 +978,23 @@ function bindClients(){
       else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
       else if(act==="merge"){ const cm=S.confirmMerge; if(!cm || cm.from!==S.sel) return; a.disabled=true; await mergeClient(cm.from, cm.to); }
       else if(act==="newscan"){ a.disabled=true; try{ await newScan(S.sel); }catch(err){ console.warn(err); toast("Couldn't start the session. Try again."); a.disabled=false; } }
-      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
+      else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",form:"wet",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
       else if(act==="rmbottle"){ readPlanForm(); { const ri=+a.dataset.i, t=S.editPlan.target; if(t===ri) S.editPlan.target=null; else if(t!=null && t>ri) S.editPlan.target=t-1; } S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
-      else if(act==="addremedy"){ readPlanForm(); const i=+a.dataset.i; const nm=(document.querySelector(`[data-remname="${i}"]`)?.value||"").trim(); const pot=document.querySelector(`[data-rempot="${i}"]`)?.value||"";
+      else if(act==="addremedy"){ readPlanForm(); const i=+a.dataset.i; const nm=(document.querySelector(`[data-remname="${a.dataset.i}"]`)?.value||"").trim(); const pot=document.querySelector(`[data-rempot="${a.dataset.i}"]`)?.value||"";
         if(!nm){ toast("Type a remedy name first"); return; }
-        const b=S.editPlan.data.bottles[i]; const line=(nm+" "+pot).trim(); b.remedies = b.remedies ? b.remedies.replace(/\s+$/,"")+"\n"+line : line; S.editPlan.dirty=true;
+        const line=(nm+" "+pot).trim();
+        if(a.dataset.i==="p"){ S.editPlan.data.bottles.push({issue:"",remedies:line,freq:"",duration:"",notes:""}); }
+        else { const b=S.editPlan.data.bottles[i]; b.remedies = b.remedies ? b.remedies.replace(/\s+$/,"")+"\n"+line : line; }
+        S.editPlan.dirty=true;
         const known=remedyChoices().some(([v])=>v.toLowerCase()===nm.toLowerCase());
         if(!known){ const mine=[...new Set([...(S.settings.myRemedies||[]), nm])].sort(); S.settings.myRemedies=mine; S.db.doc("settings/practice").update({myRemedies:mine}).catch(()=>{}); }
-        renderClients(); setTimeout(()=>{ const n=document.querySelector(`[data-remname="${i}"]`); if(n) n.focus(); },30); }
+        renderClients(); setTimeout(()=>{ const n=document.querySelector(`[data-remname="${a.dataset.i}"]`); if(n) n.focus(); },30); }
       else if(act==="bottlelib"){ readPlanForm(); S.editPlan.target=+a.dataset.i; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); toast(`Pick a protocol line to add to Bottle ${+a.dataset.i+1}`); }
       else if(act==="tolibrary"){ readPlanForm(); S.editPlan.target=null; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
-      else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id; ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
+      else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id;
+        if(isPellets(ep.data) && (ep.data.instructions||"").trim() && !S.settings.pelletInstructions){ S.settings.pelletInstructions=ep.data.instructions.trim(); S.db.doc("settings/practice").update({pelletInstructions:S.settings.pelletInstructions}).catch(()=>{}); } ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
       else if(act==="notifyfiles"){ notifyMail(a.dataset.id,"files"); }
       else if(act==="notifyplan"){ notifyMail(S.editPlan.clientId,"plan"); }
       else if(act==="askdelplan"){ S.confirmPlanDel=true; readPlanForm(); renderClients(); }
@@ -1074,6 +1113,17 @@ function pdfSafe(t){ return String(t||"").replace(/[\u2018\u2019]/g,"'").replace
 const COMBINE_RX=/\s*Remedies that share the same frequency are combined into one bottle per issue\.?/gi;
 function cleanInstr(t){ return String(t||"").replace(COMBINE_RX,"").trim(); }
 function remedyLines(t){ return String(t||"").split(/\s*(?:\n|;|\s\/\s)\s*/).map(s=>s.trim()).filter(Boolean); }
+/* Pellet plans: a plain list of remedies, one per item (no bottles). */
+const isPellets = p => !!p && p.form==="pellets";
+function itemLabel(p, i){ return (isPellets(p) ? "Remedy " : "Bottle ") + (i+1); }
+function itemCount(p){ const n=(p.bottles||[]).length; return isPellets(p) ? `${n} remed${n===1?"y":"ies"} · pellets` : `${n} bottle${n===1?"":"s"}`; }
+/* What the client sees for each item: for pellets the remedy is the heading and "For …" moves to the note. */
+function displayItems(p){
+  const bs=p.bottles||[];
+  if(!isPellets(p)) return bs;
+  return bs.map(b=>({issue: remedyLines(b.remedies).join(", "), remedies:"", freq:b.freq, duration:b.duration,
+    notes:[b.issue?"For "+b.issue:"", b.notes||""].filter(Boolean).join(". ")}));
+}
 async function planPdf(p, clientLabel){
   const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=50, CW=W-2*M, FOOT=70;
@@ -1103,7 +1153,7 @@ async function planPdf(p, clientLabel){
   };
   const room=h=>{ if(y+h>H-FOOT){ doc.addPage(); header(false); } };
   header(true);
-  const bottles=(p.bottles||[]).filter(b=>b.issue||b.remedies||b.freq||b.duration||b.notes);
+  const bottles=displayItems(p).filter(b=>b.issue||b.remedies||b.freq||b.duration||b.notes);
   const PAD=18, BADGE=26, IX=M+PAD+BADGE+14, IW=W-M-PAD-IX;
   bottles.forEach((b,i)=>{
     const issue=wrap(b.issue||"Remedies", IW, SANSB, 13.5);
@@ -1121,7 +1171,7 @@ async function planPdf(p, clientLabel){
     doc.setFillColor(...teal); doc.circle(M+PAD+BADGE/2, top+PAD+BADGE/2, BADGE/2, "F");
     font(SANSB,12,[255,255,255]); doc.text(String(i+1), M+PAD+BADGE/2, top+PAD+BADGE/2+4.3, {align:"center"});
     let cy=top+PAD+8;
-    font(SANSB,7.5,gold); doc.setCharSpace(1.4); doc.text(`BOTTLE ${i+1}`, IX, cy); doc.setCharSpace(0); cy+=15;
+    font(SANSB,7.5,gold); doc.setCharSpace(1.4); doc.text(itemLabel(p,i).toUpperCase()+(isPellets(p)?"  ·  PELLETS":""), IX, cy); doc.setCharSpace(0); cy+=15;
     font(SANSB,13.5,deep); issue.forEach(l=>{ doc.text(l,IX,cy); cy+=17; }); cy+=4;
     rems.forEach(ls=>{ doc.setFillColor(...teal); doc.circle(IX+3, cy-3.6, 1.9, "F"); font(SANS,11,ink); ls.forEach(l=>{ doc.text(l,IX+14,cy); cy+=14.5; }); cy+=3; });
     if(hSched){
@@ -2443,8 +2493,9 @@ function renderClient(){
 function planCard(p){
   return `<article class="sheet planview">
     <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div><button type="button" data-cplanpdf="${esc(p.id||"")}">Download PDF</button></div>
-    ${(p.bottles||[]).map((b,i)=>`<div class="bottle">
-      <div class="bottle-head"><span class="bottle-num">Bottle ${i+1}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
+    ${isPellets(p)?`<p class="small muted" style="margin:0">Your remedies are pellets.</p>`:""}
+    ${displayItems(p).map((b,i)=>`<div class="bottle">
+      <div class="bottle-head"><span class="bottle-num">${itemLabel(p,i)}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
       ${b.remedies?`<ul class="rxlist">${remedyLines(b.remedies).map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
       <div class="grid2">
         ${b.freq?`<div><p class="label">How often</p><p class="freq">${esc(plainFreq(b.freq)||b.freq)}${plainFreq(b.freq)?` <span class="mono muted">${esc(b.freq)}</span>`:""}</p></div>`:""}
