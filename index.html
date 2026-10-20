@@ -499,7 +499,12 @@ function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","c
   const { data:isAdm } = await SB.rpc("is_admin"); S.prac = !!isAdm;
   addSignOut();
   if(S.prac) startPractitioner();
-  else { try{ await DB.doc("clients/"+S.me).update({email:S.myEmail, lastSeen:new Date().toISOString()}); }catch(e){ console.warn(e); } startClient(); }
+  else {
+    // If Dawn already made a record for this email (forms, reports, plans), it becomes this client's portal record.
+    try{ const { error } = await SB.rpc("claim_portal_record"); if(error) console.warn(error); }catch(e){ console.warn(e); }
+    try{ await DB.doc("clients/"+S.me).update({email:S.myEmail, lastSeen:new Date().toISOString()}); }catch(e){ console.warn(e); }
+    startClient();
+  }
 })();
 
 /* =========================================================
@@ -654,17 +659,47 @@ function clientDetail(id){
   </div>`;
 }
 function detailsPane(id,c){
-  const others = Object.keys(S.clients).filter(x => x!==id && !x.startsWith("c-"));
+  const mine = id.startsWith("c-");
+  const em = clientEmail(id).trim().toLowerCase();
+  const others = Object.keys(S.clients).filter(x => x!==id && !x.startsWith("c-")).sort((a,b)=>clientName(a).localeCompare(clientName(b)));
+  const twins = em ? Object.keys(S.clients).filter(x => x!==id && x.startsWith("c-") && clientEmail(x).trim().toLowerCase()===em) : [];
+  const nm = clientName(id);
+  const cm = S.confirmMerge && S.confirmMerge.from===id && S.clients[S.confirmMerge.to] ? S.confirmMerge : null;
+  let connect = "";
+  if(mine){
+    const status = !em
+      ? `<div class="notice warn">Add the email address ${esc(nm)} will sign in with, then press Save details. That's how the portal knows this record is theirs.</div>`
+      : twins.length
+      ? `<div class="notice warn">Another record you created (${twins.map(t=>esc(clientName(t))).join(", ")}) has the same email, so neither will connect on its own. Delete the extra one, or connect by hand below.</div>`
+      : `<div class="notice ok">Ready. When ${esc(nm)} signs in at portal.dawnspain.com with <b>${esc(em)}</b>, this record becomes theirs automatically. Their reports and shared treatment plans will be waiting, and they won't need to fill in any forms.</div>`;
+    let manual;
+    if(cm){
+      const toEm = clientEmail(cm.to).trim().toLowerCase();
+      manual = `<div class="notice warn stack" style="gap:8px">
+        <p>Move everything for <b>${esc(nm)}</b>${em?` (${esc(em)})`:""} into the portal account of <b>${esc(clientName(cm.to))}</b>${toEm?` (${esc(toEm)})`:""}?</p>
+        ${em && toEm && em!==toEm ? `<p><b>These emails don't match.</b> Only continue if you're sure this is the same person.</p>` : ""}
+        <p class="small">Forms, treatment plans, reports, scan sessions and notes all move. ${esc(clientName(cm.to))} will see the shared plans and reports when they sign in. This can't be undone from here.</p>
+        <div class="row"><button type="button" class="primary" data-act="merge">Yes, move into ${esc(clientName(cm.to))}</button><button type="button" data-act="cancelmerge">Cancel</button></div></div>`;
+    } else {
+      manual = others.length ? `<div class="row"><select id="mergeTo" class="grow" aria-label="Portal account">
+          <option value="" selected>Choose a portal account…</option>
+          ${others.map(o=>{ const oe=clientEmail(o); return `<option value="${esc(o)}">${esc(clientName(o))}${oe?" · "+esc(oe):""}</option>`; }).join("")}
+        </select><button type="button" data-act="askmerge">Move into that account…</button></div>`
+        : `<p class="small muted">No portal accounts yet.</p>`;
+    }
+    connect = `<div class="formsec stack"><h3>Portal sign-in</h3>${status}
+      <details class="hist" ${cm?"open":""}><summary>Connect by hand</summary><div class="stack" style="margin-top:10px">
+        <p class="small muted">Only needed if this client already signed in and has a second record of their own (it shows <b>Portal account</b>), or signed in with a different email.</p>
+        ${manual}</div></details></div>`;
+  }
   return `<div class="stack">
     <div class="grid2">
-      <label class="field"><span>Display name</span><input id="d-name" value="${esc(c.name||"")}" placeholder="${esc(clientName(id))}"></label>
+      <label class="field"><span>Display name</span><input id="d-name" value="${esc(c.name||"")}" placeholder="${esc(nm)}"></label>
       <label class="field"><span>Next appointment</span><input id="d-next" type="date" value="${esc(c.nextVisit||"")}"></label>
+      ${mine ? `<label class="field"><span>Email they'll sign in with</span><input id="d-email" type="email" inputmode="email" value="${esc(c.email || clientEmail(id))}" placeholder="name@example.com"></label>` : ""}
     </div>
     <div class="row"><button type="button" class="primary" data-act="savedetails">Save details</button></div>
-    ${id.startsWith("c-") ? `<div class="formsec stack"><h3>Connect to a portal account</h3>
-      <p class="small muted">When this client opens the portal and saves their intake, they get their own record. Merge this record into it so their plans show up for them.</p>
-      ${others.length ? `<div class="row"><select id="mergeTo" class="grow" aria-label="Portal record">${others.map(o=>`<option value="${esc(o)}">${esc(clientName(o))}</option>`).join("")}</select><button type="button" data-act="merge">Merge into this record</button></div>` : `<p class="small muted">No portal accounts yet.</p>`}
-    </div>` : `<p class="small muted">This client has a portal account. Plans you mark “Shared” appear for them when they open the portal.</p>`}
+    ${mine ? connect : `<p class="small muted">This client has a portal account. Plans you mark “Shared” appear for them when they open the portal.</p>`}
     <div class="formsec stack"><h3>Remove client</h3>
       ${S.confirmDel===id ? `<p class="small">This deletes the record, intake and private notes. Treatment plans are deleted too.</p><div class="row"><button type="button" class="danger" data-act="delclient">Yes, delete ${esc(clientName(id))}</button><button type="button" data-act="canceldel">Keep</button></div>` : `<div class="row"><button type="button" class="danger" data-act="askdel">Delete client…</button></div>`}
     </div></div>`;
@@ -697,11 +732,11 @@ function filesPane(id){
   const files=(S.filesFor===id?S.files:[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
   return `<div class="stack">
     <p class="small muted">Upload Qest4 reports, wellness reports or anything else for this client (PDF or images, up to 50 MB each). Files stay private until you press “Share with client”; then they appear under “My reports” in the client's portal.</p>
-    ${id.startsWith("c-")?`<div class="notice warn">You added this client yourself, so they don't have a portal sign-in. Files here are kept for you, but the client can't see them. To share reports, use the client record that shows <b>Portal account</b>; it appears once they sign in at portal.dawnspain.com.</div>`:""}
+    ${id.startsWith("c-")?(clientEmail(id)?`<div class="notice ok">${esc(clientName(id))} hasn't signed in yet. When they sign in at portal.dawnspain.com with <b>${esc(clientEmail(id))}</b>, files you've shared here appear for them under “My reports.”</div>`:`<div class="notice warn">Add this client's email under Details so their shared files appear when they sign in.</div>`):""}
     <div class="row" style="gap:8px;flex-wrap:wrap">
       <label class="btn primary" for="file-up" style="cursor:pointer">Upload files</label><input type="file" id="file-up" class="sr" multiple accept=".pdf,image/*,.doc,.docx">
       <label class="check small"><input type="checkbox" id="file-share-now" checked> Share with client right away</label>
-      ${!id.startsWith("c-") && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto">Let client know</button>` : ""}
+      ${clientEmail(id) && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto">Let client know</button>` : ""}
     </div>
     <div id="file-status" class="small muted"></div>
     <div class="stack" style="gap:8px">${!S.filesLoaded&&S.filesFor===id?`<div class="empty">Loading…</div>`:files.length?files.map(f=>fileRow(f,true)).join(""):`<div class="empty small">No files yet.</div>`}</div>
@@ -793,7 +828,7 @@ function planEditor(ep){
     ${bottles || `<div class="empty small">No bottles yet. Add one here, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row"><button type="button" data-act="addbottle">Add bottle</button><button type="button" class="ghost" data-act="tolibrary">Add protocol as a new bottle</button></div>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px">${esc(p.instructions)}</textarea></label>
-    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id && p.status==="shared" && !ep.dirty && !ep.clientId.startsWith("c-") ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
   </div>`;
@@ -900,11 +935,13 @@ function bindClients(){
       else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
       else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
       else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
-      else if(act==="savedetails"){ await S.db.doc("clients/"+S.sel).update({name:$("#d-name").value.trim(), nextVisit:$("#d-next").value}); toast("Details saved"); }
+      else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim(), nextVisit:$("#d-next").value}; const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
+      else if(act==="askmerge"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to}; renderClients(); }
+      else if(act==="cancelmerge"){ S.confirmMerge=null; renderClients(); }
       else if(act==="askdel"){ S.confirmDel=S.sel; renderClients(); }
       else if(act==="canceldel"){ S.confirmDel=null; renderClients(); }
       else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
-      else if(act==="merge"){ await mergeClient(S.sel, $("#mergeTo").value); }
+      else if(act==="merge"){ const cm=S.confirmMerge; if(!cm || cm.from!==S.sel) return; a.disabled=true; await mergeClient(cm.from, cm.to); }
       else if(act==="newscan"){ a.disabled=true; try{ await newScan(S.sel); }catch(err){ console.warn(err); toast("Couldn't start the session. Try again."); a.disabled=false; } }
       else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
@@ -942,16 +979,17 @@ function bindPhoto(pre, getId){
   };
 }
 async function mergeClient(fromId, toId){
-  const from = S.clients[fromId], to = S.clients[toId];
-  if(!from || !to) return;
-  const intake = {...(from.intake||{}), ...(to.intake||{})};
-  await S.db.doc("clients/"+toId).update({name: to.name || from.name || "", intake, nextVisit: to.nextVisit || from.nextVisit || ""});
-  for(const p of S.plans){ const {id, ...rest} = p; await S.db.doc(`clients/${toId}/plans/${id}`).set(rest); await S.db.doc(`clients/${fromId}/plans/${id}`).delete(); }
-  const n = await S.db.doc("notes/"+fromId).get();
-  if(n.exists){ const t = await S.db.doc("notes/"+toId).get(); await S.db.doc("notes/"+toId).set({text:[t.exists?t.data().text:"", n.data().text].filter(Boolean).join("\n\n"), updatedAt:new Date().toISOString()}); await S.db.doc("notes/"+fromId).delete(); }
-  await S.db.doc("clients/"+fromId).delete();
+  if(!S.clients[fromId] || !S.clients[toId]) return;
+  const { error } = await SB.rpc("admin_merge_client", { from_id: fromId, to_id: toId });
+  S.confirmMerge = null;
+  if(error){
+    console.warn(error);
+    toast(/admin_merge_client|function/i.test(error.message||"") ? "Connecting isn't set up yet. Run link.sql in Supabase first." : "That didn't work: "+(error.message||"try again"));
+    renderClients(); return;
+  }
   if(S.editPlan?.clientId===fromId) S.editPlan=null;
-  S.sel = toId; S.plansFor=null; S.notesFor=null; S.sub="plans"; toast("Records merged"); renderClients();
+  S.sel = toId; S.plansFor=null; S.notesFor=null; S.filesFor=null; S.photoFor=null; S.qhistFor=null; S.scansFor=null; S.sub="plans";
+  toast("Records connected"); renderClients();
 }
 
 /* ---------- intake form (shared) ---------- */

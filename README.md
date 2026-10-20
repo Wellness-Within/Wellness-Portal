@@ -6,5 +6,6 @@ The client portal for Dawn Spain, PHom (Wellness From Within). A static site hos
 - `index.html` — the whole app
 - `config.js` — the Supabase project URL and public (anon) key
 - `setup.sql` — run once in Supabase's SQL Editor to create the table and access rules
+- `link.sql` — run once: connects records Dawn creates to a client's sign-in by email, and the safe "connect by hand" merge
 - `data/rep-kent.json` — Repertorium Publicum (Kent-based) from the OOREP open data, GPL v3
 - `data/mm-boericke.json` — Boericke's Pocket Manual of Homoeopathic Materia Medica (1906, public domain), via OOREP
