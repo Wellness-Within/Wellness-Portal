@@ -115,7 +115,7 @@ legend{font-family:var(--f-display);font-size:17px;padding:0;margin-bottom:8px}
 .scan-row{display:grid;grid-template-columns:var(--tpl);gap:10px}
 .scan-checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px}
 @media (max-width:960px){.scanview{grid-template-columns:1fr}.scan-pane{max-height:none;overflow:visible}.scan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:560px){.scan-grid,.scan-row{grid-template-columns:1fr}}
+@media (max-width:560px){.scan-grid,.scan-row{grid-template-columns:1fr}.scan-row:has(>.check){grid-template-columns:1fr auto}.scan-row:has(>.check)>.field:not(:first-child){grid-column:1/-1}}
 .pline{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .pline .n{font-family:var(--f-mono);font-size:12px;color:var(--accent);padding-top:2px;min-width:64px}
 .pline .x{font-family:var(--f-mono);font-size:13.5px;line-height:1.55;min-width:0;overflow-wrap:anywhere}
@@ -1331,6 +1331,7 @@ function consultForm(d){
     ${grid(2, sf(d,"cItem","Describe item (crystal, jewelry or other)",{type:"textarea"})+sf(d,"cShip","Shipping address (if shipping)",{type:"textarea"}))}
   </div>`;
 }
+const runBox=(d,k,label="Run")=>`<label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-k="${k}" ${getP(d,k)?"checked":""}><span>${label}</span></label>`;
 function recordForm(d){
   return `<div class="stack scan-form">
     <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">Practitioner only</p><h2>Scan Session Record</h2><p class="small muted">Quick notes while scanning. Findings come from the scan export.</p></div>
@@ -1341,9 +1342,9 @@ function recordForm(d){
     ${sh("Strep Tilch")}${grid(3, sf(d,"stPotency","Potency chosen by Qest"))}
     ${sh("Next test needed (QEST-directed)","Check when run.")}
     ${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr auto 2fr">${sf(d,`next.${i}.test`,"Next test requested")}<label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-k="next.${i}.run" ${getP(d,`next.${i}.run`)?"checked":""}><span>Run</span></label>${sf(d,`next.${i}.notes`,"Notes")}</div>`).join("")}
-    ${sh("Scans I initiated")}${[0,1,2,3].map(i=>`<div class="scan-row" style="--tpl:1fr 2fr">${sf(d,`init.${i}.scan`,"Scan")}${sf(d,`init.${i}.reason`,"Reason")}</div>`).join("")}
-    ${sh("Target searches I initiated")}${grid(2, [0,1,2,3,4,5,6,7].map(i=>sf(d,`search.${i}`,"Search keyword")).join(""))}
-    ${sh("Remedies tested against")}${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr 1fr 2fr">${sf(d,`rem.${i}.name`,"Remedy / product")}${sf(d,`rem.${i}.pot`,"Potency")}${sf(d,`rem.${i}.notes`,"Notes")}</div>`).join("")}
+    ${sh("Scans I initiated","Check when run.")}${[0,1,2,3].map(i=>`<div class="scan-row" style="--tpl:1fr auto 2fr">${sf(d,`init.${i}.scan`,"Scan")}${runBox(d,`init.${i}.run`)}${sf(d,`init.${i}.reason`,"Reason")}</div>`).join("")}
+    ${sh("Target searches I initiated","Check when run.")}${grid(2, [0,1,2,3,4,5,6,7].map(i=>`<div class="scan-row" style="--tpl:1fr auto">${sf(d,`search.${i}`,"Search keyword")}${runBox(d,`searchRun.${i}`)}</div>`).join(""))}
+    ${sh("Remedies tested against","Check when tested.")}${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr 1fr auto 2fr">${sf(d,`rem.${i}.name`,"Remedy / product")}${sf(d,`rem.${i}.pot`,"Potency")}${runBox(d,`rem.${i}.run`,"Tested")}${sf(d,`rem.${i}.notes`,"Notes")}</div>`).join("")}
     ${sh("Imprint information")}${grid(3, ss(d,"impMethod","Imprint method",IMP_METHODS)+ss(d,"carrier","Carrier",CARRIERS)+sf(d,"impItems","Items imprinted (#)")+sf(d,"impDate","Imprint date",{type:"date"})+ss(d,"impDone","Completed",DONE_OPTS))}
     ${sf(d,"impNotes","Imprint notes",{type:"textarea",wide:true})}
     ${sh("Dosage")}${grid(3, sf(d,"drops","Drops per dose")+sf(d,"perDay","Times per day")+sf(d,"weeks","Duration (weeks)")+sf(d,"startDate","Start date",{type:"date"})+sf(d,"nextScan","Next scan / re-test"))}
