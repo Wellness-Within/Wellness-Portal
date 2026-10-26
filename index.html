@@ -481,15 +481,15 @@ function addSignOut(){
 }
 
 window.addEventListener("hashchange", () => {
-  const h=(location.hash||"").toLowerCase(); if(!/^#(qest|intake|followup)$/.test(h)) return;
+  const h=(location.hash||"").toLowerCase(); if(!/^#(qest|intake|followup|nextscan)$/.test(h)) return;
   store("wfw.wantForm", {h, t:Date.now()});
-  if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; renderClient(); window.scrollTo(0,0); }
+  if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; if(h==="#nextscan"){ S.wantNext=true; S.qestNew=true; } renderClient(); window.scrollTo(0,0); }
 });
 function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
-  { const h0=(location.hash||"").toLowerCase(); const q0=new URLSearchParams(location.search).get("f"); if(/^#(qest|intake|followup)$/.test(h0)) store("wfw.wantForm", {h:h0, t:Date.now()}); else if(/^(qest|intake|followup)$/.test(q0||"")) store("wfw.wantForm", {h:"#"+q0, t:Date.now()}); }
+  { const h0=(location.hash||"").toLowerCase(); const q0=new URLSearchParams(location.search).get("f"); if(/^#(qest|intake|followup|nextscan)$/.test(h0)) store("wfw.wantForm", {h:h0, t:Date.now()}); else if(/^(qest|intake|followup|nextscan)$/.test(q0||"")) store("wfw.wantForm", {h:"#"+q0, t:Date.now()}); }
   const hashErr = /error_code=otp_expired|error=access_denied/.test(location.hash);
   const { data:{ session } } = await SB.auth.getSession();
   if(!session){ renderSignIn(hashErr?`<p class="notice warn">That sign-in link has expired or was already used. Enter your email for a new one.</p>`:""); SB.auth.onAuthStateChange((ev,sess)=>{ if(sess) location.replace(location.pathname); }); return; }
@@ -559,6 +559,58 @@ function notifyMail(id, kind){
     : `${hi}\n\n${whose} treatment plan is ready, and I've added it to your client portal. You'll find it under \u201cMy treatment plans,\u201d along with how often to take each remedy and for how long. You can come back to it anytime.\n\n${signin}\n\nIf anything is unclear, or you notice changes you'd like to share as you go, please reach out. I'm here to support you every step of the way.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`;
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
+/* ---------- scan reminders (Dawn sends with one click from her Mail app) ---------- */
+const dayDiff = (a, b) => Math.round((new Date(a+"T12:00:00") - new Date(b+"T12:00:00")) / 864e5);
+function scanFormIn(c){ const nv=c.nextVisit; if(!nv || !c.qestSubmittedAt) return false; const cut=new Date(nv+"T12:00:00"); cut.setDate(cut.getDate()-14); return c.qestSubmittedAt >= cut.toISOString(); }
+function reminderDue(id){
+  const c=S.clients[id]||{}, nv=c.nextVisit; if(!/^\d{4}-\d{2}-\d{2}$/.test(nv||"")) return null;
+  const d=dayDiff(nv, today()), sent=(c.reminders||{})[nv]||{};
+  if(d<=0 && d>=-14 && !sent.day) return "day";
+  if(d>=1 && d<=7 && !sent.week) return "week";
+  return null;
+}
+function remindersDue(){ return Object.keys(S.clients).map(id=>({id, kind:reminderDue(id)})).filter(x=>x.kind).sort((a,b)=>(S.clients[a.id].nextVisit||"").localeCompare(S.clients[b.id].nextVisit||"")); }
+function remindersPanel(){
+  const due=remindersDue(); if(!due.length) return "";
+  return `<details class="hist" open><summary>Scan reminders to send (${due.length})</summary><div class="stack" style="gap:8px;margin-top:8px">
+    ${due.map(({id,kind})=>{ const c=S.clients[id]; return `<div class="row" style="gap:6px;align-items:center">
+      <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(c.nextVisit))}${scanFormIn(c)?' · <span class="chip ok">Form in</span>':""}</div></div>
+      <button type="button" class="small" data-remind="${esc(id)}" data-kind="${kind}" title="Opens the email in your Mail app">Send</button>
+      <button type="button" class="ghost small" data-remskip="${esc(id)}" data-kind="${kind}">Skip</button></div>`; }).join("")}
+  </div></details>`;
+}
+async function markReminder(id, kind){
+  const c=S.clients[id]||{}, nv=c.nextVisit; if(!nv) return;
+  const all={...(c.reminders||{})}; all[nv]={...(all[nv]||{}), [kind]:new Date().toISOString()};
+  Object.keys(all).sort().slice(0,-6).forEach(k=>delete all[k]);
+  await S.db.doc("clients/"+id).update({reminders:all});
+}
+function scanMail(id, kind){
+  const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return false; }
+  const c=S.clients[id]||{}, first=clientFirst(id);
+  const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
+  const named = fam && first && first!=="Unnamed";
+  const hi = named ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
+  const your = named ? `${first}'s` : "your", Your = named ? `${first}'s` : "Your";
+  const howYou = named ? `how ${first} is` : "how you're";
+  const when = c.nextVisit ? fmtDate(c.nextVisit) : "";
+  const link = "https://portal.dawnspain.com/#nextscan";
+  const signin = `Sign in with this email address (${to}).${named?` Then choose ${first} at the top.`:""} ${named?"Contact":"Your contact"} details carry over, so you'll only answer the questions about ${howYou} feeling now.`;
+  const sign=`With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`;
+  const reach = `If you need to change the date or have any questions, just reply to this email or call me at ${PRACTICE.phone}.`;
+  let subject, body;
+  if(kind==="week"){
+    subject = `${Your} next Qest4 scan is coming up`;
+    body = `${hi}\n\nIt's almost time for ${your} next Qest4 scan${when?`, on ${when}`:""}, when ${named?"the":"your"} current drops are due to finish.\n\nBefore the scan, please fill out a new pre-scan form in the client portal so I can see ${howYou} doing since the last one:\n${link}\n\n${signin}\n\n${reach}\n\n${sign}`;
+  } else {
+    subject = `Time for ${your} next Qest4 scan`;
+    body = `${hi}\n\n${Your} drops are finished, which means it's time for ${your} next Qest4 scan.\n\n` +
+      (scanFormIn(c) ? `Thank you for sending ${named?"the":"your"} pre-scan form. I have everything I need for the scan.` : `If you haven't yet, please fill out the pre-scan form in the client portal before the scan:\n${link}\n\n${signin}`) +
+      `\n\n${reach}\n\n${sign}`;
+  }
+  location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return true;
+}
 function clientName(id){
   const c = S.clients[id] || {};
   return c.name || c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
@@ -624,6 +676,7 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
       <div class="head">
         <div class="row"><h2 class="grow">Clients</h2><button type="button" class="primary" data-act="newclient">New client</button></div>
         ${S.jotNew?`<div class="stack" style="gap:6px;padding:8px;border:1px solid var(--line);border-radius:8px"><p class="small muted" style="margin:0">Paste a Jotform submission (intake or Qest4). A new client is made from it.</p><textarea id="jotnew-text" class="small" style="min-height:100px" placeholder="Paste the whole submission"></textarea><div class="row"><button type="button" class="primary" data-act="jotnew">Create client</button><button type="button" class="ghost" data-act="jotnewopen">Cancel</button></div><div id="jotnew-report"></div></div>`:""}
+        ${remindersPanel()}
         <input id="clientFilter" type="search" placeholder="Find a client" value="${esc(S.clientFilter||"")}" aria-label="Find a client">
       </div>
       <div class="list">${list}</div>
@@ -713,6 +766,9 @@ function detailsPane(id,c){
       ${mine ? `<label class="field"><span>Email they'll sign in with</span><input id="d-email" type="email" inputmode="email" value="${esc(c.email || clientEmail(id))}" placeholder="name@example.com"></label>` : ""}
     </div>
     <div class="row"><button type="button" class="primary" data-act="savedetails">Save details</button></div>
+    ${c.nextVisit ? (()=>{ const sent=(c.reminders||{})[c.nextVisit]||{}; const st=k=>sent[k]?`sent ${esc(fmtDate(sent[k]))}`:"not sent yet";
+      return `<div class="small muted stack" style="gap:6px"><span>Scan reminders for ${esc(fmtDate(c.nextVisit))}: week before ${st("week")} · drops finished ${st("day")}. They appear at the top of your client list when due.</span>
+        <div class="row" style="gap:6px"><button type="button" class="small" data-remind="${esc(id)}" data-kind="week">Send week-before reminder now</button><button type="button" class="small" data-remind="${esc(id)}" data-kind="day">Send drops-finished reminder now</button></div></div>`; })() : ""}
     ${mine ? connect : id.includes("~") ? `<p class="small muted">Part of a family sign-in${clientEmail(id)?` (${esc(clientEmail(id))})`:""}${(()=>{ const sib=Object.keys(S.clients).filter(x=>x!==id && x.split("~")[0]===id.split("~")[0]); return sib.length?` with ${sib.map(x=>esc(clientName(x))).join(", ")}`:""; })()}. Plans and reports you share appear when that person signs in and chooses ${esc(nm)}.</p>` : `<p class="small muted">This client has a portal account. Plans you mark “Shared” appear for them when they open the portal.</p>`}
     <div class="formsec stack"><h3>Remove client</h3>
       ${S.confirmDel===id ? `<p class="small">This deletes the record, intake and private notes. Treatment plans are deleted too.</p><div class="row"><button type="button" class="danger" data-act="delclient">Yes, delete ${esc(clientName(id))}</button><button type="button" data-act="canceldel">Keep</button></div>` : `<div class="row"><button type="button" class="danger" data-act="askdel">Delete client…</button></div>`}
@@ -939,6 +995,8 @@ function bindClients(){
   ["pl-title","pl-date","pl-status","pl-instr","pl-extra"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
+    const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
     const fs = e.target.closest("[data-fshare]"); if(fs){ const f=S.files.find(x=>x.id===fs.dataset.fshare); if(f){ await S.db.doc(`clients/${S.sel}/files/${f.id}`).update({status:f.status==="shared"?"private":"shared"}); toast(f.status==="shared"?"Hidden from client":"Shared with client"); } return; }
     const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }
@@ -2399,11 +2457,12 @@ function startClient(){
   $("#sub").textContent = "Client portal";
   S.myRec = null; S.myPlans = []; S.myPhoto = ""; S.recLoaded=false;
   let h = (location.hash||"").toLowerCase();
-  if(!/^#(qest|intake|followup)$/.test(h)){ const w=recall("wfw.wantForm",null); if(w && Date.now()-w.t < 7*864e5) h=w.h; }
+  if(!/^#(qest|intake|followup|nextscan)$/.test(h)){ const w=recall("wfw.wantForm",null); if(w && Date.now()-w.t < 7*864e5) h=w.h; }
   if(S.me) store("wfw.wantForm", undefined);
-  S.cviewAuto = !/^#(qest|intake|followup)$/.test(h);
+  S.cviewAuto = !/^#(qest|intake|followup|nextscan)$/.test(h);
   S.cview = S.cviewAuto ? "plans" : "forms";
   S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest";
+  S.wantNext = h==="#nextscan";
   if(!S.me){ renderClient(); return; }
   S.family = {}; S.familyLoaded = false;
   S.db.collection("clients").onSnapshot(s => {
@@ -2426,7 +2485,7 @@ function familyPeople(){
 function watchPerson(id){
   (S.personUnsubs||[]).forEach(u => { try{ u&&u(); }catch(e){} });
   S.who = id; store("wfw.who", id);
-  S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.recLoaded = false; S.qestNew = false; S.clientWrite = null;
+  S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.clientWrite = null;
   const editing = clientEditing;
   S.personUnsubs = [
     S.db.doc("clients/"+id).onSnapshot(s => { if(S.who!==id) return; S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); }),
