@@ -733,6 +733,8 @@ function qestHistory(id){
 
 /* ---------- Reports & files (Supabase Storage, bucket "client-files") ---------- */
 const FILE_BUCKET = "client-files";
+/* Storage doesn't accept "~" in file names, which family-member ids contain. */
+const storeFolder = id => String(id).replace(/~/g, "_");
 function fmtSize(n){ return n>1048576 ? (n/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(n/1024))+" KB"; }
 function fileRow(f, prac){
   return `<div class="row" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;gap:10px;align-items:center">
@@ -767,7 +769,7 @@ async function uploadClientFiles(id, fileList, share){
   for(const [i,file] of list.entries()){
     if(file.size>50*1048576){ toast(`${file.name} is over 50 MB`); continue; }
     if(st) st.textContent=`Uploading ${i+1} of ${list.length}: ${file.name}…`;
-    const fid=genId(); const safe=file.name.replace(/[^\w.\- ]+/g,"_"); const path=`${id}/${fid}-${safe}`;
+    const fid=genId(); const safe=file.name.replace(/[^\w.\- ]+/g,"_"); const path=`${storeFolder(id)}/${fid}-${safe}`;
     const { error } = await SB.storage.from(FILE_BUCKET).upload(path, file, { contentType:file.type||"application/octet-stream", upsert:false });
     if(error){ console.warn(error); toast(`${file.name} didn't upload: ${error.message}`); continue; }
     await S.db.doc(`clients/${id}/files/${fid}`).set({ name:file.name, title:file.name.replace(/\.[^.]+$/,""), path, size:file.size, type:file.type, status: share?"shared":"private", uploadedAt:new Date().toISOString() });
@@ -1506,7 +1508,7 @@ async function uploadScanCsv(file){
   const sc=S.scan; if(!file) return; const st=$("#scan-csv-st");
   if(file.size>50*1048576){ toast("That file is over 50 MB"); return; }
   if(st) st.textContent="Uploading…";
-  const safe=file.name.replace(/[^\w.\- ]+/g,"_"); const path=`${sc.clientId}/scans/${sc.id}/${genId()}-${safe}`;
+  const safe=file.name.replace(/[^\w.\- ]+/g,"_"); const path=`${storeFolder(sc.clientId)}/scans/${sc.id}/${genId()}-${safe}`;
   const { error } = await SB.storage.from(FILE_BUCKET).upload(path, file, { contentType:"text/csv", upsert:false });
   if(error){ console.warn(error); toast("The scan file didn't upload: "+error.message); if(st) st.textContent=""; return; }
   const old=sc.data.csv; readScanForm(); sc.data.csv={name:file.name, path, size:file.size, uploadedAt:new Date().toISOString()};
