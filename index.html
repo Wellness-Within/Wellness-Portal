@@ -249,7 +249,7 @@ const FREQS = ["1D","2D","3D","4D","eOD","e3D","1W","e10D","e14D","e1H","e2H","e
 const INTAKE = [
   {sec:"About you", note:"All sessions are remote, so Dawn needs to know how and when to reach you.", fields:[
     {id:"fullName",label:"Full name",type:"text",req:true},{id:"preferredName",label:"What you like to be called",type:"text"},
-    {id:"dob",label:"Date of birth",type:"date"},
+    {id:"dob",label:"Date of birth",type:"dob"},
     {id:"phone",label:"Phone",type:"text"},{id:"email",label:"Email",type:"text"},
     {id:"country",label:"Country",type:"text"},
     {id:"street",label:"Street address",type:"text",wide:true},
@@ -310,7 +310,7 @@ const INTAKE = [
 const AREAS = ["Sleep","Energy","Hormones","Skin","Stress","Digestion","Pain","Detox","Anxiety","Immune","Headaches","Weight","Mood","Allergies","Focus / brain fog","Emotional support"];
 const QEST = [
   {sec:"About you", fields:[
-    {id:"fullName",label:"Full name",type:"text",req:true},{id:"dob",label:"Date of birth",type:"date"},
+    {id:"fullName",label:"Full name",type:"text",req:true},{id:"dob",label:"Date of birth",type:"dob"},
     {id:"email",label:"Email",type:"text"},{id:"phone",label:"Phone",type:"text"},
     {id:"firstScan",label:"First scan with Dawn?",type:"choice",options:["Yes, this is my first scan","No, I've had a scan before"]},
     {id:"country",label:"Country",type:"text"},
@@ -1119,10 +1119,47 @@ function intakeForm(vals, pre, readonly, def = INTAKE){
       if(f.type==="scale") return `<div class="field" style="grid-column:1/-1"><span id="${id}-l">${esc(f.label)}</span><div class="scale" role="radiogroup" aria-labelledby="${id}-l">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<label><input type="radio" name="${id}" id="${id}-${n}" value="${n}" ${String(v)===String(n)?"checked":""} ${dis}><span>${n}</span></label>`).join("")}</div></div>`;
       if(f.type==="choice") return `<div class="field"><span id="${id}-l">${esc(f.label)}</span><div class="choices" role="radiogroup" aria-labelledby="${id}-l">${f.options.map((o,i)=>`<label><input type="radio" name="${id}" id="${id}-${i}" value="${esc(o)}" ${v===o?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`;
       if(f.type==="multi"){ const arr = Array.isArray(v) ? v : []; return `<div class="field" style="grid-column:1/-1"><span class="sr">${esc(f.label)}</span><div class="choices" role="group" aria-label="${esc(f.label)}">${f.options.map((o,i)=>`<label><input type="checkbox" name="${id}" id="${id}-${i}" value="${esc(o)}" ${arr.includes(o)?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`; }
+      if(f.type==="dob"){ const iso=/^\d{4}-\d{2}-\d{2}$/.test(v)?v:""; const shown=iso?`${iso.slice(5,7)}/${iso.slice(8,10)}/${iso.slice(0,4)}`:v;
+        return `<div class="field"${style}><label for="${id}"><span>${lbl}</span></label><div class="row" style="gap:6px;flex-wrap:nowrap">
+          <input id="${id}" data-dob type="text" inputmode="numeric" autocomplete="bday" placeholder="MM/DD/YYYY" maxlength="10" value="${esc(shown)}" ${dis} ${f.req?'aria-required="true"':""} style="flex:1 1 auto;min-width:0">
+          ${readonly?"":`<span style="position:relative;flex:0 0 auto"><button type="button" class="ghost" data-dobcal="${id}" aria-label="Pick ${esc(f.label).toLowerCase()} from a calendar" title="Pick from a calendar" style="padding:8px 10px">📅</button><input type="date" data-dobpick="${id}" tabindex="-1" aria-hidden="true" value="${esc(iso)}" max="${today()}" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;pointer-events:none"></span>`}
+        </div><small class="muted">Type it in, like 04/15/1980, or tap the calendar.</small></div>`; }
       if(f.type==="check") return `<label class="check"${style}><input type="checkbox" id="${id}" ${v?"checked":""} ${dis} ${f.req?'aria-required="true"':""}><span>${lbl}</span></label>`;
       return `<label class="field"${style}><span>${lbl}</span><input id="${id}" type="${f.type}" ${f.req?'aria-required="true"':""} value="${esc(v)}" ${dis}></label>`;
     }).join("") + `</div></fieldset>`).join("") + `</form>`;
 }
+/* Date of birth: typed as MM/DD/YYYY (slashes added as they type) or picked from a calendar; saved as YYYY-MM-DD. */
+function dobToIso(t){
+  const m=/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{2}|\d{4})$/.exec(String(t).trim()); if(!m) return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:"";
+  let [_,mo,d,y]=m; mo=+mo; d=+d; y=+y; if(y<100) y += (y > (new Date().getFullYear()%100) ? 1900 : 2000);
+  const dt=new Date(y, mo-1, d); if(dt.getMonth()!==mo-1 || dt.getDate()!==d) return "";
+  return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
+document.addEventListener("input", e => {
+  const el=e.target;
+  if(el.matches?.("input[data-dob]")){
+    if(e.inputType && e.inputType.startsWith("delete")) return;
+    const dg=el.value.replace(/\D/g,"").slice(0,8);
+    // Add the slashes for them, unless they're typing their own (like 1/5/1980)
+    if(!/^\d*$|^\d{2}\/\d*$|^\d{2}\/\d{2}\/\d*$/.test(el.value)) return;
+    let out=dg; if(dg.length>=3) out=dg.slice(0,2)+"/"+dg.slice(2); if(dg.length>=5) out=dg.slice(0,2)+"/"+dg.slice(2,4)+"/"+dg.slice(4);
+    if(out!==el.value) el.value=out;
+  } else if(el.matches?.("input[data-dobpick]")){
+    const t=document.getElementById(el.dataset.dobpick), v=el.value;
+    if(t && /^\d{4}-\d{2}-\d{2}$/.test(v)){ t.value=`${v.slice(5,7)}/${v.slice(8,10)}/${v.slice(0,4)}`; t.dispatchEvent(new Event("input",{bubbles:true})); }
+  }
+}, true);
+document.addEventListener("change", e => { if(e.target.matches?.("input[data-dobpick]")) e.target.dispatchEvent(new Event("input",{bubbles:true})); }, true);
+document.addEventListener("focusout", e => {
+  const el=e.target; if(!el.matches?.("input[data-dob]")) return;
+  const iso=dobToIso(el.value); if(iso) el.value=`${iso.slice(5,7)}/${iso.slice(8,10)}/${iso.slice(0,4)}`;
+}, true);
+document.addEventListener("click", e => {
+  const b=e.target.closest?.("[data-dobcal]"); if(!b) return; e.preventDefault(); e.stopPropagation();
+  const p=document.querySelector(`input[data-dobpick="${b.dataset.dobcal}"]`); if(!p) return;
+  const iso=dobToIso(document.getElementById(b.dataset.dobcal)?.value||""); if(iso) p.value=iso; else if(!p.value) p.value="1980-01-01";
+  try{ p.style.pointerEvents="auto"; if(p.showPicker) p.showPicker(); else { p.focus(); p.click(); } }catch(err){ p.focus(); p.click(); } finally{ setTimeout(()=>p.style.pointerEvents="none", 0); }
+}, true);
 function readIntake(pre, def = INTAKE){
   const out = {};
   def.forEach(s => s.fields.forEach(f => {
@@ -1131,6 +1168,7 @@ function readIntake(pre, def = INTAKE){
     else if(f.type==="multi"){ const c=[...document.querySelectorAll(`input[name="${id}"]:checked`)].map(x=>x.value); if(c.length) out[f.id]=c; }
     else if(f.type==="choice"){ const c = document.querySelector(`input[name="${id}"]:checked`); if(c) out[f.id]=c.value; }
     else if(f.type==="check"){ const el=document.getElementById(id); if(el?.checked) out[f.id]=true; }
+    else if(f.type==="dob"){ const el=document.getElementById(id); const v=(el?.value||"").trim(); if(v) out[f.id]=dobToIso(v)||v; }
     else { const el=document.getElementById(id); if(el && el.value.trim()) out[f.id]=el.value.trim(); }
   }));
   return out;
@@ -1163,7 +1201,7 @@ function jotParse(text, def){
   clean.forEach((m,i)=>{ if(!m.f || found.has(m.f.id)) return; const raw=T.slice(m.end, i+1<clean.length?clean[i+1].start:T.length).replace(/^[\s:\t]+/,"").trim(); found.add(m.f.id); if(!raw) return;
     const f=m.f, low=raw.toLowerCase();
     if(f.type==="check"){ vals[f.id]=true; }
-    else if(f.type==="date"){ const d=jotDate(raw); if(d) vals[f.id]=d; else odd.push([f.label,raw]); }
+    else if(f.type==="date"||f.type==="dob"){ const d=jotDate(raw); if(d) vals[f.id]=d; else odd.push([f.label,raw]); }
     else if(f.type==="scale"){ const n=parseInt(raw,10); if(n>=1&&n<=10) vals[f.id]=n; else odd.push([f.label,raw]); }
     else if(f.type==="choice"){ const o=f.options.find(o=>low===o.toLowerCase())||f.options.find(o=>low.includes(o.toLowerCase())||o.toLowerCase().includes(low)); if(o) vals[f.id]=o; else odd.push([f.label,raw]); }
     else if(f.type==="multi"){ const os=f.options.filter(o=>low.includes(o.toLowerCase())); if(os.length) vals[f.id]=os; else odd.push([f.label,raw]); }
@@ -1294,7 +1332,7 @@ function fmtAnswer(f, v){
   if(f.type==="check") return v ? "Yes, agreed" : "";
   if(f.type==="scale") return `${v} out of 10`;
   if(Array.isArray(v)) return v.join(", ");
-  if(f.type==="date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return fmtDate(v);
+  if((f.type==="date"||f.type==="dob") && /^\d{4}-\d{2}-\d{2}$/.test(v)) return fmtDate(v);
   return String(v);
 }
 async function formPdf(def, vals, {kind, who, date, photo}){
