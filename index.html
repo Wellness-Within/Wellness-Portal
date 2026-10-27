@@ -445,7 +445,7 @@ function renderSignIn(note){
   $("#app").innerHTML = `<div class="sheet stack signin">
     <h1>Welcome</h1>
     <div class="seg" role="tablist"><button type="button" data-sim="link" aria-current="${!pw}">Email me a link</button><button type="button" data-sim="password" aria-current="${pw}">Use a password</button></div>
-    <p class="muted">${pw ? "Sign in with your email and password." : "Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and treatment plans stay together."}</p>
+    <p class="muted">${pw ? "Sign in with your email and the password you set in the portal. Forgot it, or never set one? Choose “Email me a link” instead." : "Enter your email and we'll send you a link to sign in. No password needed. Use the same email each time so your forms and treatment plans stay together."}</p>
     <label class="field"><span>Email</span><input id="si-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(recall("wfw.email",""))}"></label>
     ${pw ? `<label class="field"><span>Password</span><input id="si-pass" type="password" autocomplete="current-password"></label>` : ""}
     <div class="row"><button type="button" class="primary" id="si-go">${pw ? "Sign in" : "Email me a sign-in link"}</button></div>
@@ -2511,7 +2511,7 @@ function startClient(){
     if(clientEditing()) return; renderClient();
   }, e => { console.warn(e); if(!S.who) watchPerson(S.me); });
 }
-const clientEditing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form, #fam-name");
+const clientEditing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form, #fam-name, #cpw-new");
 /* People on this sign-in: the sign-in's own record (hidden while it's empty and others exist) and each family member. */
 function personName(id){ const c=(S.family||{})[id]||{}; return c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.name || ""; }
 function familyPeople(){
@@ -2606,6 +2606,11 @@ function renderClient(){
     <div><p class="label">Wellness From Within</p><h1>${familyPeople().length>1 ? esc(name||"Unnamed") : first?`Hello, ${esc(first)}`:"Welcome"}</h1></div>
     ${familyBar()}
     ${body}
+    <details class="sheet" id="cpw-box" ontoggle="S.pwOpen=this.open" ${S.pwOpen?"open":""}><summary style="cursor:pointer"><b>Sign in with a password</b> <span class="small muted">(optional)</span></summary>
+      <div class="stack" style="margin-top:10px">
+        <p class="small muted">Tired of waiting for sign-in emails? Set a password here. Next time, choose <b>Use a password</b> on the sign-in page and enter ${esc(S.myEmail||"your email")} and this password. The email link still works any time, so if you forget your password, just use that.</p>
+        <div class="row"><input id="cpw-new" type="password" autocomplete="new-password" placeholder="New password (8+ characters)" aria-label="New password" style="flex:1 1 220px"><button type="button" data-act="csetpw">Save password</button></div>
+      </div></details>
     <div class="sheet stack"><h3>Questions?</h3>${contactBlock()}</div>
   </div>`;
   bindPhoto("cp", () => S.who);
@@ -2619,6 +2624,10 @@ function renderClient(){
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
     const act=a.dataset.act;
+    if(act==="csetpw"){ const v=$("#cpw-new")?.value||""; if(v.length<8){ toast("Please use at least 8 characters"); return; }
+      a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false;
+      if(error){ console.warn(error); toast(/different from the old/i.test(error.message||"") ? "That's already your password" : "The password didn't save. Please try again."); return; }
+      $("#cpw-new").value=""; store("wfw.signin","password"); S.pwOpen=false; toast("Password saved. Next time, choose “Use a password” to sign in."); renderClient(); return; }
     if(act==="qnew"){ S.qestNew=true; S.qestEdit=false; renderClient(); window.scrollTo(0,0); return; }
     if(act==="qedit"){ S.qestEdit=true; renderClient(); window.scrollTo(0,0); return; }
     if(act==="qeditcancel"){ S.qestEdit=false; renderClient(); window.scrollTo(0,0); return; }
