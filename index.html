@@ -2523,7 +2523,7 @@ function familyPeople(){
 function watchPerson(id){
   (S.personUnsubs||[]).forEach(u => { try{ u&&u(); }catch(e){} });
   S.who = id; store("wfw.who", id);
-  S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.clientWrite = null;
+  S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.qestEdit = false; S.clientWrite = null;
   const editing = clientEditing;
   S.personUnsubs = [
     S.db.doc("clients/"+id).onSnapshot(s => { if(S.who!==id) return; S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); }),
@@ -2568,8 +2568,14 @@ function renderClient(){
       body = `${seg}<div class="sheet stack">
         <div><h2>Pre-scan wellness form</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
         ${denied}
-        ${qestIn && !S.myRec?.qestDraft && !S.qestNew ? `<div class="notice ok"><b>Thank you! Your pre-scan form was sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}.</b> Dawn has everything she needs for this scan.</div>
-          <div class="row"><button type="button" class="primary" data-act="qnew">Start a new form for my next scan</button></div>
+        ${S.qestEdit && qestIn ? `<div class="notice">You're changing the form you sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}. Make your changes, then press Send changes to Dawn.</div>
+        ${photoBlock("cp", S.myPhoto, true, true)}
+        <label class="check" style="margin-top:-4px"><input type="checkbox" id="cs-photoOnFile" ${S.myRec?.qest?.photoOnFile?"checked":""}><span>I'm a returning client. Please use the photo Dawn already has on file.</span></label>
+        ${intakeForm(S.myRec?.qest||{}, "cs", false, QEST)}
+        <div class="row"><button type="button" data-act="qeditcancel">Cancel</button><button type="button" class="primary" data-act="qsubmit">Send changes to Dawn</button></div>`
+        : qestIn && !S.myRec?.qestDraft && !S.qestNew ? `<div class="notice ok"><b>Thank you! Your pre-scan form was sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}.</b> Dawn has everything she needs for this scan.</div>
+          <div class="row"><button type="button" class="primary" data-act="qedit">Edit this form</button><button type="button" data-act="qnew">Start a new form for my next scan</button></div>
+          <p class="small muted">Need to change or add something? Use Edit this form, and Dawn will see your changes.</p>
           <p class="small muted">Only start a new form when Dawn has scheduled your next scan. Your contact details carry over, so you only answer the questions about how you are now.</p>` : `
         ${qestIn ? `<div class="notice">${S.myRec?.qestDraft?"You've started your form for your next scan. Pick up where you left off.":"New form for your next scan. Your details are filled in; please answer the rest for how you are now."}</div>` : ""}
         ${photoBlock("cp", S.myPhoto, true, true)}
@@ -2613,7 +2619,9 @@ function renderClient(){
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
     const act=a.dataset.act;
-    if(act==="qnew"){ S.qestNew=true; renderClient(); window.scrollTo(0,0); return; }
+    if(act==="qnew"){ S.qestNew=true; S.qestEdit=false; renderClient(); window.scrollTo(0,0); return; }
+    if(act==="qedit"){ S.qestEdit=true; renderClient(); window.scrollTo(0,0); return; }
+    if(act==="qeditcancel"){ S.qestEdit=false; renderClient(); window.scrollTo(0,0); return; }
     if(act==="famopen"){ S.famAdd=true; renderClient(); return; }
     if(act==="famcancel"){ S.famAdd=false; renderClient(); return; }
     if(act==="famadd"){ const nm=($("#fam-name")?.value||"").trim(); if(!nm){ toast("Please type their name"); return; }
@@ -2637,7 +2645,9 @@ function renderClient(){
     const key = isQ ? "qest" : isF ? "followup" : "intake", stKey = key + "Status";
     let patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
     if(isQ && !submit && S.myRec?.qestStatus==="submitted") patch = {qestDraft:vals, qestUpdatedAt:now};
-    if(isQ && submit){ patch.qestDraft = null; S.qestNew = false; }
+    const editing = isQ && submit && S.qestEdit && S.myRec?.qestStatus==="submitted";
+    if(isQ && submit && !editing){ patch.qestDraft = null; S.qestNew = false; }
+    if(editing) patch.qestEditedAt = now;
     if(isF && submit) patch.followup = {fullName: vals.fullName||""};
     if(submit) patch[key+"SubmittedAt"] = now;
     if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now}].slice(-60);
@@ -2645,9 +2655,17 @@ function renderClient(){
       const who=S.who||S.me;
       if(S.myRec) await S.db.doc("clients/"+who).update(patch);
       else await S.db.doc("clients/"+who).set({...patch, email:S.myEmail, createdAt:now, source:"portal"});
-      if(isQ && submit) await S.db.collection(`clients/${who}/qestForms`).doc().set({form:vals, submittedAt:now});
+      if(editing){
+        // replace the form in this scan's history instead of adding a second one
+        const hist = await S.db.collection(`clients/${who}/qestForms`).get();
+        const last = hist.docs.map(d=>({id:d.id, ...d.data()})).sort((x,y)=>(y.submittedAt||"").localeCompare(x.submittedAt||""))[0];
+        if(last) await S.db.doc(`clients/${who}/qestForms/${last.id}`).set({form:vals, submittedAt:now, editedFrom:last.submittedAt||""});
+        else await S.db.collection(`clients/${who}/qestForms`).doc().set({form:vals, submittedAt:now});
+        S.qestEdit=false;
+      }
+      else if(isQ && submit) await S.db.collection(`clients/${who}/qestForms`).doc().set({form:vals, submittedAt:now});
       S.myRec = {...(S.myRec||{}), ...patch}; if(S.myRec.qestDraft===null) delete S.myRec.qestDraft;
-      S.clientWrite="ok"; toast(submit?"Sent to Dawn. Thank you!":"Saved");
+      S.clientWrite="ok"; toast(editing?"Your changes were sent to Dawn. Thank you!":submit?"Sent to Dawn. Thank you!":"Saved");
       if(submit) S.cview="plans";
       renderClient(); window.scrollTo(0,0);
     }catch(err){ console.warn(err); a.disabled=false; if(err?.code==="invalid_argument"){ S.clientWrite="denied"; renderClient(); window.scrollTo(0,0); } else toast("That didn't save. Check your connection and try again."); }
