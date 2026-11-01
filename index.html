@@ -873,7 +873,7 @@ function plansPane(id){
   const ep = S.editPlan && S.editPlan.clientId===id ? S.editPlan : null;
   if(ep) return planEditor(ep);
   const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No treatment plans yet.</p></div>` :
-    S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.status==="shared"?'<span class="chip ok">Shared with client</span>':'<span class="chip">Draft</span>'}<span>${esc(itemCount(p))}</span></span></button>`).join("");
+    S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.replacedBy?'<span class="chip">Previous</span>':p.status==="shared"?'<span class="chip ok">Current · shared</span>':'<span class="chip warn">Draft</span>'}${p.previousId?`<span>updated from ${esc(fmtDate(p.previousDate))}</span>`:""}<span>${esc(itemCount(p))}</span></span></button>`).join("");
   return `<div class="stack"><div class="row"><p class="grow small muted">A plan can mix wet dose bottles, TT-1 baskets and pellets.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
 }
 function planEditor(ep){
@@ -912,6 +912,8 @@ function planEditor(ep){
       <label class="field"><span>Date</span><input id="pl-date" type="date" value="${esc(p.date)}"></label>
       <label class="field"><span>Visibility</span><select id="pl-status"><option value="draft" ${p.status!=="shared"?"selected":""}>Draft (only you)</option><option value="shared" ${p.status==="shared"?"selected":""}>Shared with client</option></select></label>
     </div>
+    ${p.previousId ? `<div class="notice ok small">Updated from the plan of ${esc(fmtDate(p.previousDate)||"an earlier date")}. That plan is kept as it was. ${p.status==="shared"?"":"When you share this one, the client sees it as their current plan and the earlier one moves to <b>Previous plans</b>."}</div>` : ""}
+    ${p.replacedBy ? `<div class="notice small">This is a previous plan. A newer plan has replaced it; the client sees it under <b>Previous plans</b>.</div>` : ""}
     <p class="small muted" style="margin:0">Mix and match: each item can be a wet dose bottle, a TT-1 basket or pellets. Change an item's type with the menu next to its name.</p>
     ${items || `<div class="empty small">Nothing added yet. Add a bottle, basket or pellet remedy below, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" data-act="addbottle" data-form="wet">+ Wet dose bottle</button><button type="button" data-act="addbottle" data-form="tt1">+ TT-1 basket</button><button type="button" class="ghost" data-act="tolibrary">Add from protocol library</button></div>
@@ -924,7 +926,7 @@ function planEditor(ep){
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
     <label class="field"><span>Other recommendations</span><textarea id="pl-extra" style="min-height:80px" placeholder="Type anything here: a remedy, supplement, essence or product that isn't in the list. The client sees it exactly as you write it.">${esc(p.extra||"")}</textarea></label>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px" placeholder="How to take the remedies in this plan">${esc(p.instructions)}</textarea></label>
-    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
   </div>`;
@@ -1006,7 +1008,7 @@ function bindClients(){
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const scn = e.target.closest("[data-scan]"); if(scn){ const x=S.scans.find(v=>v.id===scn.dataset.scan); if(x){ const {id:sid,...data}=x; openScan(S.sel, sid, data); } return; }
-    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",extra:p.extra||"",instructions:cleanInstr(p.instructions),bottles:p.bottles||[]})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
+    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",extra:p.extra||"",instructions:cleanInstr(p.instructions),bottles:p.bottles||[], ...(p.previousId?{previousId:p.previousId, previousDate:p.previousDate||""}:{}), ...(p.replacedBy?{replacedBy:p.replacedBy, replacedAt:p.replacedAt||""}:{})})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
@@ -1073,7 +1075,13 @@ function bindClients(){
         renderClients(); setTimeout(()=>{ const n=document.querySelector(`[data-remname="${a.dataset.i}"]`); if(n) n.focus(); },30); }
       else if(act==="bottlelib"){ readPlanForm(); S.editPlan.target=+a.dataset.i; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); toast(`Pick a protocol line to add to ${itemLabelAt(S.editPlan.data, +a.dataset.i)}`); }
       else if(act==="tolibrary"){ readPlanForm(); S.editPlan.target=null; S.editPlan.newForm=S.editPlan.newForm||"wet"; S.tab="library"; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); }
+      else if(act==="updateplan"){ readPlanForm(); const ep=S.editPlan; if(!ep?.id) return;
+        if(ep.dirty){ toast("Save or discard your changes to this plan first"); return; }
+        const src=JSON.parse(JSON.stringify(ep.data)); delete src.replacedBy; delete src.replacedAt;
+        S.editPlan={clientId:ep.clientId, id:null, data:{...src, date:today(), status:"draft", previousId:ep.id, previousDate:ep.data.date||""}, dirty:true};
+        S.confirmPlanDel=false; renderClients(); window.scrollTo(0,0); toast("New copy ready to adjust. The original plan is unchanged."); }
       else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; ep.data.bottles.forEach(b=>{ b.form=itemForm(ep.data,b); }); const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id;
+        if(ep.data.previousId && ep.data.status==="shared"){ const prev=S.plans.find(x=>x.id===ep.data.previousId); if(prev && prev.replacedBy!==ref.id) await S.db.doc(`clients/${ep.clientId}/plans/${ep.data.previousId}`).update({replacedBy:ref.id, replacedAt:new Date().toISOString()}).catch(e=>console.warn(e)); }
  ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
       else if(act==="notifyfiles"){ notifyMail(a.dataset.id,"files"); }
       else if(act==="notifyplan"){ notifyMail(S.editPlan.clientId,"plan"); }
@@ -2578,7 +2586,8 @@ function renderClient(){
       ${fl.length?fl.map(f=>fileRow(f,false)).join(""):`<div class="empty small">No reports yet. Dawn adds them here after your session.</div>`}</div>`;
   } else if(S.cview==="plans"){
     body = !S.myPlans.length ? `<div class="sheet stack"><h2>No plans yet</h2><p class="muted">After your session, Dawn adds your treatment plan here.${homeoIn||qestIn ? " Your form is in." : " In the meantime, you can fill in your form."}</p>${homeoIn||qestIn?"":`<div class="row"><button type="button" class="primary" data-cv2="forms">Open my forms</button></div>`}</div>`
-      : S.myPlans.map(planCard).join("");
+      : (()=>{ const cur=S.myPlans.filter(x=>!x.replacedBy), prev=S.myPlans.filter(x=>x.replacedBy);
+          return (cur.length?cur:prev.slice(0,1)).map(planCard).join("") + ((cur.length?prev:prev.slice(1)).length ? `<details class="sheet"><summary style="cursor:pointer"><b>Previous plans</b> <span class="small muted">(${(cur.length?prev:prev.slice(1)).length})</span></summary><div class="stack" style="margin-top:12px">${(cur.length?prev:prev.slice(1)).map(planCard).join("")}</div></details>` : ""); })();
   } else {
     const denied = S.clientWrite==="denied"?`<div class="notice">Your portal access lets you view your plans but not save forms here. Please email your answers and photo to ${esc(PRACTICE.email)}, or ask Dawn for Contributor access.</div>`:"";
     const seg = `<div class="seg" role="tablist" aria-label="Which form">
