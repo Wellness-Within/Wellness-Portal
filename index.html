@@ -518,7 +518,7 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr")) render();
+    resolveNames(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn")) render();
   }, e => console.warn(e));
   S.db.collection("custom").onSnapshot(snap => {
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
@@ -711,8 +711,22 @@ function clientDetail(id){
   if(S.sub==="files") body = filesPane(id);
   if(S.sub==="scans") body = scansPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
-    body = hist.length ? `<div class="stack">${hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""}</summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")}</div>`
-      : `<div class="empty"><p>No follow-up forms yet.</p><p class="small">Send this client <span class="mono">https://portal.dawnspain.com/#followup</span> before their next session.</p></div>`; }
+    const ed = S.fuEditFor===id ? S.fuEdit : null;
+    if(ed){
+      const cur = ed==="new" ? {fullName:clientName(id)} : (hist.find(h=>h.submittedAt===ed)?.form||{});
+      body = `<div class="stack">
+        <div class="notice ok small">${ed==="new" ? "Filling in a follow-up during the appointment. It's saved to this client's follow-up history." : `Editing the follow-up from ${esc(fmtDate(ed))}.`}</div>
+        ${intakeForm(cur, "pfu", false, FOLLOWUP)}
+        <label class="field"><span>Your notes from this follow-up (optional)</span><textarea id="pfu-dawn" style="min-height:90px" placeholder="Added to this client's Private notes with today's date. The client never sees them."></textarea></label>
+        <div class="row"><button type="button" class="primary" data-act="fusave">Save follow-up</button><button type="button" data-act="fucancel">Cancel</button></div></div>`;
+    } else {
+      body = `<div class="stack">
+        <div class="row"><p class="grow small muted">Fill one in yourself during the appointment, or have the client send theirs before the session at <span class="mono">portal.dawnspain.com/#followup</span>.</p><button type="button" class="primary" data-act="funew">New follow-up</button></div>
+        ${hist.length ? hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""} <span class="small muted">· ${h.by==="practitioner"?"filled in by you":"sent by client"}</span></summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" data-act="fuedit" data-i="${esc(h.submittedAt||"")}">Edit</button><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")
+          : `<div class="empty small">No follow-ups yet.</div>`}
+      </div>`;
+    }
+  }
   if(S.sub==="notes") body = `<div class="stack"><p class="small muted">Only you can see these notes. Clients never see this tab.</p><textarea id="notesBox" style="min-height:260px" placeholder="Case notes, Qest4 session observations, follow-up ideas">${esc(S.notesFor===id?S.notes:"")}</textarea><div class="row"><button type="button" class="primary" data-act="savenotes">Save notes</button></div></div>`;
   if(S.sub==="details") body = detailsPane(id, c);
   ensureClientSubs(id);
@@ -999,7 +1013,7 @@ function bindClients(){
     ep.target=null; ep.dirty=true; renderClients(); });
   ["pl-title","pl-date","pl-status","pl-instr","pl-extra"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
-    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
@@ -1080,6 +1094,20 @@ function bindClients(){
         const src=JSON.parse(JSON.stringify(ep.data)); delete src.replacedBy; delete src.replacedAt;
         S.editPlan={clientId:ep.clientId, id:null, data:{...src, date:today(), status:"draft", previousId:ep.id, previousDate:ep.data.date||""}, dirty:true};
         S.confirmPlanDel=false; renderClients(); window.scrollTo(0,0); toast("New copy ready to adjust. The original plan is unchanged."); }
+      else if(act==="funew"){ S.fuEditFor=S.sel; S.fuEdit="new"; renderClients(); window.scrollTo(0,0); }
+      else if(act==="fuedit"){ S.fuEditFor=S.sel; S.fuEdit=a.dataset.i; renderClients(); }
+      else if(act==="fucancel"){ S.fuEdit=null; renderClients(); }
+      else if(act==="fusave"){ const id=S.sel, c=S.clients[id]||{}, ed=S.fuEdit; if(!ed) return;
+        const vals=readIntake("pfu", FOLLOWUP), notes=($("#pfu-dawn")?.value||"").trim(), now=new Date().toISOString();
+        let hist=(c.followupHistory||[]).slice(); const patch={};
+        const key = ed==="new" ? now : ed;
+        if(ed==="new"){ hist.push({form:vals, submittedAt:now, by:"practitioner"}); patch.seenAt=now; }
+        else hist=hist.map(h=>h.submittedAt===ed ? {...h, form:vals, editedAt:now} : h);
+        patch.followupHistory=hist.slice(-60);
+        a.disabled=true; try{ await S.db.doc("clients/"+id).update(patch);
+          if(notes){ const nd=await S.db.doc("notes/"+id).get(); const old=nd.exists?(nd.data().text||""):"";
+            const text=[old.replace(/\s+$/,""), `Follow-up ${fmtDate(key)}:\n${notes}`].filter(Boolean).join("\n\n");
+            await S.db.doc("notes/"+id).set({text, updatedAt:now}); if(S.notesFor===id) S.notes=text; } S.fuEdit=null; toast("Follow-up saved"); renderClients(); }catch(err){ console.warn(err); a.disabled=false; toast("That didn't save. Try again."); } }
       else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; ep.data.bottles.forEach(b=>{ b.form=itemForm(ep.data,b); }); const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id;
         if(ep.data.previousId && ep.data.status==="shared"){ const prev=S.plans.find(x=>x.id===ep.data.previousId); if(prev && prev.replacedBy!==ref.id) await S.db.doc(`clients/${ep.clientId}/plans/${ep.data.previousId}`).update({replacedBy:ref.id, replacedAt:new Date().toISOString()}).catch(e=>console.warn(e)); }
  ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
@@ -2614,7 +2642,7 @@ function renderClient(){
         <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>`}
       </div>`;
     } else if(S.form==="followup"){
-      const lastFu=(S.myRec?.followupHistory||[]).slice(-1)[0];
+      const lastFu=(S.myRec?.followupHistory||[]).filter(h=>h.by!=="practitioner").slice(-1)[0];
       body = `${seg}<div class="sheet stack">
         <div><h2>Homeopathy follow-up</h2><p class="small muted">A quick update before your follow-up session. Only you and Dawn can see your answers.</p></div>
         ${lastFu?`<div class="notice ok">Your last follow-up was sent ${esc(fmtDate(lastFu.submittedAt))}. Thank you! Before your next visit, fill this in again with how you are now.</div>`:""}
