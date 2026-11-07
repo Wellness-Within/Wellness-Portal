@@ -1901,30 +1901,38 @@ function loadGriffithMM(){
   }).catch(e=>{ R.gmmLoading=null; console.warn(e); return null; });
   return R.gmmLoading;
 }
-/* Robin Murphy's Lotus Materia Medica: the remedy list loads with this tab; each remedy's text loads when opened. */
-function loadMurphy(){
-  if(R.mur) return Promise.resolve(R.mur);
+/* Extra materia medicas in the private library: Murphy (books/murphy) and Clarke (books/clarke).
+   The remedy list loads with this tab; each remedy's text (books/<id>-mm/<n>) loads when opened. */
+const PD_BOOKS = { murphy:{label:"Murphy", title:"Murphy, Lotus Materia Medica", foot:"From your copy of Robin Murphy's Lotus Materia Medica. Only you can see this."},
+                   clarke:{label:"Clarke", title:"Clarke, Dictionary of Practical Materia Medica", foot:"From Clarke's Dictionary of Practical Materia Medica (1900–1902, public domain), read from a scan, so expect the odd misread word."} };
+R.bk = {};
+function loadBook(id){
+  const B = R.bk[id] || (R.bk[id] = {text:{}});
+  if(B.map) return Promise.resolve(B.map);
   if(!S.db || !S.me || !R.rep) return Promise.resolve(null);
-  if(!R.murLoading) R.murLoading = S.db.doc("books/murphy").get().then(sn=>{
-    const map=new Map(); R.murRems=[]; R.murText=R.murText||{};
+  if(!B.loading) B.loading = S.db.doc("books/"+id).get().then(sn=>{
+    const map=new Map(); B.rems=[];
     if(sn.exists){
+      const d=sn.data(); B.vols=d.vols||null;
       const byName=new Map(); R.rep.remedies.forEach((r,i)=>{ const k=r[1].toLowerCase(); if(!byName.has(k)) byName.set(k,i); });
       let added=false;
-      (sn.data().rems||[]).forEach(([ab,name,common,k],n)=>{
+      (d.rems||[]).forEach(([ab,name,common,k],n)=>{
         let gi = (k>=0 && k<(R.kentRems??Infinity)) ? k : byName.get(name.toLowerCase());
-        if(gi==null){ R.rep.remedies.push([ab,name,gAliases(ab,name,common && !/remedy|nosode/i.test(common) ? `${name} (${common})` : "")]); gi=R.rep.remedies.length-1; byName.set(name.toLowerCase(),gi); (R.remSrc=R.remSrc||{})[gi]="Murphy, Lotus Materia Medica"; added=true; }
-        R.murRems[n]={ab,name,common,gi}; if(!map.has(gi)) map.set(gi,[]); map.get(gi).push(n); });
+        if(gi==null){ R.rep.remedies.push([ab,name,gAliases(ab,name,common && !/remedy|nosode/i.test(common) ? `${name} (${common})` : "")]); gi=R.rep.remedies.length-1; byName.set(name.toLowerCase(),gi); (R.remSrc=R.remSrc||{})[gi]=PD_BOOKS[id].title; added=true; }
+        B.rems[n]={ab,name,common,gi}; if(!map.has(gi)) map.set(gi,[]); map.get(gi).push(n); });
       if(added){ R.aliasMap=null; R.idx=null; }
     }
-    R.mur=map; return map;
-  }).catch(e=>{ R.murLoading=null; console.warn(e); return null; });
-  return R.murLoading;
+    B.map=map; return map;
+  }).catch(e=>{ B.loading=null; console.warn(e); return null; });
+  return B.loading;
 }
-function murphyText(n){
-  if(R.murText[n]) return R.murText[n];
-  if(!R.murText["_"+n]){ R.murText["_"+n]=1; S.db.doc("books/murphy-mm/"+n).get().then(sn=>{ R.murText[n]=sn.exists?(sn.data().paras||[]):["(Not found.)"]; if(S.tab==="mm" && R.murRems[n] && R.mmSel===R.murRems[n].gi) renderMMDetail(); }).catch(()=>{ delete R.murText["_"+n]; }); }
+function loadBooksMM(){ return Promise.all(Object.keys(PD_BOOKS).map(loadBook)); }
+function bookText(id, n){
+  const B=R.bk[id]; if(B.text[n]) return B.text[n];
+  if(!B.text["_"+n]){ B.text["_"+n]=1; S.db.doc("books/"+id+"-mm/"+n).get().then(sn=>{ B.text[n]=sn.exists?(sn.data().paras||[]):["(Not found.)"]; if(S.tab==="mm" && B.rems[n] && R.mmSel===B.rems[n].gi) renderMMDetail(); }).catch(()=>{ delete B.text["_"+n]; }); }
   return null;
 }
+function inBooks(i){ return Object.keys(PD_BOOKS).filter(id=>R.bk[id]?.map?.has(i)); }
 function bookParas(P, key, lim0, foot){
   const lim=R.mmMore[key]?Infinity:lim0;
   return P.slice(0,lim).map(t=>t.startsWith("## ") ? `<p class="label" style="margin-top:8px">${esc(t.slice(3))}</p>` : `<p class="mmtext">${esc(t)}</p>`).join("")
@@ -2404,7 +2412,7 @@ function renderMM(){
       </section>
       <section class="detail-pane" id="mmDetail"><div class="sheet empty">Loading…</div></section>
     </div></div>`;
-  Promise.all([loadRep().then(()=>Promise.all([loadGriffithMM(), loadMurphy()])), loadMM(), loadBooks().catch(()=>null)]).then(()=>{ if(S.tab!=="mm") return; renderMMList(); renderMMDetail(); })
+  Promise.all([loadRep().then(()=>Promise.all([loadGriffithMM(), loadBooksMM()])), loadMM(), loadBooks().catch(()=>null)]).then(()=>{ if(S.tab!=="mm") return; renderMMList(); renderMMDetail(); })
     .catch(()=>{ const d=$("#mmDetail"); if(d) d.innerHTML=`<div class="sheet empty">The materia medica didn't load. Reload the page to try again.</div>`; });
   let t; $("#mmq").oninput=e=>{ clearTimeout(t); t=setTimeout(()=>{ if(R.mmMode==="fe") R.feQ=e.target.value; else R.mmQ=e.target.value; renderMMList(); },100); };
   $("#app").onclick = mmClick;
@@ -2414,7 +2422,7 @@ function mmCandidates(){
   const rems=R.rep.remedies;
   const withMM = new Set(Object.keys(R.mm.remedies).map(Number));
   const gb = new Set((R.books?.gbot||[]).map(g=>g.idx));
-  const gm = new Set(R.gmm ? R.gmm.keys() : []); gm.forEach(i=>gb.add(i)); (R.gNew||[]).forEach(i=>gb.add(i)); if(R.mur) R.mur.forEach((v,i)=>gb.add(i));
+  const gm = new Set(R.gmm ? R.gmm.keys() : []); gm.forEach(i=>gb.add(i)); (R.gNew||[]).forEach(i=>gb.add(i)); Object.values(R.bk).forEach(B=>B.map&&B.map.forEach((v,i)=>gb.add(i)));
   if(!q){ return [...new Set([...gb, ...withMM])].filter(i=>i>=0).sort((a,b)=>remName(a).localeCompare(remName(b))).slice(0,2500); }
   const out=[];
   rems.forEach((r,i)=>{ const hay=(r[1]+" "+r[0]).toLowerCase().replace(/[.\-]+/g," ");
@@ -2451,13 +2459,13 @@ function renderMMList(){
   if(R.mmMode==="fe") return renderFEList();
   const el=$("#mmList"); if(!el||!R.rep||!R.mm) return;
   const c=mmCandidates(); const gb=new Set((R.books?.gbot||[]).map(g=>g.idx));
-  el.innerHTML = c.length ? c.map(i=>`<button type="button" class="item" data-mm="${i}" aria-current="${R.mmSel===i}"><b>${esc(remName(i))}</b><span class="meta"><span class="mono">${esc(remAbbr(i))}</span>${R.mm.remedies[i]?'<span class="chip">Boericke</span>':""}${R.mur?.has(i)?'<span class="chip">Murphy</span>':""}${R.gmm?.has(i)?'<span class="chip">Griffith</span>':""}${gb.has(i)?'<span class="chip acc">GBOT</span>':""}</span></button>`).join("") : `<div class="empty">No remedy matches.</div>`;
+  el.innerHTML = c.length ? c.map(i=>`<button type="button" class="item" data-mm="${i}" aria-current="${R.mmSel===i}"><b>${esc(remName(i))}</b><span class="meta"><span class="mono">${esc(remAbbr(i))}</span>${R.mm.remedies[i]?'<span class="chip">Boericke</span>':""}${inBooks(i).map(id=>`<span class="chip">${PD_BOOKS[id].label}</span>`).join("")}${R.gmm?.has(i)?'<span class="chip">Griffith</span>':""}${gb.has(i)?'<span class="chip acc">GBOT</span>':""}</span></button>`).join("") : `<div class="empty">No remedy matches.</div>`;
 }
 function renderMMDetail(){
   if(R.mmMode==="fe") return renderFEDetail();
   const el=$("#mmDetail"); if(!el) return;
   const i=R.mmSel;
-  if(i==null){ el.innerHTML=`<div class="sheet stack"><h2>Look up a remedy</h2><p class="muted">One page per remedy, pulling together:</p><ul class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>its strongest rubrics in the repertory</li><li>Boericke's Pocket Manual</li>${R.mur?.size?"<li>Robin Murphy's Lotus Materia Medica</li>":""}${R.gMeta?"<li>Colin Griffith's New Materia Medica (vols 1–3) and his repertory of the new remedies</li>":""}<li>your Getting Back on Track notes</li><li>your Extra Strength Homeopathy notes</li><li>your Substack articles and other saved notes</li><li>Narayani and Helios combinations that contain it</li><li>Banerji protocols that use it</li></ul></div>`; return; }
+  if(i==null){ el.innerHTML=`<div class="sheet stack"><h2>Look up a remedy</h2><p class="muted">One page per remedy, pulling together:</p><ul class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>its strongest rubrics in the repertory</li><li>Boericke's Pocket Manual</li>${R.bk.murphy?.map?.size?"<li>Robin Murphy's Lotus Materia Medica</li>":""}${R.bk.clarke?.map?.size?"<li>Clarke's Dictionary of Practical Materia Medica</li>":""}${R.gMeta?"<li>Colin Griffith's New Materia Medica (vols 1–3) and his repertory of the new remedies</li>":""}<li>your Getting Back on Track notes</li><li>your Extra Strength Homeopathy notes</li><li>your Substack articles and other saved notes</li><li>Narayani and Helios combinations that contain it</li><li>Banerji protocols that use it</li></ul></div>`; return; }
   if(R.books && !R.idx){ el.innerHTML=`<div class="sheet empty">Indexing your notes…</div>`; setTimeout(()=>{ buildIndex(); renderMMDetail(); },20); return; }
   const mm=R.mm.remedies[i]; const gbot=(R.books?.gbot||[]).find(g=>g.idx===i);
   const keys=R.idx?.get(i)||new Set();
@@ -2480,9 +2488,9 @@ function renderMMDetail(){
     ${gRub.length||gCmp.length ? sec("grub","Griffith repertory", gRub.length+gCmp.length, `${gRub.length?`<ul class="small strong-list">${gRub.slice(0,more("grub",60)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${gRub.length>60&&!R.mmMore.grub?`<button type="button" class="ghost" data-more-mm="grub">Show all ${gRub.length}</button>`:""}`:""}${gCmp.length?`<p class="label" style="margin-top:6px">Listed as a comparison remedy in</p><ul class="small strong-list">${gCmp.slice(0,more("gcmp",30)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${gCmp.length>30&&!R.mmMore.gcmp?`<button type="button" class="ghost" data-more-mm="gcmp">Show all ${gCmp.length}</button>`:""}`:""}`, i>=(R.kentRems??Infinity) && gRub.length>0) : ""}
     ${gEntries.map((g,gi)=>sec("gmm"+gi, g.vol==="R" ? "Griffith, outline notes (Repertory, Appendix 3)" : `Griffith, New Materia Medica Vol ${g.vol}${g.common?` · ${esc(g.common)}`:""}`, null, griffithText(g, "gmm"+gi), gi===0)).join("")}
     ${mm?sec("boe","Boericke, Pocket Manual",null, mm.s.map(([h,c])=>`<div><p class="label">${esc(h==="\\N"?"":h)}</p><p class="mmtext">${fmtMM(c)}</p></div>`).join("")):""}
-    ${(R.mur?.get(i)||[]).map((n,k)=>{ const m=R.murRems[n]; const P=murphyText(n); const many=(R.mur.get(i)||[]).length>1;
-      return sec("mur"+k, "Murphy, Lotus Materia Medica"+(many||m.name.toLowerCase()!==remName(i).toLowerCase()?` · ${esc(m.name)}${m.common?` (${esc(m.common)})`:""}`:""), null,
-        P ? bookParas(P, "mur"+k, 40, "From your copy of Robin Murphy's Lotus Materia Medica. Only you can see this.") : `<p class="small muted">Loading…</p>`, !mm && k===0); }).join("")}
+    ${inBooks(i).map(id=>{ const B=R.bk[id], ns=B.map.get(i)||[]; return ns.map((n,k)=>{ const m=B.rems[n]; const P=bookText(id,n); const key=id+k;
+      const sub=(ns.length>1||m.name.toLowerCase()!==remName(i).toLowerCase()?` · ${esc(m.name)}${m.common?` (${esc(m.common)})`:""}`:"")+(B.vols?` · Vol ${B.vols[n]}`:"");
+      return sec(key, PD_BOOKS[id].title+sub, null, P ? bookParas(P, key, 40, PD_BOOKS[id].foot) : `<p class="small muted">Loading…</p>`, !mm && k===0 && id===inBooks(i)[0]); }).join(""); }).join("")}
     ${gbot?sec("gbot","Getting Back on Track (your notes)",null,`<div class="mmtext pre">${esc(gbot.text.slice(0,more("gbot",6000)))}</div>${gbot.text.length>6000&&!R.mmMore.gbot?`<button type="button" class="ghost" data-more-mm="gbot">Show the rest (${Math.round(gbot.text.length/1000)}k characters)</button>`:""}`):""}
     ${R.books?sec("es","Extra Strength Homeopathy (your notes)",es.length, es.length?es.slice(0,more("es",12)).map(p=>`<p class="mmtext note-para">${hlr(R.books.es[p])}</p>`).join("")+(es.length>12&&!R.mmMore.es?`<button type="button" class="ghost" data-more-mm="es">Show all ${es.length}</button>`:""):`<p class="small muted">Not mentioned.</p>`, es.length>0):""}
     ${R.books?sec("nt","Your articles and notes",nt.length, nt.length?(()=>{ const shown=nt.slice(0,more("nt",15)); let last=-1; return shown.map(([d,p])=>{ const head = d!==last ? `<p class="label" style="margin-top:6px">${esc(R.books.notes[d].title)}</p>` : ""; last=d; return head+`<p class="mmtext note-para">${hlr(R.books.notes[d].paras[p])}</p>`; }).join("")+(nt.length>15&&!R.mmMore.nt?`<button type="button" class="ghost" data-more-mm="nt">Show all ${nt.length}</button>`:""); })():`<p class="small muted">Not mentioned.</p>`, nt.length>0):""}
@@ -2631,7 +2639,7 @@ function renderSettings(){
       const flush=async()=>{ if(!batch.length) return; const { error } = await SB.from("docs").upsert(batch); if(error) throw error; done+=batch.length; st.textContent=`Loaded ${done} of ${items.length}…`; batch=[]; size=0; };
       for(const it of items){ const len=JSON.stringify(it.data).length; if(size+len>400000) await flush(); batch.push({path:it.path, parent:parentOf(it.path), id:idOf(it.path), data:it.data, updated_at:new Date().toISOString()}); size+=len; }
       await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary();
-      Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, mur:null, murLoading:null, murText:{}, remSrc:{}, books:null, booksLoading:null}); }
+      Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, bk:{}, remSrc:{}, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   $("#app").onclick = async e => { const a=e.target.closest("[data-act]");
     if(a?.dataset.act==="setpw"){ const v=$("#pw-new").value; if(v.length<8){ toast("Use at least 8 characters"); return; } a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false; if(error) toast("Couldn't save the password: "+error.message); else { $("#pw-new").value=""; toast("Password saved"); } return; }
