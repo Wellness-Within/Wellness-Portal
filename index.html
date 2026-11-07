@@ -954,7 +954,7 @@ function remedyChoices(){
   const out=new Map(); const add=(v,hint)=>{ const k=v.toLowerCase(); if(v && !out.has(k)) out.set(k,[v,hint||""]); };
   (S.settings.myRemedies||[]).forEach(n=>add(n,"Your remedy"));
   GRIFFITH.forEach(([n,v])=>add(n,`New Materia Medica, Vol ${v}`));
-  if(R.rep) R.rep.remedies.forEach(r=>add(r[1],"Kent / Boericke"));
+  if(R.rep) R.rep.remedies.forEach((r,i)=>add(r[1], i>=(R.kentRems??Infinity) ? "Griffith repertory" : "Kent / Boericke"));
   if(R.books) R.books.nar.mixes.forEach(m=>add("Narayani "+titleCase(m.name),`${m.potency} (${m.code})`));
   if(R.books) R.books.gbot.forEach(g=>add(titleCase(g.remedy),"Getting Back on Track (Jill Turland)"));
   ESSENCES.forEach(([n,src])=>add(n+(src.startsWith("Bach")?" (Bach)":" (flower essence)"), src==="Flower essence" ? "Feel Good Flower Essences" : src));
@@ -1853,13 +1853,17 @@ function renderCombos(){
 /* =========================================================
    REPERTORY + MATERIA MEDICA
    ========================================================= */
-const R = { mode:recall("wfw.repmode","plain"), plain:null, rep:null, repLoading:null, lower:null, chapters:[], q:"", chap:"", shown:200, open:{},
+const R = { rsrc:recall("wfw.repsrc","all"), mode:recall("wfw.repmode","plain"), plain:null, rep:null, repLoading:null, lower:null, chapters:[], q:"", chap:"", shown:200, open:{},
   mm:null, mmLoading:null, books:null, booksLoading:null, idx:null, idxBuilding:false,
   mmSel:null, mmQ:"", mmMore:{}, caseData:{name:"", clientId:"", rubrics:[]}, caseId:null, cases:[], casesSub:null, sortBy:"score", nsrc:"helios", nq:"" };
 
 function loadRep(){
   if(R.rep) return Promise.resolve(R.rep);
   if(!R.repLoading) R.repLoading = fetch("data/rep-kent.json").then(r=>{ if(!r.ok) throw new Error("load"); return r.json(); }).then(d=>{
+    R.kentRems = d.remedies.length; R.gStart = d.rubrics.length;
+    return loadGriffith(d).catch(e=>console.warn("Griffith not loaded", e)).then(()=>d);
+  }).then(d=>{
+    R.chapters = [];
     R.rep = d; R.lower = d.rubrics.map(r=>r[0].toLowerCase());
     const seen = new Set(); d.rubrics.forEach(r=>{ const c=r[0].split(",")[0]; if(!seen.has(c)){ seen.add(c); R.chapters.push(c);} });
     R.chapters.sort();
@@ -1868,6 +1872,39 @@ function loadRep(){
   }).catch(e=>{ R.repLoading=null; throw e; });
   return R.repLoading;
 }
+/* Colin Griffith's repertory and New Materia Medica live in the private library (books/griffith*), never in this public site. */
+const G_COMMON = new Set(["red","blue","green","orange","purple","yellow","jet","clay","ruby","emerald","rainbow","silicon","rainwater","moonstone","peridot","turquoise","amethyst","aquamarine","shungite","taconite","bornite","moxa","ivory"]);
+function gAliases(ab, name, full){
+  const out=new Set(); const add=a=>{ a=a.toLowerCase().replace(/[’']/g,"'").replace(/\s+/g," ").trim(); if(a && (a.includes(" ") || (a.length>4 && !G_COMMON.has(a)))) out.add(a); };
+  add(name); const m=(full||"").match(/\(([^)]*)\)/); if(m) m[1].split(/[;,]/).forEach(add);
+  return [...out];
+}
+async function loadGriffith(d){
+  if(!S.db || !S.me) return;
+  const man = await S.db.doc("books/griffith").get(); if(!man.exists) return;
+  const m = man.data();
+  const snaps = await Promise.all(Array.from({length:m.rep||0},(_,i)=>S.db.doc("books/griffith-rep"+i).get()));
+  const gi = (m.rems||[]).map(([ab,name,k,isNew,full])=>{ if(k>=0 && k<d.remedies.length) return k; d.remedies.push([ab, name, gAliases(ab,name,full)]); return d.remedies.length-1; });
+  R.gRems = m.rems; R.gIdx = gi; R.gNew = new Set((m.rems||[]).map((r,i)=>r[3]?gi[i]:-1).filter(x=>x>=0)); R.gMeta = {mm:m.mm||0, title:m.title||"Griffith"};
+  snaps.forEach(sn=>{ if(!sn.exists) return; (sn.data().rubrics||[]).forEach(([p,l,c])=>{
+    const links = l ? l.split(" ").map(t=>{ const [h,g]=t.split("."); return gi[parseInt(h,16)].toString(16)+"."+g; }).join(" ") : "";
+    d.rubrics.push(c ? [p,links,c] : [p,links]); }); });
+}
+function loadGriffithMM(){
+  if(R.gmm) return Promise.resolve(R.gmm);
+  if(!R.gMeta || !R.gMeta.mm) return Promise.resolve(null);
+  if(!R.gmmLoading) R.gmmLoading = Promise.all(Array.from({length:R.gMeta.mm},(_,i)=>S.db.doc("books/griffith-mm"+i).get())).then(snaps=>{
+    const map=new Map();
+    snaps.forEach(sn=>{ if(!sn.exists) return; (sn.data().remedies||[]).forEach(e=>{ const gi=R.gIdx[e.r]; if(gi==null) return; if(!map.has(gi)) map.set(gi,[]); map.get(gi).push(e); }); });
+    map.forEach(v=>v.sort((a,b)=>(a.vol==="R")-(b.vol==="R")||String(a.vol).localeCompare(String(b.vol))));
+    R.gmm=map; return map;
+  }).catch(e=>{ R.gmmLoading=null; console.warn(e); return null; });
+  return R.gmmLoading;
+}
+function isG(i){ return R.gStart!=null && i>=R.gStart; }
+function repSrcOK(i){ if(!R.gMeta) return true; return R.rsrc==="kent" ? !isG(i) : R.rsrc==="griffith" ? isG(i) : true; }
+function chapterList(){ if(!R.gMeta) return R.chapters; return R.chapters.filter(c=>R.rsrc==="kent" ? !c.startsWith("Griffith ›") : R.rsrc==="griffith" ? c.startsWith("Griffith ›") : true); }
+function chapOpts(){ return `<option value="">All chapters</option>`+chapterList().map(c=>`<option value="${esc(c)}" ${R.chap===c?"selected":""}>${esc(c)}</option>`).join(""); }
 function loadMM(){
   if(R.mm) return Promise.resolve(R.mm);
   if(!R.mmLoading) R.mmLoading = fetch("data/mm-boericke.json").then(r=>r.json()).then(d=>{ R.mm=d; return d; }).catch(e=>{ R.mmLoading=null; throw e; });
@@ -2078,7 +2115,7 @@ function plainParse(q){
   for(let i=0;i<words.length;){
     let hit=null;
     for(let n=Math.min(maxN,words.length-i);n>=1;n--){ const k=words.slice(i,i+n).join(" "); if(map.has(k)){ hit={k,n}; break; } }
-    if(hit){ out.push({label:hit.k, alts:map.get(hit.k), w:1}); i+=hit.n; continue; }
+    if(hit){ out.push({label:hit.k, alts:map.get(hit.k), w:1, raw:hit.k.split(" ").filter(x=>!PLAIN_STOP.has(x)).map(plainStem)}); i+=hit.n; continue; }
     const w=words[i]; i++;
     if(PLAIN_MOD[w]){ const m=PLAIN_MOD[w]; out.push({label:w, alts:[[m]], w:m==="agg"?0.3:1, mod:m}); continue; }
     if(PLAIN_STOP.has(w) || w.length<3) continue;
@@ -2088,7 +2125,7 @@ function plainParse(q){
   return out;
 }
 function plainText(i){ // cached normalized rubric with word boundaries
-  if(!R.norm) R.norm = R.rep.rubrics.map(r=>" "+r[0].toLowerCase().replace(/[^a-z0-9]+/g," ").trim()+" ");
+  if(!R.norm) R.norm = R.rep.rubrics.map((r,i)=>" "+(isG(i) ? r[0].replace(/^Griffith › /,"").replace(/</g," agg ").replace(/>/g," amel ").replace(/\+/g," desires ") : r[0]).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()+" ");
   return R.norm[i];
 }
 function plainSearch(q, chap){
@@ -2100,9 +2137,10 @@ function plainSearch(q, chap){
   const L=R.lower; const res=[]; const cnt=new Array(cons.length).fill(0);
   plainText(0);
   for(let i=0;i<L.length;i++){
+    if(!repSrcOK(i)) continue;
     if(chapPref && !L[i].startsWith(chapPref) && L[i]!==chap.toLowerCase()) continue;
-    const s=R.norm[i]; let mask=0;
-    for(let c=0;c<cons.length;c++){ if(cons[c].alts.some(a=>a.every(t=>s.includes(" "+t)))){ mask|=(1<<c); cnt[c]++; } }
+    const s=R.norm[i]; let mask=0; const g=isG(i);
+    for(let c=0;c<cons.length;c++){ if(cons[c].alts.some(a=>a.every(t=>s.includes(" "+t))) || (g && cons[c].raw && cons[c].raw.every(t=>s.includes(" "+t)))){ mask|=(1<<c); cnt[c]++; } }
     if(mask) res.push([i,mask]);
   }
   const N=L.length; const wt=cons.map((c,k)=>c.w*(1+Math.log10(N/Math.max(1,cnt[k]))/3));
@@ -2132,13 +2170,14 @@ function renderRepertory(){
   R.view = "search";
   const viewSeg = `<div class="sheet row" style="padding:10px 14px;gap:10px"><span class="grow small">Want a full analysis with remedy differentiation and refining questions?</span><a class="btn primary" href="https://claude.ai/artifact/6kwB1ih43G1uRBxCm3ZUNq" target="_blank" rel="noopener" style="text-decoration:none;padding:7px 12px;border-radius:8px;background:var(--accent);color:#fff;font-weight:600">Open Case analysis ↗</a></div>`;
   const searchHtml = `<div class="sheet stack" style="padding:16px">
-        <div class="row"><h1 class="grow">Repertory</h1><span class="small muted">Repertorium Publicum (Kent-based) · 74,482 rubrics</span></div>
+        <div class="row"><h1 class="grow">Repertory</h1><span class="small muted" id="repSrcInfo">${repSrcInfo()}</span></div>
         <div class="row">
           <input id="repq" class="grow" type="search" placeholder="${R.mode==="exact"?"Kent words, e.g. head pain sun":"Describe the symptom, e.g. headache worse in the sun"}" value="${esc(R.q)}" aria-label="Describe the symptom" style="flex:1 1 260px">
-          <select id="repchap" aria-label="Chapter" style="width:auto;flex:0 1 200px"><option value="">All chapters</option>${R.chapters.map(c=>`<option ${R.chap===c?"selected":""}>${esc(c)}</option>`).join("")}</select>
+          <select id="repchap" aria-label="Chapter" style="width:auto;flex:0 1 200px">${chapOpts()}</select>
         </div>
+        ${repSrcSeg()}
         <div class="row small" style="gap:8px"><div class="seg" role="tablist" style="flex:1 1 100%"><button type="button" style="flex:1 1 120px" data-rmode="plain" aria-current="${R.mode!=="exact"}">Plain language</button><button type="button" style="flex:1 1 120px" data-rmode="exact" aria-current="${R.mode==="exact"}">Exact Kent words</button></div></div>
-        <p class="small muted">Grades: <span class="rem g3">BOLD</span> highest, <span class="rem g2">Italic</span> middle, <span class="rem g1">plain</span> lowest. Tap a remedy to read about it.</p>
+        <p class="small muted">Grades: <span class="rem g3">BOLD</span> highest, <span class="rem g2">Italic</span> middle, <span class="rem g1">plain</span> lowest. Tap a remedy to read about it.${R.gMeta?` In Griffith rubrics, his new remedies are <span class="rem g2">italic</span> and the comparison remedies he took from Murphy are <span class="rem g1">plain</span>.`:""}</p>
       </div>
       <div id="repResults">${R.rep ? "" : `<div class="sheet empty">Loading the repertory…</div>`}</div>`;
   $("#app").innerHTML = `<div class="rep-layout">
@@ -2149,7 +2188,7 @@ function renderRepertory(){
     <aside class="case-pane" id="casePane" aria-label="Case"></aside>
   </div>`;
   const run = () => { if(R.view==="analysis") renderCaseAI(); else renderRepResults(); };
-  loadRep().then(()=>{ if(S.tab!=="repertory") return; const sel=$("#repchap"); if(sel && sel.options.length<2) sel.innerHTML=`<option value="">All chapters</option>`+R.chapters.map(c=>`<option ${R.chap===c?"selected":""}>${esc(c)}</option>`).join(""); run(); renderCase(); })
+  loadRep().then(()=>{ if(S.tab!=="repertory") return; const sel=$("#repchap"); if(sel) sel.innerHTML=chapOpts(); const si=$("#repSrcInfo"); if(si) si.textContent=repSrcInfo(); const sg=$("#repSrcSeg"); if(sg) sg.outerHTML=repSrcSeg(); run(); renderCase(); })
     .catch(()=>{ const el=$("#repResults")||$("#caPane"); if(el) el.innerHTML=`<div class="sheet empty">The repertory didn't load. Reload the page to try again.</div>`; });
   if(R.rep){ run(); renderCase(); }
   ensureCasesSub();
@@ -2157,6 +2196,8 @@ function renderRepertory(){
   const rc=$("#repchap"); if(rc) rc.onchange = e => { R.chap=e.target.value; R.shown=200; run(); };
   $("#app").onclick = repClick;
 }
+function repSrcInfo(){ const k="Kent (Repertorium Publicum) · "+((R.gStart??74482)).toLocaleString()+" rubrics"; return R.gMeta ? k+" · Griffith · "+(R.rep.rubrics.length-R.gStart).toLocaleString()+" rubrics" : k.replace("Kent (Repertorium Publicum)","Repertorium Publicum (Kent-based)"); }
+function repSrcSeg(){ if(!R.gMeta) return `<span id="repSrcSeg"></span>`; return `<div class="row small" id="repSrcSeg" style="gap:8px"><div class="seg" role="tablist" style="flex:1 1 100%">${[["all","Both books"],["kent","Kent"],["griffith","Griffith new remedies"]].map(([k,l])=>`<button type="button" style="flex:1 1 100px" data-rsrc="${k}" aria-current="${R.rsrc===k}">${l}</button>`).join("")}</div></div>`; }
 function repMatches(){
   const terms = R.q.toLowerCase().split(/[\s,]+/).filter(Boolean);
   if(!terms.length && !R.chap) return null;
@@ -2165,6 +2206,7 @@ function repMatches(){
   const out=[]; const L=R.lower, chapPref = R.chap ? R.chap.toLowerCase()+"," : null;
   for(let i=0;i<L.length;i++){
     const s=L[i];
+    if(!repSrcOK(i)) continue;
     if(chapPref && !s.startsWith(chapPref) && s!==R.chap.toLowerCase()) continue;
     let ok=true; for(const t of terms){ if(!s.includes(t)){ ok=false; break; } }
     if(ok) out.push(i);
@@ -2196,6 +2238,7 @@ function renderRepResults(){
           <button type="button" class="rubric-path" data-toggle="${i}" aria-expanded="${!!open}"><b>${hl(parts[0],terms)}</b>${parts.length>1?", "+hl(parts.slice(1).join(", "),terms):""} <span class="chip">${n}</span></button>
           <button type="button" class="ghost" data-addr="${i}" ${inCase.has(path)?"disabled":""}>${inCase.has(path)?"In case":"+ Case"}</button>
         </div>
+        ${R.rep.rubrics[i][2] ? `<p class="small muted" style="margin:2px 0 4px">Also: ${esc(R.rep.rubrics[i][2])}</p>` : ""}
         ${n ? `<div class="rems">${show.map(([r,g])=>gradeHtml(r,g)).join(" ")}${!open && n>12?` <button type="button" class="linkish small" data-toggle="${i}">+${n-12} more</button>`:open&&n>12?` <button type="button" class="linkish small" data-toggle="${i}">Show fewer</button>`:""}</div>` : ""}
       </div>`; }).join("")}</div>
     ${m.length>R.shown?`<div class="row" style="justify-content:center;margin-top:10px"><button type="button" data-more="1">Show more</button></div>`:""}`;
@@ -2203,6 +2246,7 @@ function renderRepResults(){
 function repClick(e){
   const rv=e.target.closest("[data-rview]"); if(rv){ R.view=rv.dataset.rview; store("wfw.repview",R.view); renderRepertory(); return; }
   if(R.view==="analysis" && !e.target.closest("[data-mm]") && !e.target.closest("#casePane") && caClick(e)) return;
+  const rs=e.target.closest("[data-rsrc]"); if(rs){ R.rsrc=rs.dataset.rsrc; store("wfw.repsrc",R.rsrc); if(R.chap && !chapterList().includes(R.chap)) R.chap=""; R.shown=200; renderRepertory(); return; }
   const rm=e.target.closest("[data-rmode]"); if(rm){ R.mode=rm.dataset.rmode; store("wfw.repmode",R.mode); R.shown=200; renderRepertory(); return; }
   const tr=e.target.closest("[data-try]"); if(tr){ R.q=tr.dataset.try; $("#repq").value=R.q; renderRepResults(); return; }
   const tg=e.target.closest("[data-toggle]"); if(tg){ const i=+tg.dataset.toggle; R.open[i]=!R.open[i]; renderRepResults(); return; }
@@ -2330,7 +2374,7 @@ function renderMM(){
       </section>
       <section class="detail-pane" id="mmDetail"><div class="sheet empty">Loading…</div></section>
     </div></div>`;
-  Promise.all([loadRep(), loadMM(), loadBooks().catch(()=>null)]).then(()=>{ if(S.tab!=="mm") return; renderMMList(); renderMMDetail(); })
+  Promise.all([loadRep().then(()=>loadGriffithMM()), loadMM(), loadBooks().catch(()=>null)]).then(()=>{ if(S.tab!=="mm") return; renderMMList(); renderMMDetail(); })
     .catch(()=>{ const d=$("#mmDetail"); if(d) d.innerHTML=`<div class="sheet empty">The materia medica didn't load. Reload the page to try again.</div>`; });
   let t; $("#mmq").oninput=e=>{ clearTimeout(t); t=setTimeout(()=>{ if(R.mmMode==="fe") R.feQ=e.target.value; else R.mmQ=e.target.value; renderMMList(); },100); };
   $("#app").onclick = mmClick;
@@ -2340,7 +2384,8 @@ function mmCandidates(){
   const rems=R.rep.remedies;
   const withMM = new Set(Object.keys(R.mm.remedies).map(Number));
   const gb = new Set((R.books?.gbot||[]).map(g=>g.idx));
-  if(!q){ return [...new Set([...gb, ...withMM])].filter(i=>i>=0).sort((a,b)=>remName(a).localeCompare(remName(b))).slice(0,400); }
+  const gm = new Set(R.gmm ? R.gmm.keys() : []); gm.forEach(i=>gb.add(i)); (R.gNew||[]).forEach(i=>gb.add(i));
+  if(!q){ return [...new Set([...gb, ...withMM])].filter(i=>i>=0).sort((a,b)=>remName(a).localeCompare(remName(b))).slice(0,500); }
   const out=[];
   rems.forEach((r,i)=>{ const hay=(r[1]+" "+r[0]).toLowerCase().replace(/[.\-]+/g," ");
     const hit = hay.includes(q) || (r[2]||[]).some(a=>a.startsWith(q));
@@ -2376,13 +2421,13 @@ function renderMMList(){
   if(R.mmMode==="fe") return renderFEList();
   const el=$("#mmList"); if(!el||!R.rep||!R.mm) return;
   const c=mmCandidates(); const gb=new Set((R.books?.gbot||[]).map(g=>g.idx));
-  el.innerHTML = c.length ? c.map(i=>`<button type="button" class="item" data-mm="${i}" aria-current="${R.mmSel===i}"><b>${esc(remName(i))}</b><span class="meta"><span class="mono">${esc(remAbbr(i))}</span>${R.mm.remedies[i]?'<span class="chip">Boericke</span>':""}${gb.has(i)?'<span class="chip acc">GBOT</span>':""}</span></button>`).join("") : `<div class="empty">No remedy matches.</div>`;
+  el.innerHTML = c.length ? c.map(i=>`<button type="button" class="item" data-mm="${i}" aria-current="${R.mmSel===i}"><b>${esc(remName(i))}</b><span class="meta"><span class="mono">${esc(remAbbr(i))}</span>${R.mm.remedies[i]?'<span class="chip">Boericke</span>':""}${R.gmm?.has(i)?'<span class="chip">Griffith</span>':""}${gb.has(i)?'<span class="chip acc">GBOT</span>':""}</span></button>`).join("") : `<div class="empty">No remedy matches.</div>`;
 }
 function renderMMDetail(){
   if(R.mmMode==="fe") return renderFEDetail();
   const el=$("#mmDetail"); if(!el) return;
   const i=R.mmSel;
-  if(i==null){ el.innerHTML=`<div class="sheet stack"><h2>Look up a remedy</h2><p class="muted">One page per remedy, pulling together:</p><ul class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>its strongest rubrics in the repertory</li><li>Boericke's Pocket Manual</li><li>your Getting Back on Track notes</li><li>your Extra Strength Homeopathy notes</li><li>your Substack articles and other saved notes</li><li>Narayani and Helios combinations that contain it</li><li>Banerji protocols that use it</li></ul></div>`; return; }
+  if(i==null){ el.innerHTML=`<div class="sheet stack"><h2>Look up a remedy</h2><p class="muted">One page per remedy, pulling together:</p><ul class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>its strongest rubrics in the repertory</li><li>Boericke's Pocket Manual</li>${R.gMeta?"<li>Colin Griffith's New Materia Medica (vols 1–3) and his repertory of the new remedies</li>":""}<li>your Getting Back on Track notes</li><li>your Extra Strength Homeopathy notes</li><li>your Substack articles and other saved notes</li><li>Narayani and Helios combinations that contain it</li><li>Banerji protocols that use it</li></ul></div>`; return; }
   if(R.books && !R.idx){ el.innerHTML=`<div class="sheet empty">Indexing your notes…</div>`; setTimeout(()=>{ buildIndex(); renderMMDetail(); },20); return; }
   const mm=R.mm.remedies[i]; const gbot=(R.books?.gbot||[]).find(g=>g.idx===i);
   const keys=R.idx?.get(i)||new Set();
@@ -2392,14 +2437,18 @@ function renderMMDetail(){
   const pr=[...keys].filter(k=>k.startsWith("pr:")).map(k=>k.slice(3));
   const nt=[...keys].filter(k=>k.startsWith("nt:")).map(k=>k.slice(3).split(":").map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
   // strongest rubrics
-  const strong=[]; R.rep.rubrics.forEach(([p,l])=>{ if(!l) return; const hx=i.toString(16); if((" "+l+" ").includes(" "+hx+".3 ")) strong.push(p); });
+  const strong=[], gRub=[], gCmp=[]; const hx=i.toString(16);
+  R.rep.rubrics.forEach(([p,l],ri)=>{ if(!l) return; const L2=" "+l+" "; if(!isG(ri)){ if(L2.includes(" "+hx+".3 ")) strong.push(p); } else if(L2.includes(" "+hx+".2 ")) gRub.push(p.replace(/^Griffith › /,"")); else if(L2.includes(" "+hx+".1 ")) gCmp.push(p.replace(/^Griffith › /,"")); });
+  const gEntries = R.gmm?.get(i) || [];
   const hlr = t => highlightRem(t, i);
   const more=(k,n)=>R.mmMore[k]?Infinity:n;
   const sec=(id,title,count,body,open=true)=>`<details class="mmsec" ${open?"open":""}><summary><span class="grow">${title}</span>${count!=null?`<span class="chip">${count}</span>`:""}</summary><div class="stack mmbody">${body}</div></details>`;
   el.innerHTML = `<div class="sheet stack">
     <button type="button" class="ghost back-btn" data-act="mmback">← Remedies</button>
     <div class="row"><div class="grow"><p class="label">${esc(remAbbr(i))}</p><h1>${esc(remName(i))}</h1></div>${S.editPlan?`<button type="button" data-addrem="${i}">Add to plan</button>`:""}</div>
-    ${sec("kent","Strongest rubrics (grade 3)",strong.length, strong.length?`<ul class="small strong-list">${strong.slice(0,more("kent",60)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${strong.length>60&&!R.mmMore.kent?`<button type="button" class="ghost" data-more-mm="kent">Show all ${strong.length}</button>`:""}`:`<p class="small muted">No grade 3 rubrics for this remedy.</p>`, strong.length>0)}
+    ${i>=(R.kentRems??Infinity) ? "" : sec("kent","Strongest rubrics (grade 3)",strong.length, strong.length?`<ul class="small strong-list">${strong.slice(0,more("kent",60)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${strong.length>60&&!R.mmMore.kent?`<button type="button" class="ghost" data-more-mm="kent">Show all ${strong.length}</button>`:""}`:`<p class="small muted">No grade 3 rubrics for this remedy.</p>`, strong.length>0)}
+    ${gRub.length||gCmp.length ? sec("grub","Griffith repertory", gRub.length+gCmp.length, `${gRub.length?`<ul class="small strong-list">${gRub.slice(0,more("grub",60)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${gRub.length>60&&!R.mmMore.grub?`<button type="button" class="ghost" data-more-mm="grub">Show all ${gRub.length}</button>`:""}`:""}${gCmp.length?`<p class="label" style="margin-top:6px">Listed as a comparison remedy in</p><ul class="small strong-list">${gCmp.slice(0,more("gcmp",30)).map(p=>`<li>${esc(p)}</li>`).join("")}</ul>${gCmp.length>30&&!R.mmMore.gcmp?`<button type="button" class="ghost" data-more-mm="gcmp">Show all ${gCmp.length}</button>`:""}`:""}`, i>=(R.kentRems??Infinity) && gRub.length>0) : ""}
+    ${gEntries.map((g,gi)=>sec("gmm"+gi, g.vol==="R" ? "Griffith, outline notes (Repertory, Appendix 3)" : `Griffith, New Materia Medica Vol ${g.vol}${g.common?` · ${esc(g.common)}`:""}`, null, griffithText(g, "gmm"+gi), gi===0)).join("")}
     ${mm?sec("boe","Boericke, Pocket Manual",null, mm.s.map(([h,c])=>`<div><p class="label">${esc(h==="\\N"?"":h)}</p><p class="mmtext">${fmtMM(c)}</p></div>`).join("")):""}
     ${gbot?sec("gbot","Getting Back on Track (your notes)",null,`<div class="mmtext pre">${esc(gbot.text.slice(0,more("gbot",6000)))}</div>${gbot.text.length>6000&&!R.mmMore.gbot?`<button type="button" class="ghost" data-more-mm="gbot">Show the rest (${Math.round(gbot.text.length/1000)}k characters)</button>`:""}`):""}
     ${R.books?sec("es","Extra Strength Homeopathy (your notes)",es.length, es.length?es.slice(0,more("es",12)).map(p=>`<p class="mmtext note-para">${hlr(R.books.es[p])}</p>`).join("")+(es.length>12&&!R.mmMore.es?`<button type="button" class="ghost" data-more-mm="es">Show all ${es.length}</button>`:""):`<p class="small muted">Not mentioned.</p>`, es.length>0):""}
@@ -2408,6 +2457,12 @@ function renderMMDetail(){
     ${sec("pr","Protocols that use it",pr.length, pr.length?`<ul class="small" style="margin:0;padding-left:18px;line-height:1.7">${pr.map(id=>{ const e=allEntries().find(x=>x.id===id); return e?`<li><button type="button" class="linkish" data-proto="${esc(id)}">${esc(e.title)}</button> <span class="muted">${esc(srcLabel(e))}${e.page?` · pg ${esc(e.page)}`:""}</span></li>`:""; }).join("")}</ul>`:`<p class="small muted">None found.</p>`, pr.length>0)}
     ${!R.books?`<p class="small muted">Your notes didn't load, so only the repertory and Boericke are shown.</p>`:""}
   </div>`;
+}
+function griffithText(g, key){
+  const P=g.paras||[]; const lim=R.mmMore[key]?Infinity:45;
+  const body=P.slice(0,lim).map(t=>t.startsWith("## ") ? `<p class="label" style="margin-top:8px">${esc(t.slice(3))}</p>` : `<p class="mmtext">${esc(t)}</p>`).join("");
+  const rest=P.length>lim ? `<button type="button" class="ghost" data-more-mm="${key}">Show the rest (${P.length-lim} more paragraphs)</button>` : "";
+  return body+rest+`<p class="small muted">From your copy of Colin Griffith's ${g.vol==="R"?"Comprehensive Repertory for the New Homeopathic Remedies":"New Materia Medica, Volume "+g.vol}. Only you can see this.</p>`;
 }
 function fmtMM(c){ return esc(c).replace(/\*([^*]+)\*/g,"<em>$1</em>").replace(/\n/g,"<br>"); }
 function titleCase(s){ return s.toLowerCase().replace(/(^|[\s(\-\/])([a-z])/g,(m,a,b)=>a+b.toUpperCase()); }
@@ -2542,7 +2597,8 @@ function renderSettings(){
     try{ const j=JSON.parse(await f.text()); const items=Array.isArray(j.docs)?j.docs:[]; let done=0, batch=[], size=0;
       const flush=async()=>{ if(!batch.length) return; const { error } = await SB.from("docs").upsert(batch); if(error) throw error; done+=batch.length; st.textContent=`Loaded ${done} of ${items.length}…`; batch=[]; size=0; };
       for(const it of items){ const len=JSON.stringify(it.data).length; if(size+len>400000) await flush(); batch.push({path:it.path, parent:parentOf(it.path), id:idOf(it.path), data:it.data, updated_at:new Date().toISOString()}); size+=len; }
-      await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary(); }
+      await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary();
+      Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   $("#app").onclick = async e => { const a=e.target.closest("[data-act]");
     if(a?.dataset.act==="setpw"){ const v=$("#pw-new").value; if(v.length<8){ toast("Use at least 8 characters"); return; } a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false; if(error) toast("Couldn't save the password: "+error.message); else { $("#pw-new").value=""; toast("Password saved"); } return; }
