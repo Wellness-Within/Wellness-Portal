@@ -379,7 +379,7 @@ function photoBlock(pre, dataUrl, editable, req, client){
 /* ---------- state ---------- */
 const S = {
   user:null, db:null, me:null, prac:false, tab:"clients",
-  clients:{}, clientsLoaded:false, sel:null, sub:"intake",
+  clients:{}, clientsLoaded:false, sel:null, sub:"qest",
   plans:[], plansFor:null, plansUnsub:null, notes:"", notesFor:null, notesUnsub:null,
   editPlan:null, // {clientId, id, data}
   lib:[], libLoaded:false, custom:[], combos:[], poly:[], settings:{},
@@ -703,7 +703,7 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["intake","Homeopathy intake"],["followups","Follow-ups"],["qest","Qest4 form"],["plans","Treatment plans"],["files","Reports & files"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
+  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["plans","Treatment plans"],["files","Reports & files"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
@@ -1013,7 +1013,7 @@ function bindClients(){
     ep.target=null; ep.dirty=true; renderClients(); });
   ["pl-title","pl-date","pl-status","pl-instr","pl-extra"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
-    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="intake"; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="qest"; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
@@ -2778,7 +2778,7 @@ function renderClient(){
     const fo=e.target.closest("[data-fopen]"); if(fo){ const f=(S.myFiles||[]).find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
     const cp=e.target.closest("[data-cplanpdf]"); if(cp){ const p=(S.myPlans||[]).find(x=>x.id===cp.dataset.cplanpdf); if(!p) return; const nm=S.myRec?.intake?.fullName||S.myRec?.qest?.fullName||S.myRec?.followup?.fullName||S.myRec?.name||"";
       cp.disabled=true; cp.textContent="Making PDF…"; try{ saveBlob(await planPdf(p, nm), `Treatment plan${nm?" - "+nm:""} - ${p.date||today()}.pdf`); }catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); } cp.disabled=false; cp.textContent="Download PDF"; return; }
-    const wb=e.target.closest("[data-who]"); if(wb){ if(wb.dataset.who!==S.who){ S.cviewAuto=true; S.cview="plans"; watchPerson(wb.dataset.who); window.scrollTo(0,0); } return; }
+    const wb=e.target.closest("[data-who]"); if(wb){ if(wb.dataset.who!==S.who){ S.cviewAuto=true; S.cview="plans"; S.form="qest"; watchPerson(wb.dataset.who); window.scrollTo(0,0); } return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); return; }
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
