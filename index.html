@@ -1539,7 +1539,7 @@ async function newScan(id){
 }
 function openScan(id, sid, data){
   const c=S.clients[id]||{};
-  S.scan={clientId:id, id:sid, data:JSON.parse(JSON.stringify(data)), status:"Saved"};
+  S.scan={clientId:id, id:sid, data:JSON.parse(JSON.stringify(data)), status:"Saved"}; S.lastPackage=null;
   S.scanLeft = data.cNotes || (data.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) ? "consult" : (c.qest && Object.keys(c.qest).length ? "qest" : "consult");
   renderScan(); window.scrollTo(0,0);
 }
@@ -1569,7 +1569,8 @@ function scanFilesBox(){
       ${hasQ?`<button type="button" data-sact="dlqest">Qest4 form PDF</button>`:""}
       ${d.csv?`<button type="button" data-sact="dlcsv">Scan CSV</button>`:""}
     </div>
-    <p class="small muted">“Analyze with QCIS” saves the scan package to your Downloads, copies a ready-made request, and opens Claude. The package uses the Case ID only: no name, contact details, address or photo (the Qest4 form shows age instead of birth date). Drag the files into the chat, paste, and send. Upload the finished reports under Reports &amp; files.</p>
+    ${S.lastPackage?`<div class="notice"><p style="margin:0 0 6px"><b>Saved to your Downloads:</b></p><ul style="margin:0 0 8px;padding-left:18px">${S.lastPackage.names.map(n=>`<li class="small">${esc(n)}</li>`).join("")}</ul><p class="small" style="margin:0 0 8px">Check that the <b>Scan Session Record</b> is there. If your browser asks to allow multiple downloads, choose Allow and download again.${S.lastPackage.qcis?" The request is copied: drag these files into Claude, then paste.":""}</p>${S.lastPackage.qcis?`<button type="button" class="primary" data-sact="openclaude">Open Claude ↗</button>`:""}</div>`:""}
+    <p class="small muted">“Analyze with QCIS” saves the scan package to your Downloads, copies a ready-made request, and gives you a button to open Claude. Every download here, single files included, uses the Case ID only: no name, contact details, address or photo (the Qest4 form shows age instead of birth date). Drag the files into the chat, paste, and send. Upload the finished reports under Reports &amp; files.</p>
   </div>`;
 }
 function renderScan(){
@@ -1605,7 +1606,7 @@ async function saveScan(){
   }catch(e){ console.warn(e); sc.status="Not saved. Check your connection."; }
   const st=$("#scan-st"); if(st && S.scan===sc) st.textContent=sc.status;
 }
-function scanFileBase(){ const d=S.scan.data; return `${d.clientName||clientName(S.scan.clientId)} - ${d.scanDate||today()} - session ${d.sessionNo||""}`.replace(/[\/:*?"<>|]/g,"").trim(); }
+function scanFileBase(){ const d=S.scan.data; return `${d.caseId||"No Case ID"} - ${d.scanDate||today()} - session ${d.sessionNo||""}`.replace(/[\/:*?"<>|]/g,"").trim(); }
 
 /* fill Dawn's own PDF forms so the Scan Analyzer reads the same field values */
 let PDFLIB_P=null;
@@ -1687,33 +1688,32 @@ function bindScan(){
       const rems=(d.cScanrem||[]).flatMap(r=>String(r?.rems||"").split(/\s*[,;\n]\s*/)).filter(Boolean); d.rem=d.rem||[];
       rems.forEach(r=>{ if(d.rem.some(x=>x&&x.name===r)) return; const i=[0,1,2,3,4].find(j=>!(d.rem[j]&&d.rem[j].name)); if(i!=null){ d.rem[i]={...(d.rem[i]||{}), name:r}; n++; } });
       renderScan(); scanDirty(); toast(n?`Copied ${n} item${n===1?"":"s"} from the consult notes`:"Nothing new to copy"); return; }
-    if(act==="dlphoto"){ const ph=S.photoFor===sc.clientId?S.photo:""; if(ph) fetch(ph).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(sc.clientId)} - photo.jpg`)); return; }
-    let qWin=null;
+    if(act==="dlphoto"){ const ph=S.photoFor===sc.clientId?S.photo:""; if(ph) fetch(ph).then(r=>r.blob()).then(b=>saveBlob(b, `${(sc.data.caseId||"No Case ID").replace(/[\/:*?"<>|]/g,"")} - photo.jpg`)); return; }
+    if(act==="openclaude"){ window.open((S.settings.qcisUrl||"").trim() || "https://claude.ai/new", "_blank"); return; }
     if(act==="qcis"){
       readScanForm(); const d=sc.data, c=S.clients[sc.clientId]||{};
       const parts=["the filled Scan Session Record PDF","the Qest4 scan CSV"]; if(hasConsult(d)) parts.push("my Pre-Scan Consult Notes PDF"); if(c.qest && Object.keys(c.qest).length) parts.push("the client's Qest4 pre-scan form PDF");
-      const prompt=`Please run my QCIS Scan Report (qcis-scan-report) on the attached files: ${parts.join(", ")}. Case ID ${d.caseId||"(not entered)"}, session ${d.sessionNo||"?"}, scanned ${usDate(d.scanDate)||"(date not entered)"}. Produce the Practitioner Analysis, the Client Wellness Report and the Follow-Up Check-In Form.`;
+      const prompt=`Please run my QCIS Scan Report (qcis-scan-report) on the attached files: ${parts.join(", ")}. Case ID ${d.caseId||"(not entered)"}, session ${d.sessionNo||"?"}, scanned ${usDate(d.scanDate)||"(date not entered)"}. The Scan Session Record is required: it separates my searches and add-on scans from QEST-directed items, so if it is not attached, stop and ask me for it. Use the Case ID only, never a client name. Produce the Practitioner Analysis, the Client Wellness Report and the Follow-Up Check-In Form.`;
       try{ navigator.clipboard.writeText(prompt); }catch(e){}
-      const base=(S.settings.qcisUrl||"").trim() || "https://claude.ai/new";
-      qWin=window.open(base, "_blank");
-      if(!d.csv) toast("No scan CSV yet. Add it under “Add scan CSV” first.");
-      else if(!d.caseId) toast("Tip: enter the QCIS Case ID so the reports are labelled.");
+      if(!d.csv){ toast("No scan CSV yet. Add it under “Add scan CSV” first."); return; }
+      if(!d.caseId){ toast("Enter the QCIS Case ID first. The package is labelled by Case ID only."); return; }
     }
     const lbl=a.textContent; a.disabled=true; a.textContent="Preparing…";
     try{
       await saveScan(); const base=scanFileBase();
-      if(act==="dlrecord") saveBlob(await recordPdf(), `Scan Session Record - ${base}.pdf`);
-      else if(act==="dlconsult") saveBlob(await consultPdf(), `Pre-Scan Consult Notes - ${base}.pdf`);
-      else if(act==="dlqest") saveBlob(await qestPdfForScan(), `Qest4 pre-scan form - ${base}.pdf`);
-      else if(act==="dlcsv"){ const b=await scanCsvBlob(); if(b) saveBlob(b, sc.data.csv.name); }
+      if(act==="dlrecord") saveBlob(await recordPdf(true), `${base} - 1 Scan Session Record.pdf`);
+      else if(act==="dlconsult") saveBlob(await consultPdf(true), `${base} - 3 Pre-Scan Consult Notes.pdf`);
+      else if(act==="dlqest") saveBlob(await qestPdfForScan(true), `${base} - 4 Qest4 pre-scan form.pdf`);
+      else if(act==="dlcsv"){ const b=await scanCsvBlob(); if(b) saveBlob(b, `${base} - 2 Qest4 scan.csv`); }
       else if(act==="package"||act==="qcis"){
         const cid=(sc.data.caseId||"No Case ID").replace(/[\/:*?"<>|]/g,""), abase=`${cid} - ${sc.data.scanDate||today()} - session ${sc.data.sessionNo||""}`.trim();
         const files=[[await recordPdf(true), `${abase} - 1 Scan Session Record.pdf`]];
         const csvB=await scanCsvBlob(); if(csvB) files.push([csvB, `${abase} - 2 Qest4 scan.csv`]); else toast("No scan CSV yet. Add it, then download again.");
         if(hasConsult(sc.data)) files.push([await consultPdf(true), `${abase} - 3 Pre-Scan Consult Notes.pdf`]);
         const c=S.clients[sc.clientId]||{}; if(c.qest && Object.keys(c.qest).length) files.push([await qestPdfForScan(true), `${abase} - 4 Qest4 pre-scan form.pdf`]);
-        for(const [b,n] of files){ saveBlob(b,n); await new Promise(r=>setTimeout(r,700)); }
-        toast(act==="qcis" ? `${files.length} files saved to Downloads and the request is copied. Drag the files into Claude, then paste.` : `${files.length} files saved to your Downloads`);
+        for(const [b,n] of files){ saveBlob(b,n); await new Promise(r=>setTimeout(r,900)); }
+        S.lastPackage={names:files.map(f=>f[1]), qcis:act==="qcis"}; renderScan();
+        toast(`${files.length} files saved to your Downloads`);
       }
     }catch(err){ console.warn(err); toast("That didn't work. Check your connection and try again."); }
     a.disabled=false; a.textContent=lbl;
