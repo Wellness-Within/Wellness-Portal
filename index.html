@@ -1150,11 +1150,33 @@ function imprintStale(){ // client starting a new form for a later scan, with on
   if(S.prac || S.qestEdit) return false; const {pic,at}=imprintState(); const sent=S.myRec?.qestSubmittedAt;
   return !!(pic && sent && S.myRec?.qestStatus==="submitted" && (at||"") < sent);
 }
-function imprintInner(pre, readonly){
+const PREP = {
+  Liquid: {title:"How to prepare your remedy bottle", need:["A clean 2 oz bottle","Alcohol (vodka works well)","Filtered or bottled water","A measuring teaspoon"],
+    steps:["Put 1 level teaspoon of alcohol in the bottle.","Fill the rest of the bottle with filtered or bottled water.","Close the bottle and set it somewhere it can stay undisturbed."], thing:"bottle"},
+  Pellets: {title:"How to prepare your pellet jar", need:["A clean glass jar with a lid","Blank pellets"],
+    steps:["Fill the glass jar with blank pellets.","Close the jar and set it somewhere it can stay undisturbed."], thing:"jar"}
+};
+function prepHtml(pre, rx){
+  return Object.entries(PREP).map(([k,p])=>`<div class="notice" data-rx="${k}" ${rx && rx!==k ? "hidden" : ""} style="margin:0">
+    <b>${esc(p.title)}</b>
+    <p class="small" style="margin:6px 0 2px"><b>What you'll need</b></p>
+    <ul class="small" style="margin:0 0 6px;padding-left:20px">${p.need.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>
+    <p class="small" style="margin:6px 0 2px"><b>Steps</b></p>
+    <ol class="small" style="margin:0;padding-left:20px">${[...p.steps, `Take a picture of the ${p.thing} in that spot and upload it below.`, `Leave the ${p.thing} right where it is until Dawn lets you know your remote imprint is complete.`].map(t=>`<li>${esc(t)}</li>`).join("")}</ol>
+  </div>`).join("");
+}
+// show only the bottle or the pellet instructions, to match "Pellets or liquid?"
+document.addEventListener("change", e => {
+  const el=e.target; if(!el.matches?.('input[type="radio"][name$="-rxForm"]')) return;
+  const box=document.getElementById(el.name.replace(/-rxForm$/,"")+"-imprintbox"); if(!box) return;
+  box.querySelectorAll("[data-rx]").forEach(d=>{ d.hidden = d.dataset.rx!==el.value; });
+}, true);
+function imprintInner(pre, readonly, rx){
+  if(rx===undefined) rx=document.querySelector(`input[name="${pre}-rxForm"]:checked`)?.value||"";
   const {pic,at}=imprintState(); const stale=imprintStale();
   const who = pre==="sq" ? (S.scan?.data?.caseId||"No Case ID") : S.prac ? clientName(S.photoFor) : "";
   const fname = `${(who?who+" - ":"").replace(/[\/:*?"<>|]/g,"")}remote imprint medium.jpg`;
-  return `${!readonly && !S.prac ? `<p class="small muted" style="margin:0">Prepare your remote imprint medium the way Dawn showed you, then upload a clear picture of it.</p>` : ""}
+  return `${!readonly && !S.prac ? prepHtml(pre, rx) : ""}
     ${stale ? `<div class="notice">This is the picture you sent for your last scan. Please replace it with a picture of the medium you've prepared for this scan.</div>` : ""}
     <div class="row" style="align-items:flex-start">
       ${pic ? `<img src="${pic}" alt="Remote imprint medium" class="photo" style="width:180px;height:auto;max-height:240px;object-fit:contain">` : `<div class="photo empty-photo" aria-hidden="true">No picture yet</div>`}
@@ -1169,7 +1191,7 @@ function imprintField(f, pre, vals, readonly){
   const show = !dep || vals[dep]===want || (readonly && pic && vals[dep]==null);
   return `<div class="field" style="grid-column:1/-1" data-showif="${pre}-${dep}|${esc(want)}" ${show?"":"hidden"}>
     <span>${esc(f.label)}${!readonly&&!S.prac?' <b class="req" aria-hidden="true">*</b>':""}</span>
-    <div class="stack" id="${pre}-imprintbox" data-ro="${readonly?1:0}" style="gap:8px">${imprintInner(pre, readonly)}</div></div>`;
+    <div class="stack" id="${pre}-imprintbox" data-ro="${readonly?1:0}" style="gap:8px">${imprintInner(pre, readonly, vals.rxForm||"")}</div></div>`;
 }
 function paintImprint(){ document.querySelectorAll('[id$="-imprintbox"]').forEach(b=>{ const pre=b.id.replace(/-imprintbox$/,""); b.innerHTML=imprintInner(pre, b.dataset.ro==="1"); }); }
 // show or hide fields that depend on a choice (e.g. the picture upload only for remote imprint)
