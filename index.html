@@ -317,7 +317,10 @@ const QEST = [
     {id:"firstScan",label:"First scan with Dawn?",type:"choice",options:["Yes, this is my first scan","No, I've had a scan before"]},
     {id:"country",label:"Country",type:"text"},
     {id:"street",label:"Street address",type:"text",wide:true},
-    {id:"city",label:"City",type:"text"},{id:"state",label:"State",type:"text"},{id:"zip",label:"ZIP code",type:"text"}]},
+    {id:"city",label:"City",type:"text"},{id:"state",label:"State",type:"text"},{id:"zip",label:"ZIP code",type:"text"},
+    {id:"shipDifferent",label:"My shipping address is different from my home address",type:"check",wide:true},
+    {id:"shipStreet",label:"Shipping address (street or PO Box)",type:"text",wide:true,showIf:["shipDifferent",true]},
+    {id:"shipCity",label:"Shipping city",type:"text",showIf:["shipDifferent",true]},{id:"shipState",label:"Shipping state",type:"text",showIf:["shipDifferent",true]},{id:"shipZip",label:"Shipping ZIP code",type:"text",showIf:["shipDifferent",true]}]},
   {sec:"What would you most like help with?", note:"Most important first.", fields:[
     {id:"help1",jot:"Most important thing you would like help with",label:"1.",type:"textarea",wide:true},{id:"help2",jot:"Second thing you would like help with",label:"2.",type:"textarea",wide:true},{id:"help3",jot:"Third thing you would like help with",label:"3.",type:"textarea",wide:true}]},
   {sec:"Areas where you'd like support", note:"Choose any that apply.", fields:[
@@ -493,7 +496,7 @@ window.addEventListener("hashchange", () => {
   store("wfw.wantForm", {h, t:Date.now()});
   if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; if(h==="#nextscan"){ S.wantNext=true; S.qestNew=true; } renderClient(); window.scrollTo(0,0); }
 });
-function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip","delivery","rxForm"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
+function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip","shipDifferent","shipStreet","shipCity","shipState","shipZip","delivery","rxForm"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
@@ -1196,8 +1199,9 @@ function imprintField(f, pre, vals, readonly){
 function paintImprint(){ document.querySelectorAll('[id$="-imprintbox"]').forEach(b=>{ const pre=b.id.replace(/-imprintbox$/,""); b.innerHTML=imprintInner(pre, b.dataset.ro==="1"); }); }
 // show or hide fields that depend on a choice (e.g. the picture upload only for remote imprint)
 document.addEventListener("change", e => {
-  const el=e.target; if(!el.matches?.('input[type="radio"]')) return;
-  document.querySelectorAll(`[data-showif^="${CSS.escape(el.name)}|"]`).forEach(d=>{ d.hidden = d.dataset.showif.split("|").slice(1).join("|") !== el.value; });
+  const el=e.target; if(!el.matches?.('input[type="radio"], input[type="checkbox"]')) return;
+  const key = el.type==="checkbox" ? el.id : el.name, val = el.type==="checkbox" ? String(el.checked) : el.value; if(!key) return;
+  document.querySelectorAll(`[data-showif^="${CSS.escape(key)}|"]`).forEach(d=>{ d.hidden = d.dataset.showif.split("|").slice(1).join("|") !== val; });
 }, true);
 // upload (delegated, so it keeps working after the picture area is redrawn); never redraws the form, so typed answers stay
 document.addEventListener("change", async e => {
@@ -1228,7 +1232,9 @@ async function mergeClient(fromId, toId){
 /* ---------- intake form (shared) ---------- */
 function intakeForm(vals, pre, readonly, def = INTAKE){
   return `<form class="stack" id="${pre}-form" onsubmit="return false">` + def.map(s => `<fieldset class="formsec"><legend>${esc(s.sec)}</legend>${s.note?(s.gentle?`<div class="notice ok" style="margin-bottom:4px">${esc(s.note)}</div>`:`<p class="small muted" style="margin-top:-6px">${esc(s.note)}</p>`):""}<div class="grid2">` +
-    s.fields.map(f => {
+    s.fields.map(f => { const h = fieldHtml(f); if(!f.showIf || f.type==="imprint") return h;
+      const [dep, want] = f.showIf; return h.replace(/^<(\w+)/, `<$1 data-showif="${pre}-${dep}|${esc(String(want))}" ${String(vals[dep])===String(want)?"":"hidden"}`); }).join("") + `</div></fieldset>`).join("") + `</form>`;
+  function fieldHtml(f){
       const id = `${pre}-${f.id}`, v = vals[f.id] ?? "", dis = readonly ? "disabled" : "";
       const style = f.wide ? ' style="grid-column:1/-1"' : "";
       const lbl = esc(f.label) + (f.req ? ' <b class="req" aria-hidden="true">*</b>' : "");
@@ -1244,7 +1250,7 @@ function intakeForm(vals, pre, readonly, def = INTAKE){
         </div><small class="muted">Type it in, like 04/15/1980, or tap the calendar.</small></div>`; }
       if(f.type==="check") return `<label class="check"${style}><input type="checkbox" id="${id}" ${v?"checked":""} ${dis} ${f.req?'aria-required="true"':""}><span>${lbl}</span></label>`;
       return `<label class="field"${style}><span>${lbl}</span><input id="${id}" type="${f.type}" ${f.req?'aria-required="true"':""} value="${esc(v)}" ${dis}></label>`;
-    }).join("") + `</div></fieldset>`).join("") + `</form>`;
+  }
 }
 /* Date of birth: typed as MM/DD/YYYY (slashes added as they type) or picked from a calendar; saved as YYYY-MM-DD. */
 function dobToIso(t){
@@ -1290,6 +1296,7 @@ function readIntake(pre, def = INTAKE){
     else if(f.type==="dob"){ const el=document.getElementById(id); const v=(el?.value||"").trim(); if(v) out[f.id]=dobToIso(v)||v; }
     else { const el=document.getElementById(id); if(el && el.value.trim()) out[f.id]=el.value.trim(); }
   }));
+  def.forEach(s => s.fields.forEach(f => { if(f.showIf && f.type!=="imprint" && String(out[f.showIf[0]])!==String(f.showIf[1])) delete out[f.id]; }));
   return out;
 }
 
@@ -2889,7 +2896,7 @@ function renderClient(){
       if(isQ && !S.myPhoto && !vals.photoOnFile){ toast("Please add a recent photo of the person being scanned, or tick the box to use the photo on file"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
       if(miss.length){ const m0=miss[0]; if(m0.type==="choice"){ toast(`Please answer: ${m0.label}`); document.getElementById(`${pre}-${m0.id}-0`)?.scrollIntoView({block:"center"}); return; } }
       if(isQ && !miss.length && vals.delivery===IMPRINT_REMOTE && (!S.myImprint || imprintStale())){ toast(S.myImprint ? "Please upload a picture of the medium you've prepared for this scan" : "Please upload a picture of your prepared remote imprint medium"); document.getElementById("cs-imprintbox")?.scrollIntoView({block:"center"}); return; }
-      if(isQ && !miss.length && vals.delivery==="Shipped to me"){ const need=[["street","street address"],["city","city"],["zip","ZIP code"]].filter(([k])=>!vals[k]); if(need.length){ toast(`To ship your treatment, please fill in your ${need.map(x=>x[1]).join(", ")}`); document.getElementById("cs-"+need[0][0])?.focus(); document.getElementById("cs-"+need[0][0])?.scrollIntoView({block:"center"}); return; } }
+      if(isQ && !miss.length && vals.delivery==="Shipped to me"){ const need=(vals.shipDifferent ? [["shipStreet","shipping address"],["shipCity","shipping city"],["shipZip","shipping ZIP code"]] : [["street","street address"],["city","city"],["zip","ZIP code"]]).filter(([k])=>!vals[k]); if(need.length){ toast(`To ship your treatment, please fill in your ${need.map(x=>x[1]).join(", ")}`); document.getElementById("cs-"+need[0][0])?.focus(); document.getElementById("cs-"+need[0][0])?.scrollIntoView({block:"center"}); return; } }
       if(miss.length){ toast(miss.some(f=>f.type==="check") ? "Please check the acknowledgement and sign at the end" : `Please fill in: ${miss.map(f=>f.label).join(", ")}`); const el=document.getElementById(pre+"-"+miss[0].id); if(el){ el.focus(); el.scrollIntoView({block:"center"}); } return; }
     }
     if(isQ && vals.delivery===IMPRINT_REMOTE && S.myImprint && !imprintStale()) vals.imprintPic = `Uploaded ${fmtDate(S.myImprintAt)}`;
