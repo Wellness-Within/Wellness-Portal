@@ -57,6 +57,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 input,textarea,select{font:15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
 textarea{min-height:72px;resize:vertical}
+[hidden]{display:none!important}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field>span{font-size:13px;font-weight:600;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
@@ -308,6 +309,7 @@ const INTAKE = [
 ];
 
 const AREAS = ["Sleep","Energy","Hormones","Skin","Stress","Digestion","Pain","Detox","Anxiety","Immune","Headaches","Weight","Mood","Allergies","Focus / brain fog","Emotional support"];
+const IMPRINT_REMOTE = "Remote imprint";
 const QEST = [
   {sec:"About you", fields:[
     {id:"fullName",label:"Full name",type:"text",req:true},{id:"dob",label:"Date of birth",type:"dob"},
@@ -324,6 +326,10 @@ const QEST = [
   {sec:"A few more things", fields:[
     {id:"anythingElse",label:"Anything else you would like to share?",type:"textarea"},
     {id:"sinceLast",label:"Returning clients: anything new since your last scan?",type:"textarea"}]},
+  {sec:"Your bioenergetic treatment", note:"How you'd like to receive the treatment from this scan.", fields:[
+    {id:"delivery",jot:"How would you like to receive your treatment",label:"Remote imprint or shipped?",type:"choice",req:true,options:[IMPRINT_REMOTE,"Shipped to me"]},
+    {id:"rxForm",jot:"Pellets or liquid",label:"Pellets or liquid?",type:"choice",req:true,options:["Pellets","Liquid"]},
+    {id:"imprintPic",label:"Picture of your prepared remote imprint medium",type:"imprint",wide:true,showIf:["delivery",IMPRINT_REMOTE]}]},
   {sec:"Acknowledgement", fields:[
     {id:"ack",jot:"Wellness services acknowledgement",label:"Qest4 bioenergetic testing and homeopathy are wellness services. They do not diagnose, treat, or cure disease and are not a substitute for care from a licensed medical provider.",type:"check",wide:true,req:true},
     {id:"signature",label:"Signature (type your full name)",type:"text",req:true},{id:"sigDate",label:"Date",type:"date",req:true}]}
@@ -487,7 +493,7 @@ window.addEventListener("hashchange", () => {
   store("wfw.wantForm", {h, t:Date.now()});
   if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; if(h==="#nextscan"){ S.wantNext=true; S.qestNew=true; } renderClient(); window.scrollTo(0,0); }
 });
-function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
+function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip","delivery","rxForm"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
@@ -862,6 +868,10 @@ function ensureClientSubs(id){
     S.photoUnsub && S.photoUnsub(); S.photoFor=id; S.photo="";
     S.photoUnsub = S.db.doc(`clients/${id}/media/photo`).onSnapshot(s => { S.photo = s.exists ? (s.data().dataUrl||"") : ""; if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
   }
+  if(S.imprintFor!==id){
+    S.imprintUnsub && S.imprintUnsub(); S.imprintFor=id; S.imprint=""; S.imprintAt="";
+    S.imprintUnsub = S.db.doc(`clients/${id}/media/imprint`).onSnapshot(s => { const d=s.exists?s.data():{}; S.imprint=d.dataUrl||""; S.imprintAt=d.updatedAt||""; paintImprint(); }, e=>console.warn(e));
+  }
   if(S.qhistFor!==id){
     S.qhistUnsub && S.qhistUnsub(); S.qhistFor=id; S.qhist=[];
     S.qhistUnsub = S.db.collection(`clients/${id}/qestForms`).onSnapshot(s => { S.qhist = s.docs.map(d=>d.data()).sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||"")); if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
@@ -1058,7 +1068,7 @@ function bindClients(){
         catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent="Download PDF"; }
       else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
-      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
+      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; if(qest.delivery===IMPRINT_REMOTE && S.imprintFor===S.sel && S.imprint) qest.imprintPic=`Uploaded ${fmtDate(S.imprintAt)}`; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
       else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
       else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim(), nextVisit:$("#d-next").value}; const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
       else if(act==="askmerge"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to}; renderClients(); }
@@ -1133,6 +1143,52 @@ function bindPhoto(pre, getId){
       else toast(err?.message==="type"||err?.message==="read" ? "That file isn't a photo we can read. Try a JPG or PNG." : "The photo didn't save. Try again."); }
   };
 }
+/* Remote imprint medium picture: the client's picture of the medium they prepared, kept in clients/<id>/media/imprint
+   (same private place as the client photo). Shown on the Qest4 form only when they choose remote imprint. */
+function imprintState(){ return S.prac ? {pic:S.imprintFor&&S.imprintFor===S.photoFor?S.imprint:"", at:S.imprintAt||""} : {pic:S.myImprint||"", at:S.myImprintAt||""}; }
+function imprintStale(){ // client starting a new form for a later scan, with only last scan's picture
+  if(S.prac || S.qestEdit) return false; const {pic,at}=imprintState(); const sent=S.myRec?.qestSubmittedAt;
+  return !!(pic && sent && S.myRec?.qestStatus==="submitted" && (at||"") < sent);
+}
+function imprintInner(pre, readonly){
+  const {pic,at}=imprintState(); const stale=imprintStale();
+  const who = pre==="sq" ? (S.scan?.data?.caseId||"No Case ID") : S.prac ? clientName(S.photoFor) : "";
+  const fname = `${(who?who+" - ":"").replace(/[\/:*?"<>|]/g,"")}remote imprint medium.jpg`;
+  return `${!readonly && !S.prac ? `<p class="small muted" style="margin:0">Prepare your remote imprint medium the way Dawn showed you, then upload a clear picture of it.</p>` : ""}
+    ${stale ? `<div class="notice">This is the picture you sent for your last scan. Please replace it with a picture of the medium you've prepared for this scan.</div>` : ""}
+    <div class="row" style="align-items:flex-start">
+      ${pic ? `<img src="${pic}" alt="Remote imprint medium" class="photo" style="width:180px;height:auto;max-height:240px;object-fit:contain">` : `<div class="photo empty-photo" aria-hidden="true">No picture yet</div>`}
+      <div class="stack" style="gap:6px">
+        ${readonly ? "" : `<label class="btn" for="${pre}-imprintfile" style="cursor:pointer">${pic?"Replace picture":"Upload picture"}</label><input type="file" id="${pre}-imprintfile" accept="image/*" class="sr" data-imprint="${pre}">`}
+        ${pic && S.prac ? `<a class="btn" href="${pic}" download="${esc(fname)}">Download picture</a>` : ""}
+        ${pic && at ? `<span class="small muted">Uploaded ${esc(fmtDate(at))}</span>` : ""}
+      </div></div>`;
+}
+function imprintField(f, pre, vals, readonly){
+  const [dep, want] = f.showIf||[]; const {pic}=imprintState();
+  const show = !dep || vals[dep]===want || (readonly && pic && vals[dep]==null);
+  return `<div class="field" style="grid-column:1/-1" data-showif="${pre}-${dep}|${esc(want)}" ${show?"":"hidden"}>
+    <span>${esc(f.label)}${!readonly&&!S.prac?' <b class="req" aria-hidden="true">*</b>':""}</span>
+    <div class="stack" id="${pre}-imprintbox" data-ro="${readonly?1:0}" style="gap:8px">${imprintInner(pre, readonly)}</div></div>`;
+}
+function paintImprint(){ document.querySelectorAll('[id$="-imprintbox"]').forEach(b=>{ const pre=b.id.replace(/-imprintbox$/,""); b.innerHTML=imprintInner(pre, b.dataset.ro==="1"); }); }
+// show or hide fields that depend on a choice (e.g. the picture upload only for remote imprint)
+document.addEventListener("change", e => {
+  const el=e.target; if(!el.matches?.('input[type="radio"]')) return;
+  document.querySelectorAll(`[data-showif^="${CSS.escape(el.name)}|"]`).forEach(d=>{ d.hidden = d.dataset.showif.split("|").slice(1).join("|") !== el.value; });
+}, true);
+// upload (delegated, so it keeps working after the picture area is redrawn); never redraws the form, so typed answers stay
+document.addEventListener("change", async e => {
+  const inp=e.target; if(!inp.matches?.("input[data-imprint]")) return;
+  const f=inp.files && inp.files[0]; const id = S.prac ? (inp.dataset.imprint==="sq" ? S.scan?.clientId : S.sel) : S.who; if(!f || !id) return;
+  try{ toast("Adding picture…"); const dataUrl = await resizePhoto(f); const at=new Date().toISOString();
+    await S.db.doc(`clients/${id}/media/imprint`).set({dataUrl, updatedAt:at});
+    if(S.prac){ if(S.imprintFor===id){ S.imprint=dataUrl; S.imprintAt=at; } } else { S.myImprint=dataUrl; S.myImprintAt=at; S.clientWrite="ok"; }
+    paintImprint(); toast("Picture added");
+  }catch(err){ console.warn(err);
+    if(err?.code==="invalid_argument" && !S.prac){ S.clientWrite="denied"; renderClient(); }
+    else toast(err?.message==="type"||err?.message==="read" ? "That file isn't a picture we can read. Try a JPG or PNG." : "The picture didn't save. Try again."); }
+}, true);
 async function mergeClient(fromId, toId){
   if(!S.clients[fromId] || !S.clients[toId]) return;
   const { error } = await SB.rpc("admin_merge_client", { from_id: fromId, to_id: toId });
@@ -1156,7 +1212,8 @@ function intakeForm(vals, pre, readonly, def = INTAKE){
       const lbl = esc(f.label) + (f.req ? ' <b class="req" aria-hidden="true">*</b>' : "");
       if(f.type==="textarea") return `<label class="field"${style}><span>${lbl}</span><textarea id="${id}" ${dis} ${f.hint?`placeholder="${esc(f.hint)}"`:""}>${esc(v)}</textarea></label>`;
       if(f.type==="scale") return `<div class="field" style="grid-column:1/-1"><span id="${id}-l">${esc(f.label)}</span><div class="scale" role="radiogroup" aria-labelledby="${id}-l">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<label><input type="radio" name="${id}" id="${id}-${n}" value="${n}" ${String(v)===String(n)?"checked":""} ${dis}><span>${n}</span></label>`).join("")}</div></div>`;
-      if(f.type==="choice") return `<div class="field"><span id="${id}-l">${esc(f.label)}</span><div class="choices" role="radiogroup" aria-labelledby="${id}-l">${f.options.map((o,i)=>`<label><input type="radio" name="${id}" id="${id}-${i}" value="${esc(o)}" ${v===o?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`;
+      if(f.type==="imprint") return imprintField(f, pre, vals, readonly);
+      if(f.type==="choice") return `<div class="field"><span id="${id}-l">${lbl}</span><div class="choices" role="radiogroup" aria-labelledby="${id}-l">${f.options.map((o,i)=>`<label><input type="radio" name="${id}" id="${id}-${i}" value="${esc(o)}" ${v===o?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`;
       if(f.type==="multi"){ const arr = Array.isArray(v) ? v : []; return `<div class="field" style="grid-column:1/-1"><span class="sr">${esc(f.label)}</span><div class="choices" role="group" aria-label="${esc(f.label)}">${f.options.map((o,i)=>`<label><input type="checkbox" name="${id}" id="${id}-${i}" value="${esc(o)}" ${arr.includes(o)?"checked":""} ${dis}><span>${esc(o)}</span></label>`).join("")}</div></div>`; }
       if(f.type==="dob"){ const iso=/^\d{4}-\d{2}-\d{2}$/.test(v)?v:""; const shown=iso?`${iso.slice(5,7)}/${iso.slice(8,10)}/${iso.slice(0,4)}`:v;
         return `<div class="field"${style}><label for="${id}"><span>${lbl}</span></label><div class="row" style="gap:6px;flex-wrap:nowrap">
@@ -1203,6 +1260,7 @@ function readIntake(pre, def = INTAKE){
   const out = {};
   def.forEach(s => s.fields.forEach(f => {
     const id = `${pre}-${f.id}`;
+    if(f.type==="imprint") return;
     if(f.type==="scale"){ const c = document.querySelector(`input[name="${id}"]:checked`); if(c) out[f.id]=+c.value; }
     else if(f.type==="multi"){ const c=[...document.querySelectorAll(`input[name="${id}"]:checked`)].map(x=>x.value); if(c.length) out[f.id]=c; }
     else if(f.type==="choice"){ const c = document.querySelector(`input[name="${id}"]:checked`); if(c) out[f.id]=c.value; }
@@ -2681,13 +2739,14 @@ function familyPeople(){
 function watchPerson(id){
   (S.personUnsubs||[]).forEach(u => { try{ u&&u(); }catch(e){} });
   S.who = id; store("wfw.who", id);
-  S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.qestEdit = false; S.clientWrite = null;
+  S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.myImprint = ""; S.myImprintAt = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.qestEdit = false; S.clientWrite = null;
   const editing = clientEditing;
   S.personUnsubs = [
     S.db.doc("clients/"+id).onSnapshot(s => { if(S.who!==id) return; S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); }),
     S.db.collection("clients/"+id+"/plans").onSnapshot(s => { if(S.who!==id) return; S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.collection(`clients/${id}/files`).onSnapshot(s => { if(S.who!==id) return; S.myFiles = s.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.status==="shared"); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.doc(`clients/${id}/media/photo`).onSnapshot(s => { if(S.who!==id) return; S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e)),
+    S.db.doc(`clients/${id}/media/imprint`).onSnapshot(s => { if(S.who!==id) return; const d=s.exists?s.data():{}; S.myImprint=d.dataUrl||""; S.myImprintAt=d.updatedAt||""; paintImprint(); }, e=>console.warn(e)),
   ];
   renderClient();
 }
@@ -2806,8 +2865,12 @@ function renderClient(){
       const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id]);
       if(isQ) vals.photoOnFile = !!document.getElementById("cs-photoOnFile")?.checked || undefined;
       if(isQ && !S.myPhoto && !vals.photoOnFile){ toast("Please add a recent photo of the person being scanned, or tick the box to use the photo on file"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
+      if(miss.length){ const m0=miss[0]; if(m0.type==="choice"){ toast(`Please answer: ${m0.label}`); document.getElementById(`${pre}-${m0.id}-0`)?.scrollIntoView({block:"center"}); return; } }
+      if(isQ && !miss.length && vals.delivery===IMPRINT_REMOTE && (!S.myImprint || imprintStale())){ toast(S.myImprint ? "Please upload a picture of the medium you've prepared for this scan" : "Please upload a picture of your prepared remote imprint medium"); document.getElementById("cs-imprintbox")?.scrollIntoView({block:"center"}); return; }
+      if(isQ && !miss.length && vals.delivery==="Shipped to me"){ const need=[["street","street address"],["city","city"],["zip","ZIP code"]].filter(([k])=>!vals[k]); if(need.length){ toast(`To ship your treatment, please fill in your ${need.map(x=>x[1]).join(", ")}`); document.getElementById("cs-"+need[0][0])?.focus(); document.getElementById("cs-"+need[0][0])?.scrollIntoView({block:"center"}); return; } }
       if(miss.length){ toast(miss.some(f=>f.type==="check") ? "Please check the acknowledgement and sign at the end" : `Please fill in: ${miss.map(f=>f.label).join(", ")}`); const el=document.getElementById(pre+"-"+miss[0].id); if(el){ el.focus(); el.scrollIntoView({block:"center"}); } return; }
     }
+    if(isQ && vals.delivery===IMPRINT_REMOTE && S.myImprint && !imprintStale()) vals.imprintPic = `Uploaded ${fmtDate(S.myImprintAt)}`;
     a.disabled=true;
     const now=new Date().toISOString();
     const key = isQ ? "qest" : isF ? "followup" : "intake", stKey = key + "Status";
