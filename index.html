@@ -579,7 +579,7 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form")) render();
+    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form")) render();
   }, e => console.warn(e));
   S.db.collection("invoices").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.inv = m; S.invLoaded = true;
@@ -1003,7 +1003,8 @@ const invsOf = cid => Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filte
 function clientBalance(cid){ return r2(invsOf(cid).filter(invOpen).reduce((t,v)=>t+invMath(v).bal,0)); }
 function blankInvoice(cid, appt){
   const d=today(), due=new Date(d+"T12:00:00"); due.setDate(due.getDate()+14);
-  const v={clientId:cid, date:d, due:due.toISOString().slice(0,10), items:[], discount:{label:"", type:"pct", value:""}, status:"draft", payments:[], note:""};
+  const cd=(billSet().clientDiscounts||{})[cid];
+  const v={clientId:cid, date:d, due:due.toISOString().slice(0,10), items:[], discount:cd&&+cd.value?{label:cd.label||"Discount", type:cd.type||"pct", value:+cd.value}:{label:"", type:"pct", value:""}, status:"draft", payments:[], note:""};
   if(appt){ v.apptId=appt.id; const price=billSet().items||[];
     const kinds=[appt.type]; if(appt.type==="scan" && apptDelivery(appt)==="ship") kinds.push("shipping");
     const dl=apptDelivery(appt);
@@ -1023,6 +1024,13 @@ function billingPane(id){
     <div class="row" style="gap:10px"><div class="grow row" style="gap:16px"><span><span class="small muted">Balance due</span><br><b style="font-size:20px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
       ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
+    ${(()=>{ const cd=(billSet().clientDiscounts||{})[id];
+      return S.discEdit===id ? `<div class="row" id="disc-form" style="gap:6px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
+          <label class="field" style="flex:2"><span>Standing discount name</span><input id="cd-label" placeholder="e.g. Family discount" value="${esc(cd?.label||"")}"></label>
+          <label class="field" style="flex:1"><span>Amount</span><input id="cd-val" type="number" min="0" step="0.01" value="${esc(cd?.value||"")}"></label>
+          <select id="cd-type" style="width:auto"><option value="pct" ${cd?.type!=="amt"?"selected":""}>%</option><option value="amt" ${cd?.type==="amt"?"selected":""}>$ off</option></select>
+          <button type="button" class="primary small" data-act="discsave">Save</button>${cd?`<button type="button" class="ghost small" data-act="discclear">Remove</button>`:""}<button type="button" class="small" data-act="disccancel">Cancel</button></div>`
+        : `<p class="small">${cd&&+cd.value?`<b>Standing discount:</b> ${esc(cd.label||"Discount")} · ${cd.type==="amt"?esc(money(cd.value))+" off":esc(cd.value)+"%"} <span class="muted">(added to each new invoice)</span>`:`<span class="muted">No standing discount.</span>`} <button type="button" class="ghost small" data-act="discedit">${cd?"Change":"Add a standing discount"}</button></p>`; })()}
     ${noPrices?`<p class="small muted">Tip: add your prices and payment options under Settings → Billing, so invoices fill in for you.</p>`:""}
     ${ed?invEditor(id, ed, pp):""}
     ${list.length?`<div class="stack" style="gap:8px">${list.map(v=>invRow(id,v)).join("")}</div>`:ed?"":`<div class="empty small">No invoices yet.</div>`}
@@ -1150,6 +1158,13 @@ async function billingClick(e){
   if(act==="invvoid"){ const ed=S.invEdit; const data={...S.inv[ed.id], status:"void", voidedAt:new Date().toISOString()};
     try{ await S.db.doc("invoices/"+ed.id).set(data); S.inv={...S.inv,[ed.id]:data}; S.invEdit=null; S.invConfirm=null; toast("Invoice voided"); }catch(e1){ toast("That didn't save. Please try again."); } renderClients(); return true; }
   if(act==="invdel"){ const ed=S.invEdit; try{ await S.db.doc("invoices/"+ed.id).delete(); const m={...S.inv}; delete m[ed.id]; S.inv=m; S.invEdit=null; S.invConfirm=null; toast("Draft deleted"); }catch(e1){ toast("That didn't delete. Please try again."); } renderClients(); return true; }
+  if(act==="discedit"){ S.discEdit=S.sel; renderClients(); $("#cd-label")?.focus(); return true; }
+  if(act==="disccancel"){ S.discEdit=null; renderClients(); return true; }
+  if(act==="discsave"||act==="discclear"){ const all={...(billSet().clientDiscounts||{})};
+    if(act==="discclear") delete all[S.sel]; else { const val=r2($("#cd-val").value); if(!(val>0)){ toast("Enter the discount amount"); return true; } all[S.sel]={label:$("#cd-label").value.trim()||"Discount", type:$("#cd-type").value, value:val}; }
+    const billing={...billSet(), clientDiscounts:all}; a.disabled=true;
+    try{ await S.db.doc("settings/practice").update({billing}); S.settings={...S.settings, billing}; S.discEdit=null; toast(act==="discclear"?"Discount removed":"Discount saved. It's added to each new invoice for this client."); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); return true; }
+    renderClients(); return true; }
   if(act==="paycancel"){ S.payFor=null; renderClients(); return true; }
   if(act==="paysave"){ const id=S.payFor, v=S.inv[id]; const amt=r2($("#pf-amt").value); if(!(amt>0)){ toast("Enter the amount received"); return true; }
     const p={id:genId().slice(0,10), date:$("#pf-date").value||today(), amount:amt, method:$("#pf-method").value, note:$("#pf-note").value.trim()};
