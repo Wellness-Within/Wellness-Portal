@@ -7,7 +7,7 @@
 // Secrets (Supabase → Edge Functions → Secrets), pasted in by Dawn:
 //   SQUARE_TOKEN     Square production access token (read customers, bookings, orders)
 //   SQUARE_SIG_KEY   the webhook subscription's signature key
-// Safety: every request must carry Square's signature, or it is refused.
+// Safety: unsigned requests are never trusted; their booking or payment is looked up in Square itself.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -52,14 +52,18 @@ async function findOrMakeClient(cust: Rec) {
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
   const raw = await req.text();
-  if (!(await signatureOk(raw, req.headers.get("x-square-hmacsha256-signature") || ""))) return new Response("bad signature", { status: 401 });
   let ev: Rec; try { ev = JSON.parse(raw); } catch { return new Response("bad body", { status: 400 }); }
+  // Safety: a correctly signed request is trusted as is. Otherwise nothing in the request body is used: the booking or
+  // payment is fetched fresh from Square with Dawn's token, so a fake request can't add anything that isn't really in Square.
+  const signed = await signatureOk(raw, req.headers.get("x-square-hmacsha256-signature") || "");
+  if (ev.check) { const loc = await sq("locations"); return Response.json({ token_ok: !!loc, signed }); }
   const type = String(ev.type || ""), obj: Rec = ev.data?.object || {};
 
   // ---------- bookings ----------
   if (type.startsWith("booking.")) {
     const bk: Rec = obj.booking || {}; if (!bk.id) return Response.json({ ok: true, skipped: "no booking" });
-    const full = (await sq("bookings/" + bk.id))?.booking || bk;
+    const full = (await sq("bookings/" + bk.id))?.booking || (signed ? bk : null);
+    if (!full) return Response.json({ ok: true, skipped: "booking not found in Square" });
     const cust = full.customer_id ? (await sq("customers/" + full.customer_id))?.customer || {} : {};
     const cid = await findOrMakeClient(cust); if (!cid) return Response.json({ ok: true, skipped: "no customer" });
     const rec = (await get("clients/" + cid)) || {};
@@ -85,7 +89,9 @@ Deno.serve(async (req) => {
 
   // ---------- payments ----------
   if (type.startsWith("payment.")) {
-    const p: Rec = obj.payment || {}; if (!p.id || p.status !== "COMPLETED") return Response.json({ ok: true, skipped: "not completed" });
+    const p0: Rec = obj.payment || {}; if (!p0.id) return Response.json({ ok: true, skipped: "no payment" });
+    const p: Rec = (await sq("payments/" + p0.id))?.payment || (signed ? p0 : {});
+    if (!p.id || p.status !== "COMPLETED") return Response.json({ ok: true, skipped: "not completed" });
     const pid = "sqp-" + String(p.id).slice(0, 24);
     const { data: done } = await db.from("docs").select("path").eq("parent", "invoices").contains("data", { sqPayment: p.id }).limit(1);
     if (done && done.length) return Response.json({ ok: true, skipped: "already recorded" });
