@@ -856,6 +856,7 @@ function apptsPane(id){
       ${apptDelivery(a)==="ship"?`<span class="small" style="white-space:pre-line;margin-top:4px"><b>Ship to:</b> ${esc(a.shipTo||clientShipAddress(c)||"No address on file yet")}</span>
         ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>`:""}`:""}</div>
     <div class="row" style="gap:4px;flex-wrap:nowrap">${apptDelivery(a)==="ship"?(a.shippedAt?`<button type="button" class="ghost small" data-apptship="${esc(a.id)}" data-undo="1">Undo shipped</button>`:`<button type="button" class="small primary" data-apptship="${esc(a.id)}">Mark shipped</button>`):""}
+      ${a.type==="consult"&&a.date<=today()?`<button type="button" class="small primary" data-hcstart="${esc(a.id)}">Start consult</button>`:""}
       ${Object.values(S.inv||{}).some(v=>v.apptId===a.id&&v.status!=="void")?'<span class="chip ok">Billed</span>':`<button type="button" class="ghost small" data-apptbill="${esc(a.id)}">Bill</button>`}
       <button type="button" class="ghost small" data-apptics="${esc(a.id)}">Add to calendar</button><button type="button" class="small" data-apptedit="${esc(a.id)}">Edit</button></div></div>`;
   const form = ed ? (()=>{ const a=ed.a; return `<div class="formsec stack" id="appt-form" style="gap:10px">
@@ -1524,6 +1525,131 @@ function backupSection(){
     <p class="small muted">A copy of all client records, forms, plans, notes, invoices, messages and settings is saved every Sunday night, and the last 8 are kept. Download one to keep on your computer. To restore, load the file under “Move data in” below. Uploaded report files and the reference library are stored separately and aren't part of it.</p>
     ${!S.backupsLoaded?`<p class="small muted">Loading…</p>`:b.length?b.map(x=>`<div class="row" style="gap:6px"><span class="grow">${esc(fmtWhen(x.created_at))} <span class="small muted">· ${x.items} items</span></span><button type="button" class="ghost small" data-bkdl="${x.id}">Download</button></div>`).join(""):`<p class="small muted">No backups yet.</p>`}</div>`;
 }
+/* ---------- homeopathy consult session: split screen, notes save as you type → clients/<id>/consults/<cid> (private) ---------- */
+const HC_SECTIONS = [
+  ["since","Since last time / what's changed","What's better, worse, different. Their words."],
+  ["main","Main complaints now","Location, sensation, modalities (better/worse), concomitants, onset"],
+  ["mind","Mind & emotions","Mood, fears, stress, sleep dreams, relationships"],
+  ["generals","Physical generals","Energy, sleep, appetite, cravings/aversions, thirst, thermals, sweat, menses"],
+  ["remedies","Remedies taken & response","What they took, how often, aggravation then relief? Missed doses?"],
+  ["observ","Your observations","How they present, what stood out"],
+  ["rubrics","Rubrics & remedy ideas","Repertory rubrics, protocols, remedies to consider"],
+  ["plan","Plan & next steps","What changes, what to watch for, when to follow up"],
+];
+function hcLeftPane(){
+  const id=S.hc.clientId, c=S.clients[id]||{}, L=S.hcLeft||"intake";
+  const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
+  const prev=(S.hcList||[]).filter(x=>x.id!==S.hc.id).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const tab=(k,l)=>`<button type="button" role="tab" data-hleft="${k}" aria-current="${L===k}">${l}</button>`;
+  const tabs=`<div class="subtabs" role="tablist">${tab("intake","Homeopathy intake")}${tab("followup","Follow-up")}${tab("both","Both")}${tab("prev","Earlier consults")}${tab("progress","Progress")}</div>`;
+  const intakeHtml = c.intake && Object.keys(c.intake).length>1
+    ? `<div class="stack"><p class="label">${esc(c.intakeSubmittedAt?"Intake sent "+fmtDate(c.intakeSubmittedAt):"Homeopathy intake")}</p>${intakeForm(c.intake,"hci",true,INTAKE)}</div>`
+    : `<div class="empty small">No homeopathy intake on file.</div>`;
+  const fi=Math.min(S.hcFu||0, Math.max(0,hist.length-1)), fu=hist[fi];
+  const fuHtml = fu
+    ? `<div class="stack">${hist.length>1?`<label class="field"><span>Which follow-up</span><select id="hc-fusel">${hist.map((h,i)=>`<option value="${i}" ${i===fi?"selected":""}>${esc(fmtDate(h.submittedAt))}${i===0?" (latest)":""}</option>`).join("")}</select></label>`:`<p class="label">Follow-up sent ${esc(fmtDate(fu.submittedAt))}</p>`}${intakeForm(fu.form||{},"hcf",true,FOLLOWUP)}</div>`
+    : `<div class="empty small">No follow-up form yet. ${clientEmail(id)?`<button type="button" class="ghost small" data-hact="fumail">Email them the follow-up link</button>`:""}</div>`;
+  let body;
+  if(L==="intake") body=intakeHtml;
+  else if(L==="followup") body=fuHtml;
+  else if(L==="both") body=`<h3 class="scan-h">Latest follow-up</h3>${fuHtml}<h3 class="scan-h" style="margin-top:18px">Homeopathy intake</h3>${intakeHtml}`;
+  else if(L==="prev") body = prev.length ? prev.map(p=>`<details class="formsec" ${prev[0]===p?"open":""}><summary style="cursor:pointer"><b>${esc(fmtDate(p.date))}</b> <span class="small muted">${esc(p.kind||"Consult")}</span></summary>
+      <div class="stack" style="gap:6px;margin-top:8px">${HC_SECTIONS.filter(([k])=>(p[k]||"").trim()).map(([k,l])=>`<div><p class="label">${esc(l)}</p><p class="small" style="white-space:pre-wrap;margin:0">${esc(p[k])}</p></div>`).join("")||`<p class="small muted">No notes.</p>`}</div></details>`).join("")
+    : `<div class="empty small">No earlier consults.</div>`;
+  else { const e=progressEntries(c, S.qhistFor===id?S.qhist:[], S.progFor===id?S.prog:[], false); const ch=progCharts(e); body = ch?`<div class="prog-grid">${ch}</div>`:`<div class="empty small">No ratings yet.</div>`; }
+  return tabs+`<div style="margin-top:12px">${body}</div>`;
+}
+function hcForm(d){
+  return `<div class="stack scan-form">
+    <div><p class="label">Practitioner only</p><h2>Consult notes</h2><p class="small muted">Saves as you type. The client never sees these.</p></div>
+    <div class="scan-grid" style="--cols:3">
+      <label class="field"><span>Date</span><input type="date" data-hk="date" value="${esc(d.date||"")}"></label>
+      <label class="field"><span>Start time</span><input type="time" data-hk="startTime" value="${esc(d.startTime||"")}"></label>
+      <label class="field"><span>Type</span><select data-hk="kind">${["Follow-up consult","Initial consult","Acute","Other"].map(k=>`<option ${d.kind===k?"selected":""}>${k}</option>`).join("")}</select></label></div>
+    ${HC_SECTIONS.map(([k,l,h])=>`<label class="field"><span>${esc(l)}</span><textarea data-hk="${k}" placeholder="${esc(h)}" style="min-height:${k==="since"||k==="main"?120:90}px">${esc(d[k]||"")}</textarea></label>`).join("")}
+    <div class="scan-grid" style="--cols:2">
+      <label class="field"><span>Your progress rating (optional)</span><select data-hk="rating"><option value="">No rating</option>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${+d.rating===n?"selected":""}>${n}${n===1?" · much worse":n===5?" · about the same":n===10?" · much improved":""}</option>`).join("")}</select></label>
+      <label class="field"><span>Next follow-up (optional)</span><input type="date" data-hk="nextDate" value="${esc(d.nextDate||"")}"></label></div>
+    <div class="row" style="gap:6px">
+      <button type="button" class="primary" data-hact="plan">Start a treatment plan</button>
+      ${d.nextDate?`<button type="button" data-hact="appt">Add ${esc(fmtDate(d.nextDate))} to Appointments</button>`:""}
+      <button type="button" data-hact="copy">Copy notes</button>
+    </div>
+    <p class="small muted">Your progress rating is added to this client's Progress chart (private to you).</p>
+  </div>`;
+}
+function renderHConsult(){
+  const h=S.hc; if(!h) return renderClients();
+  $("#app").innerHTML=`<div class="stack">
+    <div class="row scan-bar"><button type="button" class="ghost" data-hact="close">← Back to ${esc(clientName(h.clientId))}</button>
+      <b class="grow" style="text-align:center">Consult · ${esc(fmtDate(h.data.date)||"")}</b><span class="small muted" id="hc-st">${esc(h.status||"Saved")}</span>
+      ${S.hcDel?`<button type="button" class="danger" data-hact="del">Confirm delete</button>`:`<button type="button" class="ghost danger" data-hact="askdel">Delete</button>`}</div>
+    <div class="scanview" id="hc-root">
+      <section class="sheet scan-pane" aria-label="Client's forms">${hcLeftPane()}</section>
+      <section class="scan-pane right" aria-label="Consult notes"><div class="sheet">${hcForm(h.data)}</div></section>
+    </div></div>`;
+  bindHConsult();
+}
+function hcRead(){ const h=S.hc; if(!h) return; document.querySelectorAll("#hc-root [data-hk]").forEach(el=>{ h.data[el.dataset.hk]=el.value; }); }
+let HC_T=null;
+function hcDirty(){ hcRead(); const st=$("#hc-st"); if(st) st.textContent="Saving…"; if(S.hc) S.hc.status="Saving…"; clearTimeout(HC_T); HC_T=setTimeout(hcSave, 1000); }
+async function hcSave(){
+  const h=S.hc; if(!h) return; clearTimeout(HC_T); hcRead(); h.data.updatedAt=new Date().toISOString();
+  try{
+    await S.db.doc(`clients/${h.clientId}/consults/${h.id}`).set(h.data);
+    // the rating feeds the Progress chart as a private note tied to this consult
+    const pid="hc-"+h.id, r=+h.data.rating||0;
+    if(r) await S.db.doc(`clients/${h.clientId}/progress/${pid}`).set({date:h.data.date||today(), rating:r, note:"From consult notes"+(h.data.plan?": "+String(h.data.plan).slice(0,140):""), shared:false, status:"private", at:h.data.createdAt||h.data.updatedAt, updatedAt:h.data.updatedAt});
+    else if(h.hadRating) await S.db.doc(`clients/${h.clientId}/progress/${pid}`).delete().catch(()=>{});
+    h.hadRating=!!r;
+    h.status="Saved "+new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+  }catch(e){ console.warn(e); h.status="Not saved. Check your connection."; }
+  const st=$("#hc-st"); if(st && S.hc===h) st.textContent=h.status;
+}
+async function hcLoadList(id){ try{ const s=await S.db.collection(`clients/${id}/consults`).get(); S.hcList=s.docs.map(d=>({id:d.id,...d.data()})); S.hcListFor=id; }catch(e){ S.hcList=[]; } }
+async function newHConsult(id, kind){
+  const now=new Date(); const hh=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  const data={date:today(), startTime:hh, kind:kind||(((S.clients[id]||{}).followupHistory||[]).length||(S.clients[id]||{}).intakeSubmittedAt?"Follow-up consult":"Initial consult"), createdAt:now.toISOString(), updatedAt:now.toISOString()};
+  const ref=S.db.collection(`clients/${id}/consults`).doc(); await ref.set(data);
+  await openHConsult(id, ref.id, data);
+}
+async function openHConsult(id, hid, data){
+  ensureClientSubs(id); await hcLoadList(id);
+  const c=S.clients[id]||{};
+  S.hc={clientId:id, id:hid, data:{...data}, status:"Saved", hadRating:!!(+data.rating)}; S.hcDel=false; S.hcFu=0;
+  S.hcLeft = (c.followupHistory||[]).length && c.intake && Object.keys(c.intake).length>1 ? "both" : (c.followupHistory||[]).length ? "followup" : "intake";
+  renderHConsult(); window.scrollTo(0,0);
+}
+function bindHConsult(){
+  const root=$("#hc-root");
+  root.addEventListener("input", e=>{ if(e.target.closest("[data-hk]")) hcDirty(); });
+  root.addEventListener("change", e=>{ if(e.target.closest("[data-hk]")){ hcDirty(); if(e.target.dataset.hk==="nextDate"){ hcRead(); const r=root.querySelector(".scan-pane.right .sheet"); if(r) r.innerHTML=hcForm(S.hc.data); } }
+    const fs=e.target.closest("#hc-fusel"); if(fs){ hcRead(); S.hcFu=+fs.value; root.querySelector(".scan-pane").innerHTML=hcLeftPane(); } });
+  $("#app").onclick = async e => {
+    const lt=e.target.closest("[data-hleft]"); if(lt){ hcRead(); S.hcLeft=lt.dataset.hleft; root.querySelector(".scan-pane").innerHTML=hcLeftPane(); return; }
+    const a=e.target.closest("[data-hact]"); if(!a) return; const act=a.dataset.hact, h=S.hc;
+    if(act==="close"){ await hcSave(); S.hc=null; S.hcDel=false; S.sub="consults"; renderClients(); window.scrollTo(0,0); return; }
+    if(act==="askdel"){ hcRead(); S.hcDel=true; renderHConsult(); return; }
+    if(act==="del"){ clearTimeout(HC_T); await S.db.doc(`clients/${h.clientId}/consults/${h.id}`).delete(); await S.db.doc(`clients/${h.clientId}/progress/hc-${h.id}`).delete().catch(()=>{}); S.hc=null; S.hcDel=false; S.sub="consults"; toast("Consult notes deleted"); renderClients(); return; }
+    if(act==="copy"){ hcRead(); const d=h.data; const txt=`${clientName(h.clientId)} · ${d.kind||"Consult"} · ${fmtDate(d.date)}\n\n`+HC_SECTIONS.filter(([k])=>(d[k]||"").trim()).map(([k,l])=>`${l}:\n${d[k].trim()}`).join("\n\n"); try{ await navigator.clipboard.writeText(txt); toast("Notes copied"); }catch(e1){ toast("Couldn't copy here"); } return; }
+    if(act==="fumail"){ await hcSave(); const id=h.clientId; S.hc=null; S.sel=id; S.sub="followups"; S.compose=followupMail(id); renderClients(); return; }
+    if(act==="appt"){ hcRead(); await hcSave(); const id=h.clientId, list=apptsOf(S.clients[id]); if(list.some(x=>x.type==="consult"&&x.date===h.data.nextDate)){ toast("That date is already on their Appointments"); return; }
+      list.push({id:genId().slice(0,10), type:"consult", date:h.data.nextDate, time:"", mins:60, how:"", note:"Follow-up"}); await saveAppts(id, list); toast("Added to Appointments. Set the time there."); return; }
+    if(act==="plan"){ await hcSave(); const id=h.clientId; S.hc=null; S.sel=id; S.sub="plans";
+      S.editPlan={clientId:id,id:null,data:{title:"Treatment plan",date:today(),status:"draft",form:"wet",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true};
+      renderClients(); toast("New plan started. Your consult notes are under Consults."); return; }
+  };
+}
+function consultsPane(id){
+  if(S.hcListFor!==id){ hcLoadList(id).then(()=>{ if(S.sel===id && S.sub==="consults" && !S.hc) renderClients(); }); return `<div class="empty">Loading…</div>`; }
+  const list=(S.hcList||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")+(b.startTime||"").localeCompare(a.startTime||""));
+  return `<div class="stack">
+    <div class="row"><p class="grow small muted">Only you see these. A consult opens as a split screen: their homeopathy intake and follow-ups on one side, your notes on the other. Everything saves as you type.</p>
+      <button type="button" class="primary" data-act="hcnew">New consult</button></div>
+    ${list.length?list.map(p=>`<button type="button" class="item" data-hcopen="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(fmtDate(p.date))}${p.startTime?" · "+esc(fmtTime12(p.startTime)):""}</b><span class="meta"><span class="chip">${esc(p.kind||"Consult")}</span>${p.rating?`<span class="chip">Your rating ${esc(p.rating)}</span>`:""}<span class="small muted">${esc(String(p.since||p.main||p.plan||"").slice(0,90))}</span></span></button>`).join(""):`<div class="empty small">No consults yet.</div>`}
+  </div>`;
+}
+
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
   const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
@@ -1574,6 +1700,7 @@ document.addEventListener("change", e => { if(e.target && e.target.id==="plan-ta
 /* ---------- Clients ---------- */
 function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   if(S.scan){ if(!document.getElementById("scan-root")) renderScan(); return; }
+  if(S.hc){ if(!document.getElementById("hc-root")) renderHConsult(); return; }
   const ids = Object.keys(S.clients).sort((a,b)=>((isNewForm(S.clients[b])||msgUnreadDawn(S.clients[b]))-(isNewForm(S.clients[a])||msgUnreadDawn(S.clients[a]))) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
   const cf = CLIENT_FILTERS[S.cf||"all"] || CLIENT_FILTERS.all;
@@ -1616,7 +1743,7 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["progress","Progress"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
+  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["consults","Consults"],["progress","Progress"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
@@ -1625,6 +1752,7 @@ function clientDetail(id){
   if(S.sub==="appts") body = apptsPane(id);
   if(S.sub==="billing") body = billingPane(id);
   if(S.sub==="progress") body = progressPane(id);
+  if(S.sub==="consults") body = consultsPane(id);
   if(S.sub==="messages"){ body = messagesPane(id); if(msgUnreadDawn(c) && S.msgSeenMark!==c.lastMsg.at){ S.msgSeenMark=c.lastMsg.at; setTimeout(()=>S.db.doc("clients/"+id).update({msgSeenByDawn:new Date().toISOString()}).catch(e=>console.warn(e)),400); } }
   if(S.sub==="scans") body = scansPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
@@ -1638,7 +1766,7 @@ function clientDetail(id){
         <div class="row"><button type="button" class="primary" data-act="fusave">Save follow-up</button><button type="button" data-act="fucancel">Cancel</button></div></div>`;
     } else {
       body = `<div class="stack">
-        <div class="row"><p class="grow small muted">Fill one in yourself during the appointment, or have the client send theirs before the session at <span class="mono">portal.dawnspain.com/#followup</span>.</p><div class="row" style="gap:6px;flex-wrap:nowrap">${clientEmail(id)?`<button type="button" data-act="fumail">Email follow-up link</button>`:""}<button type="button" class="primary" data-act="funew">New follow-up</button></div></div>
+        <div class="row"><p class="grow small muted">Fill one in yourself during the appointment, or have the client send theirs before the session at <span class="mono">portal.dawnspain.com/#followup</span>.</p><div class="row" style="gap:6px;flex-wrap:nowrap">${clientEmail(id)?`<button type="button" data-act="fumail">Email follow-up link</button>`:""}<button type="button" data-act="hcnew" title="Split screen: their forms beside your notes">Start consult</button><button type="button" class="primary" data-act="funew">New follow-up</button></div></div>
         ${hist.length ? hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""} <span class="small muted">· ${h.by==="practitioner"?"filled in by you":"sent by client"}</span></summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" data-act="fuedit" data-i="${esc(h.submittedAt||"")}">Edit</button><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")
           : `<div class="empty small">No follow-ups yet.</div>`}
       </div>`;
@@ -1955,6 +2083,8 @@ function bindClients(){
     if(await billingClick(e)) return;
     if(await progressClick(e)) return;
     if(await planTplClick(e)) return;
+    { const ho=e.target.closest("[data-hcopen]"); if(ho){ const p=(S.hcList||[]).find(x=>x.id===ho.dataset.hcopen); if(p){ const {id:_i,...d}=p; openHConsult(S.sel, p.id, d); } return; }
+      const hs=e.target.closest('[data-act="hcnew"],[data-hcstart]'); if(hs){ hs.disabled=true; await newHConsult(S.sel); return; } }
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
