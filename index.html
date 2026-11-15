@@ -699,7 +699,7 @@ function messagesPane(id){
     ${!loaded?`<div class="empty small">Loading messages…</div>`:msgThread(S.msgs||[], "dawn", clientFirst(id)||clientName(id))}
     <label class="field"><span>Reply to ${esc(clientFirst(id)||clientName(id))}</span><textarea id="msg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write a message. ${esc(clientFirst(id)||"They")} sees it in their portal under Messages.">${esc(S.msgDraft?.[id]||"")}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="msgsend">Send message</button>
-      ${auto?`<span class="small muted">They'll get an email saying there's a new message waiting.</span>`
+      ${auto?`<span class="small muted">It's also emailed to them, and their email replies come to your inbox.</span>`
         :`<button type="button" data-act="msgmail" title="Opens a short email in your Mail app">Let them know by email</button><span class="small muted grow">Automatic “new message” emails aren't switched on yet.</span>`}</div>
     ${c.lastMsg?.from==="dawn" && c.msgSeenByClient && c.msgSeenByClient>=c.lastMsg.at ? `<p class="small muted">Seen by ${esc(clientFirst(id)||"the client")} ${esc(fmtWhen(c.msgSeenByClient))}.</p>`:""}
   </div>`;
@@ -1142,7 +1142,7 @@ function bindClients(){
     const act = a.dataset.act;
     try{
       if(act==="back"){ S.sel=null; S.compose=null; renderClients(); }
-      else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent. They'll get an email about it.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
+      else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent, and emailed to them.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
       else if(act==="msgmail"){ msgHeadsUp(S.sel); }
       else if(act==="cmstart"){ S.compose={id:S.sel, tpl:"", subject:"", body:`Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); $("#cm-subj")?.focus(); }
       else if(act==="cmcancel"){ S.compose=null; renderClients(); }
@@ -2938,7 +2938,7 @@ function renderClient(){
   let body;
   if(S.cview==="messages"){
     const fam = familyPeople().length > 1;
-    body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. For anything urgent, please call ${esc(PRACTICE.phone)}.</p></div>
+    body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. Dawn's messages are also emailed to you. For anything urgent, please call ${esc(PRACTICE.phone)}.</p></div>
       ${S.msgsLoaded ? msgThread(S.myMsgs||[], "client", "Dawn") : `<div class="empty small">Loading messages…</div>`}
       <label class="field"><span>Your message</span><textarea id="cmsg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write to Dawn">${esc(S.cmsgDraft||"")}</textarea></label>
       <div class="row"><button type="button" class="primary" data-act="cmsgsend">Send to Dawn</button></div></div>`;

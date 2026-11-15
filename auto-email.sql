@@ -1,8 +1,8 @@
--- Wellness From Within portal: automatic "you have a new message" emails to clients.
+-- Wellness From Within portal: email clients each portal message Dawn sends them (the message is in the email).
 -- Run once in Supabase → SQL Editor, AFTER messages.sql and after the message-email Edge Function is deployed. Safe to run again.
--- When Dawn sends a portal message, this asks the message-email function to email that person a short heads-up
--- (never the message itself). The function sends from the portal mailbox and checks for itself that the
--- newest message really is a fresh one from Dawn, so nothing else can make it send.
+-- When Dawn sends a portal message, this asks the message-email function to email it to that person.
+-- The function sends from the portal mailbox, with replies going to Dawn's own inbox, and checks for itself
+-- that the message really is a fresh one from Dawn that hasn't been emailed yet, so nothing else can make it send.
 
 create extension if not exists pg_net;
 
@@ -13,7 +13,7 @@ begin
     begin
       perform net.http_post(
         url     := 'https://tvdnxiztylhobfbhywxk.supabase.co/functions/v1/message-email',
-        body    := jsonb_build_object('cid', split_part(new.parent, '/', 2)),
+        body    := jsonb_build_object('path', new.path),
         headers := '{"Content-Type": "application/json"}'::jsonb
       );
     exception when others then null;   -- an email problem must never stop a message from saving
