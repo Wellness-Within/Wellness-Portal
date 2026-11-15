@@ -764,12 +764,23 @@ async function logEmail(id, subject, kind){
   try{ const c=S.clients?.[id]||{}; const log=[{at:new Date().toISOString(), subject:String(subject||"").slice(0,200), kind}, ...(c.emailLog||[])].slice(0,50);
     await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
 }
-const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", auto:"New-message email (automatic)"};
+const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", auto:"New-message email (automatic)"};
 function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`; }
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
-    .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{signature\}/gi, emailSign());
+    .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{signature\}/gi, emailSign());
+}
+function followupMail(id){
+  const to=clientEmail(id), c=S.clients[id]||{}, first=clientFirst(id);
+  const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
+  const named = fam && first && first!=="Unnamed";
+  const ups = upcomingAppts(c), next = ups.find(a=>a.type==="consult") || ups[0];
+  const when = next ? apptWhen(next) : "";
+  const hi = named ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
+  const subject = `${named?`${first}'s`:"Your"} follow-up form${next?` before our ${next.type==="consult"?"consult":"appointment"}`:""}`;
+  const body = `${hi}\n\n${next?`I'm looking forward to our ${next.type==="consult"?"consult":"appointment"} on ${when}. `:""}Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked:\nhttps://portal.dawnspain.com/#followup\n\nSign in with this email address (${to}).${named?` Then choose ${first} at the top.`:""} The link opens the follow-up form, and your answers come straight to me.\n\nIf you have any questions, just reply to this email or call me at ${PRACTICE.phone}.\n\n${emailSign()}`;
+  return {id, tpl:"", kind:"followup", subject, body};
 }
 function openMail(to, subject, body){ location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }
 function composePanel(id){
@@ -997,7 +1008,7 @@ function clientDetail(id){
         <div class="row"><button type="button" class="primary" data-act="fusave">Save follow-up</button><button type="button" data-act="fucancel">Cancel</button></div></div>`;
     } else {
       body = `<div class="stack">
-        <div class="row"><p class="grow small muted">Fill one in yourself during the appointment, or have the client send theirs before the session at <span class="mono">portal.dawnspain.com/#followup</span>.</p><button type="button" class="primary" data-act="funew">New follow-up</button></div>
+        <div class="row"><p class="grow small muted">Fill one in yourself during the appointment, or have the client send theirs before the session at <span class="mono">portal.dawnspain.com/#followup</span>.</p><div class="row" style="gap:6px;flex-wrap:nowrap">${clientEmail(id)?`<button type="button" data-act="fumail">Email follow-up link</button>`:""}<button type="button" class="primary" data-act="funew">New follow-up</button></div></div>
         ${hist.length ? hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""} <span class="small muted">· ${h.by==="practitioner"?"filled in by you":"sent by client"}</span></summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" data-act="fuedit" data-i="${esc(h.submittedAt||"")}">Edit</button><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")
           : `<div class="empty small">No follow-ups yet.</div>`}
       </div>`;
@@ -1331,9 +1342,10 @@ function bindClients(){
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
       else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent, and emailed to them.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
       else if(act==="msgmail"){ msgHeadsUp(S.sel); }
+      else if(act==="fumail"){ S.compose=followupMail(S.sel); renderClients(); $("#compose")?.scrollIntoView({behavior:"smooth",block:"start"}); }
       else if(act==="cmstart"){ S.compose={id:S.sel, tpl:"", subject:"", body:`Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); $("#cm-subj")?.focus(); }
       else if(act==="cmcancel"){ S.compose=null; renderClients(); }
-      else if(act==="cmopen"){ const subj=$("#cm-subj").value.trim(), body=$("#cm-body").value; if(!subj){ toast("Add a subject first"); return; } const id=S.sel, kind=S.compose?.tpl?"template":"email";
+      else if(act==="cmopen"){ const subj=$("#cm-subj").value.trim(), body=$("#cm-body").value; if(!subj){ toast("Add a subject first"); return; } const id=S.sel, kind=S.compose?.kind || (S.compose?.tpl?"template":"email");
         openMail(clientEmail(id), subj, body); S.compose=null; await logEmail(id, subj, kind); renderClients(); toast("Opened in Mail. Noted in this client's email history."); }
       else if(act==="newclient"){ const id=rid("c-"); await S.db.doc("clients/"+id).set({name:"New client", createdAt:new Date().toISOString(), intake:{}}); S.sel=id; S.sub="details"; renderClients(); setTimeout(()=>{const n=$("#d-name"); if(n){n.value="";n.focus();}},50); }
       else if(act==="jotfill"){ const txt=$("#jot-text").value; const kind=a.dataset.kind; const def=kind==="qest"?QEST:INTAKE; const r=jotParse(txt, def);
@@ -2994,7 +3006,7 @@ function templatesSection(){
       <label class="field"><span>Template name (only you see this)</span><input id="tp-name" value="${esc(ed.name||"")}" placeholder="e.g. Appointment confirmation"></label>
       <label class="field"><span>Subject</span><input id="tp-subj" value="${esc(ed.subject||"")}"></label>
       <label class="field"><span>Message</span><textarea id="tp-body" style="min-height:180px">${esc(ed.body||"")}</textarea></label>
-      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> next appointment date, <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature.</p>
+      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> next appointment date, <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature, <span class="mono">{followup}</span> link to their follow-up form.</p>
       <div class="row"><button type="button" class="primary" data-act="tplsave">Save template</button><button type="button" data-act="tplcancel">Cancel</button></div></div>` : "";
   return `<div class="formsec stack">
       <h3>Email templates</h3>
