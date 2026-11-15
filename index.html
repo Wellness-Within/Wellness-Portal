@@ -87,6 +87,7 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .num-dot{width:32px;height:32px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
 .dash-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.dash-row:last-child{border-bottom:0}
 .avatar{width:40px;height:40px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.count{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .dot{display:inline-block;min-width:8px;height:8px;border-radius:50%;background:var(--accent);margin-left:6px;vertical-align:middle}
 .muted{color:var(--muted)}
 .small{font-size:13px}
@@ -575,7 +576,7 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose")) render();
+    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose")) render();
   }, e => console.warn(e));
   S.db.collection("custom").onSnapshot(snap => {
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
@@ -747,6 +748,20 @@ function emailHistory(id){
       <p class="small muted">Emails you started from the portal and opened in Mail. Mail is where they're actually sent.</p>`
     :`<p class="small muted">None yet. Emails you start from the portal (reminders, “plan ready”, and the Email button) are listed here.</p>`}</div>`;
 }
+function renderInbox(){
+  const rows = Object.keys(S.clients).filter(id=>S.clients[id].lastMsg).sort((a,b)=>(S.clients[b].lastMsg.at||"").localeCompare(S.clients[a].lastMsg.at||""));
+  const unread = rows.filter(id=>msgUnreadDawn(S.clients[id]));
+  $("#app").innerHTML = `<div class="sheet stack" style="max-width:820px">
+    <div class="row"><h1 class="grow">Messages</h1><span class="small muted">${unread.length?`${unread.length} unread`:"All caught up"}</span></div>
+    ${!S.clientsLoaded?`<div class="empty">Loading…</div>`:!rows.length?`<div class="empty small">No messages yet. When a client writes to you, the conversation appears here. To start one, open a client and choose Messages.</div>`
+    :`<div class="list-pane">${rows.map(id=>{ const c=S.clients[id], m=c.lastMsg, u=msgUnreadDawn(c);
+      return `<button type="button" class="item" data-inbox="${esc(id)}" style="${u?"background:var(--soft)":""}">
+        <div class="row" style="gap:10px;flex-wrap:nowrap"><span class="avatar">${esc((clientName(id).match(/\b\w/g)||["?"]).slice(0,2).join("").toUpperCase())}</span>
+        <div class="grow" style="min-width:0"><div class="row" style="justify-content:space-between;gap:8px"><b>${esc(clientName(id))}</b><span class="small muted">${esc(fmtWhen(m.at))}</span></div>
+        <span class="small ${u?"":"muted"}">${u?'<span class="dot" style="margin:0 6px 0 0"></span><b>New message from them</b>':m.from==="dawn"?"You replied":"Read"}</span></div></div></button>`; }).join("")}</div>`}
+  </div>`;
+  $("#app").onclick = e => { const b=e.target.closest("[data-inbox]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.inbox; S.sub="messages"; S.compose=null; renderTabs(); render(); window.scrollTo(0,0); };
+}
 function messagesPane(id){
   const c=S.clients[id]||{}, loaded=S.msgsFor===id && S.msgsLoaded;
   const auto=!!S.settings.autoEmail;
@@ -773,14 +788,15 @@ function clientName(id){
 }
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
-  const tabs = [["clients","Clients"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
-  t.innerHTML = tabs.map(([k,l]) => `<button type="button" data-tab="${k}" aria-current="${S.tab===k}">${icon(k)}<span>${l}</span></button>`).join(""); sideHelp(false);
+  const tabs = [["clients","Clients"],["inbox","Messages"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
+  const unread = Object.values(S.clients||{}).filter(msgUnreadDawn).length;
+  t.innerHTML = tabs.map(([k,l]) => `<button type="button" data-tab="${k}" aria-current="${S.tab===k}">${icon(k==="inbox"?"messages":k)}<span>${l}</span>${k==="inbox"&&unread?`<span class="count" aria-label="${unread} unread">${unread}</span>`:""}</button>`).join(""); sideHelp(false);
   t.onclick = e => { const b=e.target.closest("[data-tab]"); if(!b) return; S.tab=b.dataset.tab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); };
 }
 function render(){
   if(!S.prac) return renderClient();
   store("wfw.editPlan", S.editPlan||undefined);
-  (({clients:renderClients, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
+  (({clients:renderClients, inbox:renderInbox, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
 }
 
 /* ---------- working-plan banner (shared by library & combos) ---------- */
