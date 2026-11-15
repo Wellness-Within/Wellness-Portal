@@ -5,41 +5,50 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Wellness From Within Portal</title>
 <meta name="robots" content="noindex">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="https://dawnspain.com/wp-content/uploads/2026/11/wellness-from-within-site-icon-300x300.png">
+<link rel="apple-touch-icon" href="https://dawnspain.com/wp-content/uploads/2026/11/wellness-from-within-site-icon-300x300.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a quiet apothecary ledger. Sticky header, then a two-pane workspace (list | record) that stacks on phones. */
+/* Layout: a quiet apothecary ledger. Sticky header, then a two-pane workspace (list | record) that stacks on phones.
+   Look matches dawnspain.com: ivory paper, deep sea-ink text, teal accents, aqua tints, Georgia headings, Manrope body. */
 :root{
-  --bg:#F1FAFB; --surface:#FFFFFF; --sunk:#E4F4F6; --ink:#173A41; --muted:#4F6C72; --line:#CBE7EA;
-  --accent:#0B7891; --accent-ink:#FFFFFF; --soft:#D3F4F7; --brand:#75E3EB; --brand-ink:#0F333A; --amber:#2D5A9E; --amber-soft:#E2ECFA; --ok:#0B6F86; --ok-soft:#D9F5F8; --danger:#A3312B;
-  --f-display:"Young Serif", Georgia, "Times New Roman", serif;
-  --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg:#F8F6EF; --surface:#FFFEFA; --sunk:#F1EEE5; --ink:#28454C; --muted:#5E777D; --line:#DCE2E3;
+  --accent:#087C9C; --accent-ink:#FFFFFF; --soft:#DEF1F2; --brand:#F8F6EF; --brand-ink:#28454C; --amber:#2D5A9E; --amber-soft:#E2ECFA; --ok:#087C9C; --ok-soft:#DEF1F2; --danger:#A3312B;
+  --sand:#E9E1D3;
+  --f-display:Georgia, "Times New Roman", serif;
+  --f-body:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
-  --r:10px;
+  --r:6px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0A191C; --surface:#11262A; --sunk:#0D1F23; --ink:#E0F2F4; --muted:#93B2B7; --line:#21414A;
-  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#A9C6F5; --amber-soft:#1A2A44; --ok:#75E3EB; --ok-soft:#173A40; --danger:#F08C84; color-scheme:dark}}
+  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#0D1F23; --brand-ink:#E0F2F4; --amber:#A9C6F5; --amber-soft:#1A2A44; --ok:#75E3EB; --ok-soft:#173A40; --danger:#F08C84; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0A191C; --surface:#11262A; --sunk:#0D1F23; --ink:#E0F2F4; --muted:#93B2B7; --line:#21414A;
-  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#1B4C54; --brand-ink:#E0F7F9; --amber:#A9C6F5; --amber-soft:#1A2A44; --ok:#75E3EB; --ok-soft:#173A40; --danger:#F08C84; color-scheme:dark}
+  --accent:#75E3EB; --accent-ink:#06262B; --soft:#173A40; --brand:#0D1F23; --brand-ink:#E0F2F4; --amber:#A9C6F5; --amber-soft:#1A2A44; --ok:#75E3EB; --ok-soft:#173A40; --danger:#F08C84; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--brand)}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1240px;margin:0 auto}
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--brand);color:var(--brand-ink);border-bottom:1px solid var(--line)}
-header.top .brand span,header.top nav.tabs button{color:var(--brand-ink)}header.top nav.tabs button{opacity:.85}header.top nav.tabs button[aria-current="true"]{background:var(--surface);color:var(--ink);opacity:1}header.top #signout{color:var(--brand-ink)}
-header.top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:12px}
-.brand{display:flex;flex-direction:column;line-height:1.1;margin-right:auto}
-.brand b{font-family:var(--f-display);font-weight:400;font-size:20px;letter-spacing:.2px}
-.brand span{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
-nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
-nav.tabs button{background:none;border:0;padding:8px 12px;border-radius:999px;color:var(--muted);font:600 14px var(--f-body);cursor:pointer}
-nav.tabs button[aria-current="true"]{background:var(--soft);color:var(--ink)}
+header.top nav.tabs button{color:var(--brand-ink)}header.top nav.tabs button{opacity:.8}header.top nav.tabs button[aria-current="true"]{opacity:1}header.top #signout{color:var(--accent)}
+header.top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:14px}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto;color:inherit;text-decoration:none}
+.brand-mark{width:40px;height:40px;flex:none;background:url("https://dawnspain.com/wp-content/uploads/2026/11/wellness-from-within-site-icon-300x300.png") center/contain no-repeat}
+.brand-name{display:flex;flex-direction:column;line-height:1.1}
+.brand b{font-family:var(--f-display);font-weight:400;font-size:22px;letter-spacing:-.5px}
+.brand-name span{font-size:10px;text-transform:uppercase;letter-spacing:.19em;color:var(--muted);margin-top:4px}
+nav.tabs{display:flex;gap:2px 14px;flex-wrap:wrap}
+nav.tabs button{background:none;border:0;border-bottom:1.5px solid transparent;padding:7px 2px;border-radius:0;color:var(--muted);font:500 14px var(--f-body);cursor:pointer}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button[aria-current="true"]{background:none;color:var(--ink);border-bottom-color:var(--accent)}
 main.wrap{padding-block:20px 48px}
 h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0}
 h1{font-size:26px} h2{font-size:21px} h3{font-size:17px}
 p{margin:0}
+a{color:var(--accent);text-underline-offset:2px}a:hover{color:var(--ink)}
 .muted{color:var(--muted)}
 .small{font-size:13px}
 .mono{font-family:var(--f-mono);font-size:13px}
@@ -47,15 +56,15 @@ p{margin:0}
 .stack{display:flex;flex-direction:column;gap:12px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grow{flex:1 1 auto;min-width:0}
-button,.btn{font:600 14px var(--f-body);border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
-button.primary,.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:#4FD3DD}
-button.primary:hover{background:#5ED9E2}
+button,.btn{font:600 14px var(--f-body);border-radius:3px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary,.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.primary:hover{background:#066A86;border-color:#066A86}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.primary{background:#75E3EB;color:#06262B}}
 button.ghost{border-color:transparent;background:none;color:var(--accent);padding:6px 8px}
 button.danger{color:var(--danger)}
 button:disabled{opacity:.5;cursor:not-allowed}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-input,textarea,select{font:15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input,textarea,select{font:15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:8px 10px;width:100%}
 textarea{min-height:72px;resize:vertical}
 [hidden]{display:none!important}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -201,7 +210,7 @@ details.poly summary{cursor:pointer;font-weight:600}
 <body>
 
 <header class="top"><div class="wrap">
-  <div class="brand"><b>Wellness From Within</b><span id="sub">Client Portal</span></div>
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name"><b>Wellness From Within</b><span id="sub">Client Portal</span></span></div>
   <nav class="tabs" id="tabs" aria-label="Sections" hidden></nav>
 </div></header>
 <main class="wrap" id="app">
