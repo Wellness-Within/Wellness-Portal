@@ -758,7 +758,7 @@ function renderInbox(){
       return `<button type="button" class="item" data-inbox="${esc(id)}" style="${u?"background:var(--soft)":""}">
         <div class="row" style="gap:10px;flex-wrap:nowrap"><span class="avatar">${esc((clientName(id).match(/\b\w/g)||["?"]).slice(0,2).join("").toUpperCase())}</span>
         <div class="grow" style="min-width:0"><div class="row" style="justify-content:space-between;gap:8px"><b>${esc(clientName(id))}</b><span class="small muted">${esc(fmtWhen(m.at))}</span></div>
-        <span class="small ${u?"":"muted"}">${u?'<span class="dot" style="margin:0 6px 0 0"></span><b>New message from them</b>':m.from==="dawn"?"You replied":"Read"}</span></div></div></button>`; }).join("")}</div>`}
+        <span class="small ${u?"":"muted"}">${u?'<b style="color:var(--accent)">● New message from them</b>':m.from==="dawn"?"You replied":"Read"}</span></div></div></button>`; }).join("")}</div>`}
   </div>`;
   $("#app").onclick = e => { const b=e.target.closest("[data-inbox]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.inbox; S.sub="messages"; S.compose=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
