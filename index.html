@@ -49,6 +49,12 @@ h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0
 h1{font-size:26px} h2{font-size:21px} h3{font-size:17px}
 p{margin:0}
 a{color:var(--accent);text-underline-offset:2px}a:hover{color:var(--ink)}
+.msgs{display:flex;flex-direction:column;gap:10px;max-height:56vh;overflow-y:auto;padding:4px 2px}
+.msg{max-width:min(78%,560px);padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);overflow-wrap:anywhere}
+.msg.mine{align-self:flex-end;background:var(--soft);border-color:transparent;border-bottom-right-radius:3px}
+.msg.theirs{align-self:flex-start;border-bottom-left-radius:3px}
+.msg-meta{font-size:11.5px;color:var(--muted);margin-top:4px}
+.dot{display:inline-block;min-width:8px;height:8px;border-radius:50%;background:var(--accent);margin-left:6px;vertical-align:middle}
 .muted{color:var(--muted)}
 .small{font-size:13px}
 .mono{font-family:var(--f-mono);font-size:13px}
@@ -536,13 +542,13 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn")) render();
+    resolveNames(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose")) render();
   }, e => console.warn(e));
   S.db.collection("custom").onSnapshot(snap => {
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
     if(S.tab==="library") render();
   }, e => console.warn(e));
-  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings") render(); }, e=>console.warn(e));
+  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings" && !document.activeElement?.closest?.("#tpl-editor, #st-instr, #st-qcis, #pw-new")) render(); }, e=>console.warn(e));
   loadLibrary();
   render();
 }
@@ -578,6 +584,7 @@ function notifyMail(id, kind){
     ? `${hi}\n\n${whose} Qest4 scan and Wellness Summary reports are complete, and I've added them to your client portal. You can view all of your reports there anytime, under \u201cMy reports.\u201d\n\n${signin}\n\nTake your time reading through them. If anything raises a question or you'd like to talk it over, I'm always happy to hear from you.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`
     : `${hi}\n\n${whose} treatment plan is ready, and I've added it to your client portal. You'll find it under \u201cMy treatment plans,\u201d along with how often to take each remedy and for how long. You can come back to it anytime.\n\n${signin}\n\nIf anything is unclear, or you notice changes you'd like to share as you go, please reach out. I'm here to support you every step of the way.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`;
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  logEmail(id, subject, kind);
 }
 /* ---------- scan reminders (Dawn sends with one click from her Mail app) ---------- */
 const dayDiff = (a, b) => Math.round((new Date(a+"T12:00:00") - new Date(b+"T12:00:00")) / 864e5);
@@ -629,7 +636,81 @@ function scanMail(id, kind){
       `\n\n${reach}\n\n${sign}`;
   }
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  logEmail(id, subject, kind);
   return true;
+}
+/* ---------- messages: one conversation per person, stored as clients/<id>/messages/<msg id> ---------- */
+const MSG_MAX = 4000;
+const fmtWhen = t => { if(!t) return ""; const d=new Date(t); if(isNaN(d)) return ""; const same=d.toDateString()===new Date().toDateString();
+  return (same?"Today":d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:d.getFullYear()===new Date().getFullYear()?undefined:"numeric"}))+", "+d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}); };
+function msgUnreadDawn(c){ const m=c?.lastMsg; return m && m.from==="client" && (m.at||"") > (c.msgSeenByDawn||"") ? 1 : 0; }
+function msgUnreadClient(c){ const m=c?.lastMsg; return m && m.from==="dawn" && (m.at||"") > (c.msgSeenByClient||"") ? 1 : 0; }
+function msgSort(list){ return list.slice().sort((a,b)=>(a.at||"").localeCompare(b.at||"")); }
+function msgThread(list, me, theirName){
+  if(!list.length) return `<div class="empty small">No messages yet.</div>`;
+  return `<div class="msgs" id="msg-list">${msgSort(list).map(m=>`<div class="msg ${m.from===me?"mine":"theirs"}"><div>${esc(m.body).replace(/\n/g,"<br>")}</div><div class="msg-meta">${m.from===me?"You":esc(theirName)} · ${esc(fmtWhen(m.at))}</div></div>`).join("")}</div>`;
+}
+function msgScroll(){ const l=$("#msg-list"); if(l) l.scrollTop=l.scrollHeight; }
+async function sendMsg(cid, from, body){
+  body = String(body||"").trim(); if(!body) return false;
+  if(body.length > MSG_MAX){ toast(`That's a long one. Please keep messages under ${MSG_MAX} characters.`); return false; }
+  const id = Date.now().toString(36) + genId().slice(0,8), parent = `clients/${cid}/messages`;
+  const { error } = await SB.from("docs").insert({ path: parent+"/"+id, parent, id, data: { from, body, at: new Date().toISOString() }, updated_at: new Date().toISOString() });
+  if(error){ console.warn(error); toast(/security|permission|violates/i.test(error.message||"") ? "Messaging isn't switched on yet. Please try again later." : "That didn't send. Check your connection and try again."); return false; }
+  return true;
+}
+/* ---------- email from the portal: a log on the client record of emails started here ---------- */
+async function logEmail(id, subject, kind){
+  try{ const c=S.clients?.[id]||{}; const log=[{at:new Date().toISOString(), subject:String(subject||"").slice(0,200), kind}, ...(c.emailLog||[])].slice(0,50);
+    await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
+}
+const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up"};
+function emailSign(){ return `With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`; }
+function fillTemplate(t, id){
+  const c=S.clients[id]||{}, first=clientFirst(id);
+  return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
+    .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{signature\}/gi, emailSign());
+}
+function openMail(to, subject, body){ location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }
+function composePanel(id){
+  const cp=S.compose; if(!cp || cp.id!==id) return "";
+  const tpls=S.settings.emailTemplates||[];
+  return `<div class="formsec stack" id="compose" style="gap:10px">
+    <div class="row"><h3 class="grow">Email ${esc(clientName(id))}</h3><span class="small muted">${esc(clientEmail(id))}</span></div>
+    ${tpls.length?`<label class="field"><span>Start from a template</span><select id="cm-tpl"><option value="">Blank email</option>${tpls.map(t=>`<option value="${esc(t.id)}" ${cp.tpl===t.id?"selected":""}>${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>`
+      :`<p class="small muted">Tip: save emails you send often as templates in Settings.</p>`}
+    <label class="field"><span>Subject</span><input id="cm-subj" value="${esc(cp.subject||"")}"></label>
+    <label class="field"><span>Message</span><textarea id="cm-body" style="min-height:200px">${esc(cp.body||"")}</textarea></label>
+    <div class="row"><button type="button" class="primary" data-act="cmopen">Open in Mail</button><button type="button" data-act="cmcancel">Cancel</button>
+      <span class="small muted grow">Opens in your Mail app so you can check it and press Send. It's noted in this client's email history.</span></div>
+  </div>`;
+}
+function emailHistory(id){
+  const log=(S.clients[id]||{}).emailLog||[];
+  return `<div class="formsec stack"><h3>Emails from the portal</h3>
+    ${log.length?`<div class="stack" style="gap:4px">${log.map(e=>`<div class="row small" style="gap:8px"><span class="muted" style="min-width:150px">${esc(fmtWhen(e.at))}</span><span class="grow">${esc(e.subject||"(no subject)")}</span><span class="chip">${esc(EMAIL_KINDS[e.kind]||"Email")}</span></div>`).join("")}</div>
+      <p class="small muted">Emails you started from the portal and opened in Mail. Mail is where they're actually sent.</p>`
+    :`<p class="small muted">None yet. Emails you start from the portal (reminders, “plan ready”, and the Email button) are listed here.</p>`}</div>`;
+}
+function messagesPane(id){
+  const c=S.clients[id]||{}, loaded=S.msgsFor===id && S.msgsLoaded;
+  const auto=!!S.settings.autoEmail;
+  return `<div class="stack">
+    ${!loaded?`<div class="empty small">Loading messages…</div>`:msgThread(S.msgs||[], "dawn", clientFirst(id)||clientName(id))}
+    <label class="field"><span>Reply to ${esc(clientFirst(id)||clientName(id))}</span><textarea id="msg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write a message. ${esc(clientFirst(id)||"They")} sees it in their portal under Messages.">${esc(S.msgDraft?.[id]||"")}</textarea></label>
+    <div class="row"><button type="button" class="primary" data-act="msgsend">Send message</button>
+      ${auto?`<span class="small muted">They'll get an email saying there's a new message waiting.</span>`
+        :`<button type="button" data-act="msgmail" title="Opens a short email in your Mail app">Let them know by email</button><span class="small muted grow">Automatic “new message” emails aren't switched on yet.</span>`}</div>
+    ${c.lastMsg?.from==="dawn" && c.msgSeenByClient && c.msgSeenByClient>=c.lastMsg.at ? `<p class="small muted">Seen by ${esc(clientFirst(id)||"the client")} ${esc(fmtWhen(c.msgSeenByClient))}.</p>`:""}
+  </div>`;
+}
+function msgHeadsUp(id){
+  const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return false; }
+  const first=clientFirst(id), fam=id.includes("~") || Object.keys(S.clients).filter(x=>clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length>1;
+  const hi = fam ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
+  const subject = "You have a new message from Dawn";
+  const body = `${hi}\n\nI've sent ${fam&&first?`a message about ${first}`:"you a message"} in your client portal. To read it, go to https://portal.dawnspain.com/#messages, sign in with this email address (${to}), and open Messages.${fam&&first?` Then choose ${first} at the top.`:""}\n\n${emailSign()}`;
+  openMail(to, subject, body); logEmail(id, subject, "msg"); return true;
 }
 function clientName(id){
   const c = S.clients[id] || {};
@@ -684,7 +765,7 @@ document.addEventListener("change", e => { if(e.target && e.target.id==="plan-ta
 /* ---------- Clients ---------- */
 function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   if(S.scan){ if(!document.getElementById("scan-root")) renderScan(); return; }
-  const ids = Object.keys(S.clients).sort((a,b)=>(isNewForm(S.clients[b])-isNewForm(S.clients[a])) || clientName(a).localeCompare(clientName(b)));
+  const ids = Object.keys(S.clients).sort((a,b)=>((isNewForm(S.clients[b])||msgUnreadDawn(S.clients[b]))-(isNewForm(S.clients[a])||msgUnreadDawn(S.clients[a]))) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
   const shown = ids.filter(id => !f || clientName(id).toLowerCase().includes(f));
   const sel = S.sel && S.clients[S.sel] ? S.sel : null;
@@ -711,6 +792,7 @@ function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||"
 function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
 function intakeChip(c){
   const out = [];
+  if(msgUnreadDawn(c)) out.push(`<span class="chip acc" style="font-weight:700">New message</span>`);
   if(isNewForm(c)) out.push(`<span class="chip warn" style="font-weight:700">New form</span>`);
   if(c.intakeStatus==="submitted") out.push(`<span class="chip ok">Intake in</span>`);
   else if(c.intake && Object.keys(c.intake).length) out.push(`<span class="chip warn">Intake started</span>`);
@@ -721,12 +803,13 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["plans","Treatment plans"],["files","Reports & files"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
+  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["plans","Treatment plans"],["files","Reports & files"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
+  if(S.sub==="messages"){ body = messagesPane(id); if(msgUnreadDawn(c) && S.msgSeenMark!==c.lastMsg.at){ S.msgSeenMark=c.lastMsg.at; setTimeout(()=>S.db.doc("clients/"+id).update({msgSeenByDawn:new Date().toISOString()}).catch(e=>console.warn(e)),400); } }
   if(S.sub==="scans") body = scansPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
     const ed = S.fuEditFor===id ? S.fuEdit : null;
@@ -751,8 +834,9 @@ function clientDetail(id){
   return `<div class="sheet stack">
     <button type="button" class="ghost back-btn" data-act="back">← All clients</button>
     <div class="row"><h1 class="grow">${esc(clientName(id))}</h1>${intakeChip(c)}</div>
-    <p class="small muted">${[c.intake?.phone||c.qest?.phone||c.phone, c.intake?.email||c.qest?.email||c.email].filter(Boolean).map(esc).join(" · ") || "No contact details yet"}</p>
-    <div class="subtabs" role="tablist">${subs.map(([k,l])=>`<button type="button" role="tab" data-sub="${k}" aria-current="${S.sub===k}">${l}</button>`).join("")}</div>
+    <div class="row" style="gap:8px"><p class="small muted grow">${[c.intake?.phone||c.qest?.phone||c.phone, c.intake?.email||c.qest?.email||c.email].filter(Boolean).map(esc).join(" · ") || "No contact details yet"}</p>${clientEmail(id)&&!(S.compose&&S.compose.id===id)?`<button type="button" class="small" data-act="cmstart">Email</button>`:""}</div>
+    ${composePanel(id)}
+    <div class="subtabs" role="tablist">${subs.map(([k,l])=>`<button type="button" role="tab" data-sub="${k}" aria-current="${S.sub===k}">${l}${k==="messages"&&msgUnreadDawn(c)?'<span class="dot" aria-label="new"></span>':""}</button>`).join("")}</div>
     ${body}
   </div>`;
 }
@@ -806,6 +890,7 @@ function detailsPane(id,c){
       return `<div class="small muted stack" style="gap:6px"><span>Scan reminders for ${esc(fmtDate(c.nextVisit))}: week before ${st("week")} · drops finished ${st("day")}. They appear at the top of your client list when due.</span>
         <div class="row" style="gap:6px"><button type="button" class="small" data-remind="${esc(id)}" data-kind="week">Send week-before reminder now</button><button type="button" class="small" data-remind="${esc(id)}" data-kind="day">Send drops-finished reminder now</button></div></div>`; })() : ""}
     ${mine ? connect : id.includes("~") ? `<p class="small muted">Part of a family sign-in${clientEmail(id)?` (${esc(clientEmail(id))})`:""}${(()=>{ const sib=Object.keys(S.clients).filter(x=>x!==id && x.split("~")[0]===id.split("~")[0]); return sib.length?` with ${sib.map(x=>esc(clientName(x))).join(", ")}`:""; })()}. Plans and reports you share appear when that person signs in and chooses ${esc(nm)}.</p>` : `<p class="small muted">This client has a portal account. Plans you mark “Shared” appear for them when they open the portal.</p>`}
+    ${emailHistory(id)}
     <div class="formsec stack"><h3>Remove client</h3>
       ${S.confirmDel===id ? `<p class="small">This deletes the record, intake and private notes. Treatment plans are deleted too.</p><div class="row"><button type="button" class="danger" data-act="delclient">Yes, delete ${esc(clientName(id))}</button><button type="button" data-act="canceldel">Keep</button></div>` : `<div class="row"><button type="button" class="danger" data-act="askdel">Delete client…</button></div>`}
     </div></div>`;
@@ -898,6 +983,11 @@ function ensureClientSubs(id){
       S.plans = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
       S.plansLoaded = true; if(S.tab==="clients" && S.sel===id && S.sub==="plans") render();
     }, e=>console.warn(e));
+  }
+  if(S.msgsFor!==id){
+    S.msgsUnsub && S.msgsUnsub(); S.msgsFor=id; S.msgs=[]; S.msgsLoaded=false;
+    S.msgsUnsub = S.db.collection(`clients/${id}/messages`).onSnapshot(snap => { S.msgs = snap.docs.map(d=>({id:d.id,...d.data()})); S.msgsLoaded=true;
+      if(S.tab==="clients" && S.sel===id && S.sub==="messages" && !document.activeElement?.closest?.("#msg-box, #compose")){ render(); msgScroll(); } }, e=>{ console.warn(e); S.msgsLoaded=true; });
   }
   if(S.notesFor!==id){
     S.notesUnsub && S.notesUnsub(); S.notesFor=id; S.notes="";
@@ -1025,6 +1115,9 @@ function bindClients(){
   if($("#remlist")) ensureRemedyList();
   app.querySelectorAll("[data-remname]").forEach(inp => inp.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); document.querySelector(`[data-act="addremedy"][data-i="${inp.dataset.remname}"]`)?.click(); } });
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
+  const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
+  const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
+      subject: t ? fillTemplate(t.subject, S.sel) : S.compose.subject, body: t ? fillTemplate(t.body, S.sel) : `Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
   app.querySelectorAll("[data-formsel]").forEach(sel => sel.onchange = () => {
@@ -1035,7 +1128,7 @@ function bindClients(){
     ep.target=null; ep.dirty=true; renderClients(); });
   ["pl-title","pl-date","pl-status","pl-instr","pl-extra"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
   app.onclick = async e => {
-    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub="qest"; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
@@ -1048,7 +1141,13 @@ function bindClients(){
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
-      if(act==="back"){ S.sel=null; renderClients(); }
+      if(act==="back"){ S.sel=null; S.compose=null; renderClients(); }
+      else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent. They'll get an email about it.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
+      else if(act==="msgmail"){ msgHeadsUp(S.sel); }
+      else if(act==="cmstart"){ S.compose={id:S.sel, tpl:"", subject:"", body:`Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); $("#cm-subj")?.focus(); }
+      else if(act==="cmcancel"){ S.compose=null; renderClients(); }
+      else if(act==="cmopen"){ const subj=$("#cm-subj").value.trim(), body=$("#cm-body").value; if(!subj){ toast("Add a subject first"); return; } const id=S.sel, kind=S.compose?.tpl?"template":"email";
+        openMail(clientEmail(id), subj, body); S.compose=null; await logEmail(id, subj, kind); renderClients(); toast("Opened in Mail. Noted in this client's email history."); }
       else if(act==="newclient"){ const id=rid("c-"); await S.db.doc("clients/"+id).set({name:"New client", createdAt:new Date().toISOString(), intake:{}}); S.sel=id; S.sub="details"; renderClients(); setTimeout(()=>{const n=$("#d-name"); if(n){n.value="";n.focus();}},50); }
       else if(act==="jotfill"){ const txt=$("#jot-text").value; const kind=a.dataset.kind; const def=kind==="qest"?QEST:INTAKE; const r=jotParse(txt, def);
         if(r.count){ const key=kind==="qest"?"qest":"intake"; const cur=S.clients[S.sel]?.[key]||{}; const merged={...cur, ...r.vals}; const patch={[key]:merged, [key+"Status"]:"submitted", [key+"UpdatedAt"]:new Date().toISOString()};
@@ -1093,7 +1192,7 @@ function bindClients(){
       else if(act==="cancelmerge"){ S.confirmMerge=null; renderClients(); }
       else if(act==="askdel"){ S.confirmDel=S.sel; renderClients(); }
       else if(act==="canceldel"){ S.confirmDel=null; renderClients(); }
-      else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
+      else if(act==="delclient"){ const id=S.sel; for(const p of S.plans) await S.db.doc(`clients/${id}/plans/${p.id}`).delete(); for(const m of (S.msgsFor===id?S.msgs:[])) await S.db.doc(`clients/${id}/messages/${m.id}`).delete(); await S.db.doc("notes/"+id).delete(); await S.db.doc("clients/"+id).delete(); S.sel=null; S.confirmDel=null; if(S.editPlan?.clientId===id) S.editPlan=null; toast("Client deleted"); }
       else if(act==="merge"){ const cm=S.confirmMerge; if(!cm || cm.from!==S.sel) return; a.disabled=true; await mergeClient(cm.from, cm.to); }
       else if(act==="newscan"){ a.disabled=true; try{ await newScan(S.sel); }catch(err){ console.warn(err); toast("Couldn't start the session. Try again."); a.disabled=false; } }
       else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",form:"wet",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
@@ -2702,6 +2801,23 @@ function narayaniHtml(){
 }
 
 /* ---------- Settings ---------- */
+function templatesSection(){
+  const tpls=S.settings.emailTemplates||[], ed=S.tplEdit;
+  const editor = ed ? `<div class="stack" id="tpl-editor" style="gap:8px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
+      <label class="field"><span>Template name (only you see this)</span><input id="tp-name" value="${esc(ed.name||"")}" placeholder="e.g. Appointment confirmation"></label>
+      <label class="field"><span>Subject</span><input id="tp-subj" value="${esc(ed.subject||"")}"></label>
+      <label class="field"><span>Message</span><textarea id="tp-body" style="min-height:180px">${esc(ed.body||"")}</textarea></label>
+      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> next appointment date, <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature.</p>
+      <div class="row"><button type="button" class="primary" data-act="tplsave">Save template</button><button type="button" data-act="tplcancel">Cancel</button></div></div>` : "";
+  return `<div class="formsec stack">
+      <h3>Email templates</h3>
+      <p class="small muted">Emails you send often. On a client's record, press <b>Email</b> and choose one; it opens in your Mail app with their details filled in.</p>
+      ${tpls.length?`<div class="stack" style="gap:6px">${tpls.map(t=>`<div class="row" style="gap:6px"><span class="grow"><b>${esc(t.name||"Untitled")}</b> <span class="small muted">· ${esc(t.subject||"")}</span></span>
+        <button type="button" class="small" data-tpledit="${esc(t.id)}">Edit</button>${S.tplDel===t.id?`<button type="button" class="small danger" data-tpldel="${esc(t.id)}">Yes, delete</button>`:`<button type="button" class="ghost small" data-tplaskdel="${esc(t.id)}">Delete</button>`}</div>`).join("")}</div>`
+        :`<p class="small muted">No templates yet.</p>`}
+      ${editor || `<div><button type="button" data-act="tplnew">New template</button></div>`}
+    </div>`;
+}
 function renderSettings(){
   $("#app").innerHTML = `<div class="sheet stack" style="max-width:760px">
     <h1>Settings</h1>
@@ -2709,6 +2825,7 @@ function renderSettings(){
     <label class="field"><span>Scan Analyzer (QCIS) chat link</span><input id="st-qcis" type="url" placeholder="https://claude.ai/new" value="${esc(S.settings.qcisUrl||"")}"></label>
     <p class="small muted" style="margin-top:-6px">Where “Analyze with QCIS” opens. Leave blank for a new Claude chat, or paste the link of the Claude project you use for scan analysis.</p>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
+    ${templatesSection()}
     <div class="formsec stack">
       <h3>Inviting clients</h3>
       <p class="small">Send clients the portal address. They type their email, open the sign-in link we email them, and they're in, with no password and no account to set up.</p>
@@ -2737,7 +2854,17 @@ function renderSettings(){
       await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary();
       Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, bk:{}, remSrc:{}, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
-  $("#app").onclick = async e => { const a=e.target.closest("[data-act]");
+  $("#app").onclick = async e => {
+    const te=e.target.closest("[data-tpledit]"); if(te){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===te.dataset.tpledit); if(t){ S.tplEdit={...t}; S.tplDel=null; renderSettings(); $("#tp-name")?.focus(); } return; }
+    const ta=e.target.closest("[data-tplaskdel]"); if(ta){ S.tplDel=ta.dataset.tplaskdel; renderSettings(); return; }
+    const td=e.target.closest("[data-tpldel]"); if(td){ const list=(S.settings.emailTemplates||[]).filter(x=>x.id!==td.dataset.tpldel); try{ await S.db.doc("settings/practice").update({emailTemplates:list}); S.settings.emailTemplates=list; S.tplDel=null; renderSettings(); toast("Template deleted"); }catch(err){ toast("That didn't save. Try again."); } return; }
+    const a=e.target.closest("[data-act]");
+    if(a?.dataset.act==="tplnew"){ S.tplEdit={id:"", name:"", subject:"", body:"Hi {first},\n\n\n\n{signature}"}; S.tplDel=null; renderSettings(); $("#tp-name")?.focus(); return; }
+    if(a?.dataset.act==="tplcancel"){ S.tplEdit=null; renderSettings(); return; }
+    if(a?.dataset.act==="tplsave"){ const t={id:S.tplEdit?.id||genId(), name:$("#tp-name").value.trim(), subject:$("#tp-subj").value.trim(), body:$("#tp-body").value};
+      if(!t.name && !t.subject){ toast("Give the template a name or subject"); return; }
+      const list=(S.settings.emailTemplates||[]).slice(); const i=list.findIndex(x=>x.id===t.id); if(i>=0) list[i]=t; else list.push(t);
+      try{ a.disabled=true; await S.db.doc("settings/practice").update({emailTemplates:list}); S.settings.emailTemplates=list; S.tplEdit=null; a.blur(); renderSettings(); toast("Template saved"); }catch(err){ a.disabled=false; toast("That didn't save. Try again."); } return; }
     if(a?.dataset.act==="setpw"){ const v=$("#pw-new").value; if(v.length<8){ toast("Use at least 8 characters"); return; } a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false; if(error) toast("Couldn't save the password: "+error.message); else { $("#pw-new").value=""; toast("Password saved"); } return; }
     if(a?.dataset.act==="savesettings"){ try{ await S.db.doc("settings/practice").update({instructions:$("#st-instr").value, qcisUrl:($("#st-qcis")?.value||"").trim()}); toast("Settings saved"); }catch(err){ toast("That didn't save. Try again."); } } };
 }
@@ -2755,6 +2882,7 @@ function startClient(){
   S.cview = S.cviewAuto ? "plans" : "forms";
   S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest";
   S.wantNext = h==="#nextscan";
+  if((location.hash||"").toLowerCase()==="#messages"){ S.cviewAuto=false; S.cview="messages"; }
   if(!S.me){ renderClient(); return; }
   S.family = {}; S.familyLoaded = false;
   S.db.collection("clients").onSnapshot(s => {
@@ -2765,7 +2893,7 @@ function startClient(){
     if(clientEditing()) return; renderClient();
   }, e => { console.warn(e); if(!S.who) watchPerson(S.me); });
 }
-const clientEditing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form, #fam-name, #cpw-new");
+const clientEditing = () => document.activeElement?.closest?.("#ci-form, #cs-form, #cf-form, #fam-name, #cpw-new, #cmsg-box");
 /* People on this sign-in: the sign-in's own record (hidden while it's empty and others exist) and each family member. */
 function personName(id){ const c=(S.family||{})[id]||{}; return c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.name || ""; }
 function familyPeople(){
@@ -2777,11 +2905,13 @@ function familyPeople(){
 function watchPerson(id){
   (S.personUnsubs||[]).forEach(u => { try{ u&&u(); }catch(e){} });
   S.who = id; store("wfw.who", id);
+  S.myMsgs = []; S.msgsLoaded = false; S.cmsgDraft = "";
   S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.myImprint = ""; S.myImprintAt = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.qestEdit = false; S.clientWrite = null;
   const editing = clientEditing;
   S.personUnsubs = [
     S.db.doc("clients/"+id).onSnapshot(s => { if(S.who!==id) return; S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); }),
     S.db.collection("clients/"+id+"/plans").onSnapshot(s => { if(S.who!==id) return; S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e)),
+    S.db.collection(`clients/${id}/messages`).onSnapshot(s => { if(S.who!==id) return; S.myMsgs = s.docs.map(d=>({id:d.id,...d.data()})); S.msgsLoaded = true; if(editing()) return; renderClient(); }, e=>{ console.warn(e); S.msgsLoaded = true; }),
     S.db.collection(`clients/${id}/files`).onSnapshot(s => { if(S.who!==id) return; S.myFiles = s.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.status==="shared"); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.doc(`clients/${id}/media/photo`).onSnapshot(s => { if(S.who!==id) return; S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.doc(`clients/${id}/media/imprint`).onSnapshot(s => { if(S.who!==id) return; const d=s.exists?s.data():{}; S.myImprint=d.dataUrl||""; S.myImprintAt=d.updatedAt||""; paintImprint(); }, e=>console.warn(e)),
@@ -2802,11 +2932,18 @@ function renderClient(){
   const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.followup?.fullName || S.myRec?.name || "";
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
-  t.innerHTML = [["plans","My treatment plans"],["reports","My reports"],["forms","My forms"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}</button>`).join("");
+  t.innerHTML = [["plans","My treatment plans"],["reports","My reports"],["forms","My forms"],["messages","Messages"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${l}${k==="messages"&&msgUnreadClient(S.myRec)?'<span class="dot" aria-label="new"></span>':""}</button>`).join("");
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
-  if(S.cview==="reports"){
+  if(S.cview==="messages"){
+    const fam = familyPeople().length > 1;
+    body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. For anything urgent, please call ${esc(PRACTICE.phone)}.</p></div>
+      ${S.msgsLoaded ? msgThread(S.myMsgs||[], "client", "Dawn") : `<div class="empty small">Loading messages…</div>`}
+      <label class="field"><span>Your message</span><textarea id="cmsg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write to Dawn">${esc(S.cmsgDraft||"")}</textarea></label>
+      <div class="row"><button type="button" class="primary" data-act="cmsgsend">Send to Dawn</button></div></div>`;
+    if(msgUnreadClient(S.myRec) && S.cmsgSeenMark!==S.myRec.lastMsg.at){ S.cmsgSeenMark=S.myRec.lastMsg.at; const who=S.who; setTimeout(()=>S.db.doc("clients/"+who).update({msgSeenByClient:new Date().toISOString()}).catch(e=>console.warn(e)),400); }
+  } else if(S.cview==="reports"){
     const fl=(S.myFiles||[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
     body = `<div class="sheet stack"><h2>My reports</h2><p class="small muted">Your Qest4 and wellness reports from Dawn. Tap Open to view or save a copy.</p>
       ${fl.length?fl.map(f=>fileRow(f,false)).join(""):`<div class="empty small">No reports yet. Dawn adds them here after your session.</div>`}</div>`;
@@ -2870,6 +3007,7 @@ function renderClient(){
     <div class="sheet stack"><h3>Questions?</h3>${contactBlock()}</div>
   </div>`;
   bindPhoto("cp", () => S.who);
+  const cmb=$("#cmsg-box"); if(cmb){ msgScroll(); cmb.oninput=()=>{ S.cmsgDraft=cmb.value; }; }
   const fn=$("#fam-name"); if(fn){ fn.focus(); fn.onkeydown=e=>{ if(e.key==="Enter") document.querySelector('[data-act="famadd"]')?.click(); }; }
   $("#app").onclick = async e => {
     const fo=e.target.closest("[data-fopen]"); if(fo){ const f=(S.myFiles||[]).find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
@@ -2880,6 +3018,7 @@ function renderClient(){
     const fm=e.target.closest("[data-form]"); if(fm){ S.form=fm.dataset.form; renderClient(); return; }
     const a=e.target.closest("[data-act]"); if(!a) return;
     const act=a.dataset.act;
+    if(act==="cmsgsend"){ const box=$("#cmsg-box"); a.disabled=true; if(await sendMsg(S.who, "client", box.value)){ S.cmsgDraft=""; box.value=""; box.blur(); toast("Sent to Dawn"); renderClient(); } a.disabled=false; return; }
     if(act==="csetpw"){ const v=$("#cpw-new")?.value||""; if(v.length<8){ toast("Please use at least 8 characters"); return; }
       a.disabled=true; const { error } = await SB.auth.updateUser({ password:v }); a.disabled=false;
       if(error){ console.warn(error); toast(/different from the old/i.test(error.message||"") ? "That's already your password" : "The password didn't save. Please try again."); return; }
