@@ -88,6 +88,7 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .prog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}.prog-chart{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}.prog-chart figcaption{margin-bottom:4px}.prog-chart svg{width:100%;height:auto;display:block;margin-top:6px}
 .prog-chart .grid{stroke:var(--line);stroke-width:1}.prog-chart .ax{font-size:11px;fill:var(--muted)}.prog-chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.prog-chart .dot{fill:var(--accent);stroke:var(--surface);stroke-width:2}.prog-chart .hit{fill:transparent}.prog-chart .pt:hover .dot{r:6}
 .prog-up{color:#2f7d4f}.prog-down{color:#a8562a}.dash-wide{grid-column:1/-1}
+.dash-link{width:100%;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 0;font:inherit;color:inherit;cursor:pointer;text-align:left}.dash-link:hover b{color:var(--accent)}.dash-link:last-child{border-bottom:0}
 .inv-tab{width:100%;border-collapse:collapse;font-size:14px}.inv-tab th,.inv-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.inv-tab th{font-weight:600;color:var(--muted);font-size:12px}.inv-tab .num{text-align:right;white-space:nowrap}.inv-tab tfoot td{border:0;padding:3px 4px}
 .inv-line{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr) minmax(110px,1fr) 64px 92px auto auto;gap:6px;align-items:center}
 @media (max-width:760px){.inv-line{grid-template-columns:1fr 1fr}.inv-line .li-desc{grid-column:1/-1}}
@@ -590,15 +591,16 @@ function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","c
    ========================================================= */
 function startPractitioner(){
   $("#sub").textContent = "Practitioner workspace";
-  S.tab = recall("wfw.tab","clients"); S.editPlan = recall("wfw.editPlan", null);
+  S.tab = "home"; S.editPlan = recall("wfw.editPlan", null);
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
+    resolveNames(); renderTabs(); if(S.tab==="home") renderHome(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
   }, e => console.warn(e));
   S.db.collection("invoices").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.inv = m; S.invLoaded = true;
     if(S.tab==="billing") renderBilling();
+    if(S.tab==="home") renderHome();
     if(S.tab==="clients" && S.sel && S.sub==="billing" && !document.activeElement?.closest?.("#inv-form, #pay-form")) renderClients();
   }, e => { console.warn(e); S.invLoaded = true; });
   S.db.collection("custom").onSnapshot(snap => {
@@ -1380,9 +1382,60 @@ function clientProgressView(){
     ${e.length?`<div class="stack" style="gap:0"><h3>Timeline</h3>${progTimeline(e,true)}</div>`:""}</div>`;
 }
 
+/* ---------- practitioner Home dashboard ---------- */
+function openClientAt(id, sub){
+  S.tab="clients"; store("wfw.tab",S.tab); S.sel=id; S.compose=null; S.apptEdit=null; S.invEdit=null;
+  const rec=S.clients[id];
+  if(!sub){ sub="qest"; if(isNewForm(rec)){ const ls=lastSubmitted(rec); sub = rec.followupSubmittedAt===ls ? "followups" : rec.qestSubmittedAt===ls ? "qest" : "intake"; } }
+  if(isNewForm(rec)) S.db.doc("clients/"+id).update({seenAt:new Date().toISOString()}).catch(()=>{});
+  S.sub=sub; renderTabs(); render(); window.scrollTo(0,0);
+}
+function renderHome(){
+  const t=today(), wk=new Date(t+"T12:00:00"); wk.setDate(wk.getDate()+7); const wkS=wk.toISOString().slice(0,10);
+  const ago=new Date(t+"T12:00:00"); ago.setDate(ago.getDate()-7); const agoS=ago.toISOString().slice(0,10);
+  const ids=Object.keys(S.clients||{}), nm=id=>esc(clientName(id));
+  const row=(id,sub,main,sideHtml)=>`<button type="button" class="dash-row dash-link" data-hopen="${esc(id)}" data-hsub="${esc(sub||"")}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left">${main}</span>${sideHtml||""}</button>`;
+  // this week
+  const week=[]; ids.forEach(id=>upcomingAppts(S.clients[id]).filter(a=>a.date<wkS).forEach(a=>week.push({id,a})));
+  week.sort((x,y)=>(x.a.date+(x.a.time||"")).localeCompare(y.a.date+(y.a.time||"")));
+  const dayLbl=d=>d===t?"Today":new Date(d+"T12:00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+  // shipments
+  const ship=[]; ids.forEach(id=>apptsOf(S.clients[id]).filter(a=>apptDelivery(a)==="ship"&&!a.shippedAt&&a.date<wkS).forEach(a=>ship.push({id,a})));
+  // messages
+  const unread=ids.filter(id=>msgUnreadDawn(S.clients[id])).sort((a,b)=>(S.clients[b].lastMsg?.at||"").localeCompare(S.clients[a].lastMsg?.at||""));
+  // new forms
+  const forms=ids.filter(id=>isNewForm(S.clients[id])).sort((a,b)=>lastSubmitted(S.clients[b]).localeCompare(lastSubmitted(S.clients[a])));
+  const formKind=c=>{ const ls=lastSubmitted(c); return c.followupSubmittedAt===ls?"Follow-up":c.qestSubmittedAt===ls?"Qest4 pre-scan form":"Homeopathy intake"; };
+  // orders + billing
+  const invs=Object.entries(S.inv||{}).map(([id,v])=>({id,...v}));
+  const orders=invs.filter(v=>v.source==="website" && v.status!=="void" && (v.date||"")>=agoS).sort((a,b)=>(b.createdAt||b.date||"").localeCompare(a.createdAt||a.date||""));
+  const open=invs.filter(invOpen), owed=r2(open.reduce((s,v)=>s+invMath(v).bal,0)), overdue=open.filter(v=>invStatus(v)[0]==="Overdue");
+  // date-change requests, scan reminders
+  const asks=ids.filter(id=>S.clients[id].reschedReq), rem=remindersDue();
+  const card=(title, count, body, foot)=>`<section class="dash-card"><div class="head"><h2>${title}</h2>${count?`<span class="count">${count}</span>`:""}</div>${body}${foot||""}</section>`;
+  const empty=s=>`<p class="small muted">${s}</p>`;
+  const cards=[
+    card("This week", week.length, week.length?`<div>${week.slice(0,8).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${esc(dayLbl(a.date))}${a.time?` · ${esc(fmtTime12(a.time))}`:""} · ${esc(apptLabel(a))}</span>`, a.date===t?'<span class="chip acc">Today</span>':"")).join("")}</div>${week.length>8?`<p class="small muted">and ${week.length-8} more</p>`:""}`:empty("Nothing scheduled in the next 7 days."), `<button type="button" class="ghost" data-htab="schedule">Full schedule</button>`),
+    card("Messages", unread.length, unread.length?`<div>${unread.slice(0,6).map(id=>row(id,"messages",`<b>${nm(id)}</b><span class="small muted">${esc(fmtWhen(S.clients[id].lastMsg.at))}</span>`,'<span class="dot" aria-label="unread"></span>')).join("")}</div>`:empty("All caught up."), `<button type="button" class="ghost" data-htab="inbox">All messages</button>`),
+    card("New forms in", forms.length, forms.length?`<div>${forms.slice(0,6).map(id=>row(id,"",`<b>${nm(id)}</b><span class="small muted">${esc(formKind(S.clients[id]))} · ${esc(fmtWhen(lastSubmitted(S.clients[id])))}</span>`,'<span class="chip acc">New</span>')).join("")}</div>`:empty("No new forms since you last looked.")),
+    card("Website orders", orders.length, orders.length?`<div>${orders.slice(0,6).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">${esc(fmtDate(v.date))} · ${esc((v.items||[])[0]?.desc||"Order")}</span>`,`<b>${esc(money(invMath(v).total))}</b>`)).join("")}</div>`:empty("No website orders in the last 7 days.")),
+    card("To ship", ship.length, ship.length?`<div>${ship.slice(0,6).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Scan ${esc(dayLbl(a.date))}</span>`,'<span class="chip acc">To ship</span>')).join("")}</div>`:empty("Nothing waiting to ship this week.")),
+    card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
+      ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
+  ];
+  if(asks.length) cards.splice(1,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
+  if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(S.clients[id].nextVisit))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
+  const hr=new Date().getHours(), hi=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
+  $("#app").innerHTML=`<div class="stack" style="gap:20px;max-width:1180px;margin:0 auto">
+    <div class="dash-hello"><h1>${hi}, Dawn</h1><p class="muted">${esc(new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}))}</p></div>
+    ${!S.clientsLoaded?`<div class="empty">Loading…</div>`:`<div class="dash-grid">${cards.join("")}</div>`}</div>`;
+  $("#app").onclick=e=>{ const o=e.target.closest("[data-hopen]"); if(o){ openClientAt(o.dataset.hopen, o.dataset.hsub||""); return; }
+    const tb=e.target.closest("[data-htab]"); if(tb){ S.tab=tb.dataset.htab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); } };
+}
+
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
-  const tabs = [["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
+  const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
   const unread = Object.values(S.clients||{}).filter(msgUnreadDawn).length, asks = Object.values(S.clients||{}).filter(c=>c.reschedReq).length;
   t.innerHTML = tabs.map(([k,l]) => `<button type="button" data-tab="${k}" aria-current="${S.tab===k}">${icon(k==="inbox"?"messages":k==="schedule"?"calendar":k)}<span>${l}</span>${k==="inbox"&&unread?`<span class="count" aria-label="${unread} unread">${unread}</span>`:""}${k==="schedule"&&asks?`<span class="count" aria-label="${asks} date change requests">${asks}</span>`:""}</button>`).join(""); sideHelp(false);
   t.onclick = e => { const b=e.target.closest("[data-tab]"); if(!b) return; S.tab=b.dataset.tab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); };
@@ -1390,7 +1443,7 @@ function renderTabs(){
 function render(){
   if(!S.prac) return renderClient();
   store("wfw.editPlan", S.editPlan||undefined);
-  (({clients:renderClients, schedule:renderSchedule, inbox:renderInbox, billing:renderBilling, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
+  (({clients:renderClients, home:renderHome, schedule:renderSchedule, inbox:renderInbox, billing:renderBilling, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
 }
 
 /* ---------- working-plan banner (shared by library & combos) ---------- */
