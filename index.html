@@ -1006,7 +1006,10 @@ function blankInvoice(cid, appt){
   const v={clientId:cid, date:d, due:due.toISOString().slice(0,10), items:[], discount:{label:"", type:"pct", value:""}, status:"draft", payments:[], note:""};
   if(appt){ v.apptId=appt.id; const price=billSet().items||[];
     const kinds=[appt.type]; if(appt.type==="scan" && apptDelivery(appt)==="ship") kinds.push("shipping");
-    kinds.forEach(k=>{ const p=price.find(x=>x.kind===k); v.items.push(p?{kind:k, desc:p.name, qty:1, price:+p.price||0}:{kind:k, desc:(APPT_TYPES[k]||BILL_KINDS[k])+(k===appt.type?` · ${fmtDate(appt.date)}`:""), qty:1, price:0}); });
+    const dl=apptDelivery(appt);
+    const scanPick = () => { const sc=price.filter(x=>x.kind==="scan"); return dl==="ship" ? sc.find(x=>/mail|ship/i.test(x.name)) : dl==="none" ? sc.find(x=>/only/i.test(x.name)) : sc.find(x=>!/mail|ship|only/i.test(x.name)) || sc[0]; };
+    if(appt.type==="scan"){ const sp=scanPick(); if(sp && /mail|ship/i.test(sp.name)) kinds.pop(); }
+    kinds.forEach(k=>{ const p=k==="scan"?scanPick():price.find(x=>x.kind===k); v.items.push(p?{kind:k, desc:p.name, qty:1, price:+p.price||0}:{kind:k, desc:(APPT_TYPES[k]||BILL_KINDS[k])+(k===appt.type?` · ${fmtDate(appt.date)}`:""), qty:1, price:0}); });
   }
   if(!v.items.length) v.items.push({kind:"other", desc:"", qty:1, price:0});
   return v;
