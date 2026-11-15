@@ -664,7 +664,7 @@ async function logEmail(id, subject, kind){
   try{ const c=S.clients?.[id]||{}; const log=[{at:new Date().toISOString(), subject:String(subject||"").slice(0,200), kind}, ...(c.emailLog||[])].slice(0,50);
     await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
 }
-const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up"};
+const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", auto:"New-message email (automatic)"};
 function emailSign(){ return `With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`; }
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);

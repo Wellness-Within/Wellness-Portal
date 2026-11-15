@@ -9,5 +9,6 @@ The client portal for Dawn Spain, PHom (Wellness From Within). A static site hos
 - `link.sql` — run once: connects records Dawn creates to a client's sign-in by email, and the safe "connect by hand" merge
 - `family.sql` — run once after link.sql: one sign-in can hold several people (a parent and their children)
 - `messages.sql` — run once after family.sql: messages between Dawn and each client (one conversation per person), with a ping to Dawn when a client writes
+- `auto-email.sql` + `supabase/functions/message-email` — automatic "you have a new message" emails to clients, sent from the portal mailbox (never the message itself)
 - `data/rep-kent.json` — Repertorium Publicum (Kent-based) from the OOREP open data, GPL v3
 - `data/mm-boericke.json` — Boericke's Pocket Manual of Homoeopathic Materia Medica (1906, public domain), via OOREP
