@@ -85,6 +85,9 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .date-tile{width:72px;height:76px;flex:none;border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg)}
 .date-tile span{font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--muted)}.date-tile b{font-family:var(--f-display);font-weight:400;font-size:30px;line-height:1}
 .num-dot{width:32px;height:32px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.prog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}.prog-chart{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}.prog-chart figcaption{margin-bottom:4px}.prog-chart svg{width:100%;height:auto;display:block;margin-top:6px}
+.prog-chart .grid{stroke:var(--line);stroke-width:1}.prog-chart .ax{font-size:11px;fill:var(--muted)}.prog-chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.prog-chart .dot{fill:var(--accent);stroke:var(--surface);stroke-width:2}.prog-chart .hit{fill:transparent}.prog-chart .pt:hover .dot{r:6}
+.prog-up{color:#2f7d4f}.prog-down{color:#a8562a}.dash-wide{grid-column:1/-1}
 .inv-tab{width:100%;border-collapse:collapse;font-size:14px}.inv-tab th,.inv-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.inv-tab th{font-weight:600;color:var(--muted);font-size:12px}.inv-tab .num{text-align:right;white-space:nowrap}.inv-tab tfoot td{border:0;padding:3px 4px}
 .inv-line{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr) minmax(110px,1fr) 64px 92px auto auto;gap:6px;align-items:center}
 @media (max-width:760px){.inv-line{grid-template-columns:1fr 1fr}.inv-line .li-desc{grid-column:1/-1}}
@@ -375,6 +378,14 @@ const QEST = [
     {id:"shipCity",label:"Shipping city",type:"text",showIf:["shipDifferent",true]},{id:"shipState",label:"Shipping state",type:"text",showIf:["shipDifferent",true]},{id:"shipZip",label:"Shipping ZIP code",type:"text",showIf:["shipDifferent",true]}]},
   {sec:"What would you most like help with?", note:"Most important first.", fields:[
     {id:"help1",jot:"Most important thing you would like help with",label:"1.",type:"textarea",wide:true},{id:"help2",jot:"Second thing you would like help with",label:"2.",type:"textarea",wide:true},{id:"help3",jot:"Third thing you would like help with",label:"3.",type:"textarea",wide:true}]},
+  {sec:"How you're doing right now", note:"Rate each from 1 to 10. These are added to your progress chart so you and Dawn can see how things change from scan to scan. Skip any that don't apply.", fields:[
+    {id:"help1Rate",label:"How much your #1 concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
+    {id:"help2Rate",label:"How much your #2 concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
+    {id:"help3Rate",label:"How much your #3 concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
+    {id:"energy",label:"Energy (1 = very low, 10 = great)",type:"scale"},
+    {id:"sleep",label:"Sleep (1 = very poor, 10 = great)",type:"scale"},
+    {id:"mood",label:"Mood (1 = very low, 10 = great)",type:"scale"},
+    {id:"stress",label:"Stress (1 = very calm, 10 = very stressed)",type:"scale"}]},
   {sec:"Areas where you'd like support", note:"Choose any that apply.", fields:[
     {id:"areas",jot:"Areas where you would like support",label:"Areas of support",type:"multi",options:AREAS},
     {id:"areasOther",jot:"Other areas of support",label:"Other",type:"text",wide:true}]},
@@ -398,6 +409,10 @@ const FOLLOWUP = [
   {sec:"Since your last visit", note:"Short answers are fine. Dawn will go through the details with you in your session.", fields:[
     {id:"overall",label:"Overall, how are you feeling compared with your last visit?",type:"choice",options:["Much better","A little better","About the same","A little worse","Much worse"]},
     {id:"mainNow",label:"How much your main concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
+    {id:"energy",label:"Energy (1 = very low, 10 = great)",type:"scale"},
+    {id:"sleep",label:"Sleep (1 = very poor, 10 = great)",type:"scale"},
+    {id:"mood",label:"Mood (1 = very low, 10 = great)",type:"scale"},
+    {id:"stress",label:"Stress (1 = very calm, 10 = very stressed)",type:"scale"},
     {id:"changes",label:"What has changed since your last visit?",type:"textarea",wide:true,hint:"Better, worse, different, or anything you've noticed"},
     {id:"remedies",label:"Which remedies have you been taking, and how often?",type:"textarea",wide:true},
     {id:"response",label:"How did you feel after starting them?",type:"textarea",wide:true,hint:"Did anything get stronger for a short time and then ease? Any changes in sleep, energy or mood?"},
@@ -579,7 +594,7 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form")) render();
+    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
   }, e => console.warn(e));
   S.db.collection("invoices").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.inv = m; S.invLoaded = true;
@@ -688,6 +703,7 @@ const ICONS = {
   plans:'<path d="M10 3h4M11 3v4l-4 6v6a2 2 0 002 2h6a2 2 0 002-2v-6l-4-6V3"/><path d="M7 15h10"/>',
   reports:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 17v-3M12 17v-6M15 17v-2"/>',
   messages:'<path d="M4 5h16v11H9l-5 4z"/>',
+  progress:'<path d="M4 19h16"/><path d="M5 15l4-5 4 3 6-7"/>',
   billing:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h3"/>',
   calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   clients:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18.5 14.8c1.7.8 2.8 2.5 3 5.2"/>',
@@ -1249,6 +1265,121 @@ function clientBillingView(){
     <p class="small muted">Questions about a bill? Send Dawn a message or call ${esc(PRACTICE.phone)}.</p></div>`;
 }
 
+/* ---------- progress: ratings from forms (intake, Qest4 pre-scan, follow-ups) + Dawn's notes at clients/<id>/progress/<pid> ---------- */
+const PROG_MEASURES = [
+  {k:"main",   label:"Main concern",   hint:"how much it affects them · lower is better", low:true},
+  {k:"c2",     label:"Second concern", hint:"lower is better", low:true},
+  {k:"c3",     label:"Third concern",  hint:"lower is better", low:true},
+  {k:"energy", label:"Energy",         hint:"higher is better"},
+  {k:"sleep",  label:"Sleep",          hint:"higher is better"},
+  {k:"mood",   label:"Mood",           hint:"higher is better"},
+  {k:"stress", label:"Stress",         hint:"lower is better", low:true},
+  {k:"dawn",   label:"Dawn's progress rating", hint:"higher is better"},
+];
+const OVERALL_SCORE = {"Much better":5,"A little better":4,"About the same":3,"A little worse":2,"Much worse":1};
+const n10 = v => { const n=+v; return n>=1&&n<=10 ? n : null; };
+/* one entry per form or note: {date, src, vals:{k:n}, texts:{k:"concern text"}, overall, note} */
+function progressEntries(c, qhist, notes, forClient){
+  const out=[]; c=c||{};
+  if(c.intakeSubmittedAt && c.intake){ const f=c.intake; const v={main:n10(f.concern1Sev), stress:n10(f.stressLevel)};
+    out.push({date:c.intakeSubmittedAt, src:"Homeopathy intake", vals:v, texts:{main:f.concern1||f.mainConcern||""}}); }
+  const qs=(qhist||[]).slice(); if(!qs.length && c.qestSubmittedAt && c.qest) qs.push({form:c.qest, submittedAt:c.qestSubmittedAt});
+  qs.forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Qest4 pre-scan form",
+    vals:{main:n10(f.help1Rate), c2:n10(f.help2Rate), c3:n10(f.help3Rate), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)},
+    texts:{main:f.help1||"", c2:f.help2||"", c3:f.help3||""}, note:f.sinceLast||""}); });
+  (c.followupHistory||[]).forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Follow-up",
+    vals:{main:n10(f.mainNow), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, overall:f.overall||"", note:f.changes||""}); });
+  (notes||[]).filter(p=>!forClient||p.shared).forEach(p=>out.push({date:p.date||p.at, src:"Dawn's note", vals:{dawn:n10(p.rating)}, note:p.note||"", id:p.id, shared:!!p.shared}));
+  return out.filter(e=>e.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+function progChart(m, pts){
+  // single series, 1–10 scale; pts: [{date, v, text}]
+  const W=320, H=150, L=26, R=10, T=12, B=26, iw=W-L-R, ih=H-T-B;
+  const t=pts.map(p=>Date.parse(String(p.date).slice(0,10)+"T12:00:00")); const t0=Math.min(...t), t1=Math.max(...t);
+  const x=i=> pts.length===1 ? L+iw/2 : L+(t1===t0 ? i/(pts.length-1) : (t[i]-t0)/(t1-t0))*iw;
+  const y=v=> T+ih-(v-1)/9*ih;
+  const line=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
+  const first=pts[0], last=pts[pts.length-1], d=last.v-first.v;
+  const better = pts.length>1 && d!==0 ? (m.low ? d<0 : d>0) : null;
+  const fmt=s=>new Date(String(s).slice(0,10)+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"});
+  return `<figure class="prog-chart">
+    <figcaption><b>${esc(m.label)}</b> <span class="small muted">${esc(m.hint)}</span></figcaption>
+    <div class="row" style="gap:10px;align-items:baseline"><b style="font-size:22px">${last.v}</b><span class="small muted">of 10 · ${esc(fmt(last.date))}</span>
+      ${better===null?"":`<span class="small ${better?"prog-up":"prog-down"}">${better?"▲ better":"▼ harder"} than ${esc(fmt(first.date))} (${first.v})</span>`}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(m.label)}: ${pts.map(p=>`${fmt(p.date)} ${p.v}`).join(", ")}">
+      ${[1,5,10].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}</text>`).join("")}
+      ${pts.length>1?`<path d="${line}" class="ln"/>`:""}
+      ${pts.map((p,i)=>`<g class="pt"><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="12" class="hit"/><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4.5" class="dot"/><title>${esc(fmt(p.date))}: ${p.v} of 10 · ${esc(p.src)}${p.text?" · "+esc(p.text):""}</title></g>`).join("")}
+      <text x="${L}" y="${H-6}" class="ax">${esc(fmt(first.date))}</text>${pts.length>1?`<text x="${W-R}" y="${H-6}" text-anchor="end" class="ax">${esc(fmt(last.date))}</text>`:""}
+    </svg></figure>`;
+}
+function progCharts(entries, keys){
+  return PROG_MEASURES.filter(m=>!keys||keys.includes(m.k)).map(m=>{ const pts=entries.filter(e=>e.vals&&e.vals[m.k]!=null).map(e=>({date:e.date, v:e.vals[m.k], src:e.src, text:(e.texts||{})[m.k]||""}));
+    return pts.length ? progChart(m, pts) : ""; }).join("");
+}
+function progTimeline(entries, forClient){
+  const lab={main:"Main concern",c2:"2nd concern",c3:"3rd concern",energy:"Energy",sleep:"Sleep",mood:"Mood",stress:"Stress",dawn:forClient?"Dawn's rating":"Your rating"};
+  return entries.slice().reverse().map(e=>{ const chips=Object.entries(e.vals||{}).filter(([,v])=>v!=null).map(([k,v])=>`<span class="chip">${esc(lab[k]||k)} ${v}</span>`).join("");
+    const concerns=["main","c2","c3"].map(k=>(e.texts||{})[k]).filter(Boolean);
+    return `<div class="dash-row" style="align-items:flex-start"><div class="stack" style="gap:4px;min-width:0;flex:1">
+      <div class="row" style="gap:8px"><b>${esc(fmtDate(String(e.date).slice(0,10)))}</b><span class="small muted">${esc(forClient&&e.src==="Dawn's note"?"Note from Dawn":e.src)}</span>${!forClient&&e.src==="Dawn's note"?(e.shared?'<span class="chip ok">Client sees this</span>':'<span class="chip">Private</span>'):""}</div>
+      ${chips?`<div class="row" style="gap:4px;flex-wrap:wrap">${chips}</div>`:""}
+      ${e.overall?`<span class="small">Overall: <b>${esc(e.overall)}</b></span>`:""}
+      ${concerns.length?`<span class="small muted">Concerns: ${concerns.map((t,i)=>`${i+1}. ${esc(t)}`).join(" · ")}</span>`:""}
+      ${e.note?`<span class="small" style="white-space:pre-line">${esc(e.note)}</span>`:""}</div>
+      ${!forClient&&e.src==="Dawn's note"?`<button type="button" class="ghost small" data-progedit="${esc(e.id)}">Edit</button>`:""}</div>`; }).join("");
+}
+/* practitioner: Progress tab */
+function progressPane(id){
+  const c=S.clients[id]||{}, notes=S.progFor===id?S.prog:[], qh=S.qhistFor===id?S.qhist:[];
+  const entries=progressEntries(c, qh, notes, false), ed=S.progEdit&&S.progEdit.cid===id?S.progEdit:null;
+  const charts=progCharts(entries);
+  const p=ed?ed.p:null;
+  return `<div class="stack">
+    <div class="row"><p class="grow small muted">Ratings come from their intake, Qest4 pre-scan forms and follow-ups. Add your own note after a scan or consult, especially when they didn't send a form.</p>
+      ${ed?"":`<button type="button" class="primary" data-act="prognew">Add progress note</button>`}</div>
+    ${ed?`<div class="formsec stack" id="prog-form" style="gap:10px">
+      <h3>${ed.isNew?"New progress note":"Edit progress note"}</h3>
+      <div class="grid2"><label class="field"><span>Date</span><input id="pg-date" type="date" value="${esc(p.date||today())}"></label>
+        <label class="field"><span>Your progress rating (optional)</span><select id="pg-rate"><option value="">No rating</option>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${+p.rating===n?"selected":""}>${n}${n===1?" · much worse":n===5?" · about the same":n===10?" · much improved":""}</option>`).join("")}</select></label></div>
+      <label class="field"><span>Note</span><textarea id="pg-note" style="min-height:90px" placeholder="What changed, what you noticed in the scan, what's next">${esc(p.note||"")}</textarea></label>
+      <label class="check"><input type="checkbox" id="pg-share" ${p.shared?"checked":""}><span>Show this note and rating to ${esc(clientFirst(id)||"the client")} in their portal</span></label>
+      <div class="row"><button type="button" class="primary" data-act="progsave">Save note</button><button type="button" data-act="progcancel">Cancel</button><span class="grow"></span>
+        ${ed.isNew?"":S.progDel?`<button type="button" class="danger small" data-act="progdel">Yes, delete</button>`:`<button type="button" class="ghost small" data-act="progaskdel">Delete note</button>`}</div></div>`:""}
+    ${charts?`<div class="prog-grid">${charts}</div>`:`<div class="empty small">No ratings yet. They appear once ${esc(clientFirst(id)||"this client")} sends a form with ratings, or when you add a note with a rating.</div>`}
+    ${entries.length?`<div class="formsec stack" style="gap:0"><h3>Timeline</h3>${progTimeline(entries,false)}</div>`:""}
+  </div>`;
+}
+async function progressClick(e){
+  const pe=e.target.closest("[data-progedit]"); if(pe){ const p=(S.prog||[]).find(x=>x.id===pe.dataset.progedit); if(p){ S.progEdit={cid:S.sel, isNew:false, p:{...p}}; S.progDel=false; renderClients(); $("#prog-form")?.scrollIntoView({block:"center"}); } return true; }
+  const a=e.target.closest("[data-act]"); if(!a) return false; const act=a.dataset.act;
+  if(act==="prognew"){ S.progEdit={cid:S.sel, isNew:true, p:{id:genId(), date:today(), rating:"", note:"", shared:false}}; S.progDel=false; renderClients(); $("#pg-note")?.focus(); return true; }
+  if(act==="progcancel"){ S.progEdit=null; renderClients(); return true; }
+  if(act==="progaskdel"){ S.progDel=true; renderClients(); return true; }
+  if(act==="progdel"){ const ed=S.progEdit; try{ await S.db.doc(`clients/${ed.cid}/progress/${ed.p.id}`).delete(); S.progEdit=null; toast("Note deleted"); }catch(e1){ toast("That didn't delete. Please try again."); } renderClients(); return true; }
+  if(act==="progsave"){ const ed=S.progEdit; const p={date:$("#pg-date").value||today(), rating:$("#pg-rate").value?+$("#pg-rate").value:"", note:$("#pg-note").value.trim(), shared:$("#pg-share").checked, at:ed.p.at||new Date().toISOString(), updatedAt:new Date().toISOString(), status:$("#pg-share").checked?"shared":"private"};
+    if(!p.note && !p.rating){ toast("Add a rating or a note"); return true; }
+    a.disabled=true; try{ await S.db.doc(`clients/${ed.cid}/progress/${ed.p.id}`).set(p); S.progEdit=null; toast("Progress note saved"); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); return true; }
+    renderClients(); return true; }
+  return false;
+}
+/* client: Home card + full view */
+function clientProgressCard(){
+  const e=progressEntries(S.myRec, S.myQhist, S.myProg, true); if(!e.some(x=>Object.values(x.vals||{}).some(v=>v!=null))) return "";
+  const charts=progCharts(e, ["main","energy","sleep","mood"]);
+  return `<section class="dash-card dash-wide"><div class="head"><h2>My progress</h2><button type="button" class="ghost" data-cv2="progress">See all</button></div>
+    <p class="small muted">From the ratings in your forms${(S.myProg||[]).length?" and Dawn's notes":""}. Hover or tap a dot for details.</p>
+    <div class="prog-grid">${charts}</div></section>`;
+}
+function clientProgressView(){
+  const e=progressEntries(S.myRec, S.myQhist, S.myProg, true);
+  const charts=progCharts(e);
+  return `<div class="sheet stack"><h2>My progress</h2>
+    <p class="small muted">Each time you fill in a pre-scan or follow-up form, your ratings are added here so you and Dawn can see how things are changing.</p>
+    ${charts?`<div class="prog-grid">${charts}</div>`:`<div class="empty small">Nothing yet. Your ratings appear after your next form.</div>`}
+    ${e.length?`<div class="stack" style="gap:0"><h3>Timeline</h3>${progTimeline(e,true)}</div>`:""}</div>`;
+}
+
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
   const tabs = [["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
@@ -1337,7 +1468,7 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
+  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["progress","Progress"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
@@ -1345,6 +1476,7 @@ function clientDetail(id){
   if(S.sub==="files") body = filesPane(id);
   if(S.sub==="appts") body = apptsPane(id);
   if(S.sub==="billing") body = billingPane(id);
+  if(S.sub==="progress") body = progressPane(id);
   if(S.sub==="messages"){ body = messagesPane(id); if(msgUnreadDawn(c) && S.msgSeenMark!==c.lastMsg.at){ S.msgSeenMark=c.lastMsg.at; setTimeout(()=>S.db.doc("clients/"+id).update({msgSeenByDawn:new Date().toISOString()}).catch(e=>console.warn(e)),400); } }
   if(S.sub==="scans") body = scansPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
@@ -1505,9 +1637,13 @@ function ensureClientSubs(id){
     S.imprintUnsub && S.imprintUnsub(); S.imprintFor=id; S.imprint=""; S.imprintAt="";
     S.imprintUnsub = S.db.doc(`clients/${id}/media/imprint`).onSnapshot(s => { const d=s.exists?s.data():{}; S.imprint=d.dataUrl||""; S.imprintAt=d.updatedAt||""; paintImprint(); }, e=>console.warn(e));
   }
+  if(S.progFor!==id){
+    S.progUnsub && S.progUnsub(); S.progFor=id; S.prog=[];
+    S.progUnsub = S.db.collection(`clients/${id}/progress`).onSnapshot(s => { S.prog = s.docs.map(d=>({id:d.id,...d.data()})); if(S.tab==="clients" && S.sel===id && S.sub==="progress" && !document.activeElement?.closest?.("#prog-form")) render(); }, e=>console.warn(e));
+  }
   if(S.qhistFor!==id){
     S.qhistUnsub && S.qhistUnsub(); S.qhistFor=id; S.qhist=[];
-    S.qhistUnsub = S.db.collection(`clients/${id}/qestForms`).onSnapshot(s => { S.qhist = s.docs.map(d=>d.data()).sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||"")); if(S.tab==="clients" && S.sel===id && S.sub==="qest") render(); }, e=>console.warn(e));
+    S.qhistUnsub = S.db.collection(`clients/${id}/qestForms`).onSnapshot(s => { S.qhist = s.docs.map(d=>d.data()).sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||"")); if(S.tab==="clients" && S.sel===id && (S.sub==="qest"||S.sub==="progress") && !document.activeElement?.closest?.("#prog-form")) render(); }, e=>console.warn(e));
   }
   if(S.filesFor!==id){
     S.filesUnsub && S.filesUnsub(); S.filesFor=id; S.files=[]; S.filesLoaded=false;
@@ -1669,6 +1805,7 @@ function bindClients(){
   bindBilling();
   app.onclick = async e => {
     if(await billingClick(e)) return;
+    if(await progressClick(e)) return;
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
@@ -3460,12 +3597,14 @@ function familyPeople(){
 function watchPerson(id){
   (S.personUnsubs||[]).forEach(u => { try{ u&&u(); }catch(e){} });
   S.who = id; store("wfw.who", id);
-  S.myMsgs = []; S.msgsLoaded = false; S.cmsgDraft = ""; S.myInv = [];
+  S.myMsgs = []; S.msgsLoaded = false; S.cmsgDraft = ""; S.myInv = []; S.myQhist = []; S.myProg = [];
   S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.myImprint = ""; S.myImprintAt = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.qestEdit = false; S.clientWrite = null;
   const editing = clientEditing;
   S.personUnsubs = [
     S.db.doc("clients/"+id).onSnapshot(s => { if(S.who!==id) return; S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); }),
     S.db.collection("clients/"+id+"/plans").onSnapshot(s => { if(S.who!==id) return; S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e)),
+    S.db.collection(`clients/${id}/qestForms`).onSnapshot(s => { if(S.who!==id) return; S.myQhist = s.docs.map(d=>d.data()); if(editing()) return; renderClient(); }, e=>console.warn(e)),
+    S.db.collection(`clients/${id}/progress`).onSnapshot(s => { if(S.who!==id) return; S.myProg = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.shared); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.collection("invoices").onSnapshot(s => { if(S.who!==id) return; S.myInv = s.docs.map(d=>({id:d.id,...d.data()})).filter(v=>v.clientId===id && v.status==="sent"); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.collection(`clients/${id}/messages`).onSnapshot(s => { if(S.who!==id) return; S.myMsgs = s.docs.map(d=>({id:d.id,...d.data()})); S.msgsLoaded = true; if(editing()) return; renderClient(); }, e=>{ console.warn(e); S.msgsLoaded = true; }),
     S.db.collection(`clients/${id}/files`).onSnapshot(s => { if(S.who!==id) return; S.myFiles = s.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.status==="shared"); if(editing()) return; renderClient(); }, e=>console.warn(e)),
@@ -3504,6 +3643,8 @@ function clientHome(first){
         :`<div class="row" style="gap:8px"><button type="button" data-ics="${esc(a.id)}">Add to calendar</button><button type="button" class="ghost" data-resched="${esc(a.id)}">Need a different date?</button></div>`}
       ${r.reschedReq?`<p class="small muted">You asked Dawn for a different date ${esc(fmtWhen(r.reschedReq.at))}. She'll update it here.</p>`:""}
     </section>`); }
+  // progress
+  { const pc=clientProgressCard(); if(pc) cards.push(pc); }
   // reports
   const fl=(S.myFiles||[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
   cards.push(`<section class="dash-card"><div class="head"><h2>My reports</h2>${fl.length?`<button type="button" class="ghost" data-cv2="reports">View all</button>`:""}</div>
@@ -3545,12 +3686,13 @@ function renderClient(){
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
   const cBal = (S.myInv||[]).some(invOpen);
-  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"],...((S.myInv||[]).length||S.cview==="billing"?[["billing","Billing"]]:[])].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${(k==="messages"&&msgUnreadClient(S.myRec))||(k==="billing"&&cBal)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
+  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"],...(progressEntries(S.myRec, S.myQhist, S.myProg, true).some(x=>Object.values(x.vals||{}).some(v=>v!=null))||S.cview==="progress"?[["progress","My progress"]]:[]),...((S.myInv||[]).length||S.cview==="billing"?[["billing","Billing"]]:[])].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${(k==="messages"&&msgUnreadClient(S.myRec))||(k==="billing"&&cBal)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
   if(S.cview==="home"){ body = clientHome(first); }
   else if(S.cview==="billing"){ body = clientBillingView(); }
+  else if(S.cview==="progress"){ body = clientProgressView(); }
   else if(S.cview==="messages"){
     const fam = familyPeople().length > 1;
     body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. Dawn's messages are also emailed to you. For anything urgent, please call ${esc(PRACTICE.phone)}.</p></div>
