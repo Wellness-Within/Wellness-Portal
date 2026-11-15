@@ -3706,7 +3706,7 @@ function clientHome(first){
     </section>`); }
   // reports
   const fl=(S.myFiles||[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
-  cards.push(`<section class="dash-card"><div class="head"><h2>My reports</h2>${fl.length?`<button type="button" class="ghost" data-cv2="reports">View all</button>`:""}</div>
+  if(fl.length) cards.push(`<section class="dash-card"><div class="head"><h2>My reports</h2>${fl.length?`<button type="button" class="ghost" data-cv2="reports">View all</button>`:""}</div>
     ${fl.length?`<div>${fl.slice(0,3).map(f=>`<div class="dash-row"><div style="display:flex;flex-direction:column;min-width:0"><b style="overflow-wrap:anywhere">${esc(f.name||"Report")}</b><span class="small muted">${esc(fmtDate(f.uploadedAt))}</span></div><button type="button" class="small" data-fopen="${esc(f.id)}">Open</button></div>`).join("")}</div>`
       :`<p class="small muted">Dawn adds your Qest4 and wellness reports here after your session.</p>`}</section>`);
   // treatment plan
@@ -3717,7 +3717,6 @@ function clientHome(first){
       <div class="stack" style="gap:10px">${items.slice(0,4).map(b=>`<div class="row" style="gap:12px;flex-wrap:nowrap"><span class="num-dot">${esc(b._n)}</span>
         <div style="display:flex;flex-direction:column;min-width:0"><b>${esc(b._label)}${b.issue?" · "+esc(b.issue):""}</b>${b.freq?`<span class="small muted">${esc(plainFreq(b.freq)||b.freq)}</span>`:""}</div></div>`).join("")}
         ${items.length>4?`<span class="small muted">and ${items.length-4} more</span>`:""}</div></section>`); }
-  else cards.push(`<section class="dash-card"><div class="head"><h2>Your treatment plan</h2></div><p class="small muted">After your session, Dawn adds your treatment plan here.</p></section>`);
   // messages
   const ms=msgSort(S.myMsgs||[]), last=ms[ms.length-1];
   cards.push(`<section class="dash-card"><div class="head"><h2>Messages</h2>${ms.length?`<button type="button" class="ghost" data-cv2="messages">Open</button>`:""}</div>
