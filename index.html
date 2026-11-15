@@ -603,6 +603,7 @@ function startPractitioner(){
     if(S.tab==="home") renderHome();
     if(S.tab==="clients" && S.sel && S.sub==="billing" && !document.activeElement?.closest?.("#inv-form, #pay-form")) renderClients();
   }, e => { console.warn(e); S.invLoaded = true; });
+  S.db.collection("planTemplates").onSnapshot(snap => { S.planTpls = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||"").localeCompare(b.name||"")); if(S.tab==="settings" && !document.activeElement?.closest?.("#auto-set, #bill-set, #tpl-editor")) render(); }, e=>console.warn(e));
   S.db.collection("custom").onSnapshot(snap => {
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
     if(S.tab==="library") render();
@@ -1211,9 +1212,11 @@ function renderBilling(){
       :`<div class="list-pane">${rows.map(v=>{ const [st,cls]=invStatus(v), m=invMath(v); return `<button type="button" class="item" data-billopen="${esc(v.clientId)}" data-inv="${esc(v.id)}">
         <div class="row" style="gap:10px;flex-wrap:nowrap"><div class="grow" style="min-width:0"><b>${esc(clientName(v.clientId))}</b><div class="small muted">#${esc(v.number||"—")} · ${esc(fmtDate(v.date))}${v.due&&invOpen(v)?` · due ${esc(fmtDate(v.due))}`:""}</div></div>
         <b>${esc(money(f==="unpaid"?m.bal:m.total))}</b><span class="chip ${cls}">${st}</span></div></button>`; }).join("")}</div>`}
+    ${S.invLoaded?summarySection():""}
     <p class="small muted">Payment options and your price list are in Settings → Billing.</p>
   </div>`;
-  $("#app").onclick=e=>{ const bf=e.target.closest("[data-bf]"); if(bf){ S.billFilter=bf.dataset.bf; renderBilling(); return; }
+  $("#app").onclick=e=>{ const cv=e.target.closest('[data-act="csvpay"],[data-act="csvinv"]'); if(cv){ cv.dataset.act==="csvpay"?csvPayments():csvInvoices(); return; }
+    const bf=e.target.closest("[data-bf]"); if(bf){ S.billFilter=bf.dataset.bf; renderBilling(); return; }
     const b=e.target.closest("[data-billopen]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.billopen; S.sub="billing"; S.invOpenId=b.dataset.inv; S.invEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
 /* settings: prices and payment options */
@@ -1452,6 +1455,66 @@ function autoMailSection(){
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
 }
+/* ---------- client list filters ---------- */
+function clientLastSeen(c){ const past=apptsOf(c).filter(a=>a.date<=today()).map(a=>a.date); return [lastSubmitted(c||{}).slice(0,10), ...past, (c.createdAt||"").slice(0,10)].filter(Boolean).sort().pop()||""; }
+const CLIENT_FILTERS = {
+  all:["All clients", ()=>true],
+  attention:["New forms or messages", c=>isNewForm(c)||msgUnreadDawn(c)],
+  month:["Scan this month", c=>{ const m=today().slice(0,7); return apptsOf(c).some(a=>a.type==="scan" && a.date.slice(0,7)===m); }],
+  quiet:["Not seen in 3+ months", c=>{ const ls=clientLastSeen(c); if(!ls) return false; const d=new Date(today()+"T12:00:00"); d.setMonth(d.getMonth()-3); return ls<d.toISOString().slice(0,10) && !upcomingAppts(c).length; }],
+  owes:["Owes money", (c,id)=>clientBalance(id)>0],
+  unsched:["Needs a scan date", c=>!!c.scanToSchedule],
+};
+/* ---------- monthly summary + CSV ---------- */
+function monthlySummary(){
+  const rows={}; const mk=m=>rows[m]=rows[m]||{m, income:0, scans:0, consults:0, newClients:0};
+  Object.values(S.inv||{}).filter(v=>v.status==="sent").forEach(v=>(v.payments||[]).forEach(p=>{ if(p.date) mk(p.date.slice(0,7)).income+=+p.amount||0; }));
+  Object.values(S.clients||{}).forEach(c=>{ apptsOf(c).filter(a=>a.date<=today()).forEach(a=>{ if(a.type==="scan") mk(a.date.slice(0,7)).scans++; if(a.type==="consult") mk(a.date.slice(0,7)).consults++; }); if(c.createdAt) mk(c.createdAt.slice(0,7)).newClients++; });
+  return Object.values(rows).sort((a,b)=>b.m.localeCompare(a.m)).slice(0,12);
+}
+function summarySection(){
+  const rows=monthlySummary(); const lbl=m=>new Date(m+"-15T12:00:00").toLocaleDateString(undefined,{month:"long",year:"numeric"});
+  return `<div class="formsec stack"><div class="row"><h3 class="grow">Monthly summary</h3><button type="button" class="small" data-act="csvpay">Download payments (CSV)</button><button type="button" class="small" data-act="csvinv">Download invoices (CSV)</button></div>
+    ${rows.length?`<table class="inv-tab"><thead><tr><th>Month</th><th class="num">Received</th><th class="num">Scans</th><th class="num">Consults</th><th class="num">New clients</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(lbl(r.m))}</td><td class="num">${esc(money(r.income))}</td><td class="num">${r.scans}</td><td class="num">${r.consults}</td><td class="num">${r.newClients}</td></tr>`).join("")}</tbody></table>`:`<p class="small muted">Nothing yet.</p>`}
+    <p class="small muted">Received counts payments recorded in the portal, including website orders. Scans and consults count past appointments.</p></div>`;
+}
+function downloadCsv(name, rows){ const q=v=>{ const s=String(v??""); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
+  saveBlob(new Blob(["﻿"+rows.map(r=>r.map(q).join(",")).join("\r\n")],{type:"text/csv"}), name); }
+function csvPayments(){ const out=[["Date","Client","Invoice","Method","Amount","Note"]];
+  Object.values(S.inv||{}).filter(v=>v.status==="sent").forEach(v=>(v.payments||[]).forEach(p=>out.push([p.date, clientName(v.clientId), v.number, p.method||"", r2(p.amount).toFixed(2), p.note||""])));
+  out.splice(1, out.length, ...out.slice(1).sort((a,b)=>String(a[0]).localeCompare(String(b[0])))); downloadCsv(`Payments ${today()}.csv`, out); }
+function csvInvoices(){ const out=[["Invoice","Date","Due","Client","Status","Items","Total","Paid","Balance","Source"]];
+  Object.values(S.inv||{}).forEach(v=>{ const m=invMath(v); out.push([v.number, v.date, v.due||"", clientName(v.clientId), invStatus(v)[0], (v.items||[]).map(i=>i.desc).join("; "), m.total.toFixed(2), m.paid.toFixed(2), m.bal.toFixed(2), v.source==="website"?"Website":"Portal"]); });
+  out.splice(1, out.length, ...out.slice(1).sort((a,b)=>String(a[1]).localeCompare(String(b[1])))); downloadCsv(`Invoices ${today()}.csv`, out); }
+/* ---------- treatment plan templates: planTemplates/<id> (only Dawn can see them) ---------- */
+function planTemplatePicker(){
+  const t=S.planTpls||[]; if(!t.length) return "";
+  return `<select id="pl-from-tpl" style="width:auto" aria-label="Start a plan from a template"><option value="">New plan from template…</option>${t.map(x=>`<option value="${esc(x.id)}">${esc(x.name||"Untitled template")}</option>`).join("")}</select>`;
+}
+function planTplSaveBox(){
+  if(!S.tplSaveOpen) return `<button type="button" data-act="tplsaveopen" title="Save these remedies and instructions to reuse for other clients">Save as template</button>`;
+  return `<span class="row" style="gap:6px;flex-wrap:nowrap"><input id="tpl-name" placeholder="Template name, e.g. Sleep support" style="width:220px"><button type="button" class="primary small" data-act="tplsavedo">Save</button><button type="button" class="ghost small" data-act="tplsaveclose">Cancel</button></span>`;
+}
+async function planTplClick(e){
+  const a=e.target.closest("[data-act]"); if(!a) return false; const act=a.dataset.act;
+  if(act==="tplsaveopen"){ S.tplSaveOpen=true; readPlanForm(); renderClients(); $("#tpl-name")?.focus(); return true; }
+  if(act==="tplsaveclose"){ S.tplSaveOpen=false; readPlanForm(); renderClients(); return true; }
+  if(act==="tplsavedo"){ const name=($("#tpl-name")?.value||"").trim(); if(!name){ toast("Give the template a name"); return true; }
+    readPlanForm(); const d=S.editPlan.data; const tpl={name, title:d.title||"Treatment plan", bottles:JSON.parse(JSON.stringify(d.bottles||[])), instructions:d.instructions||"", extra:d.extra||"", form:d.form||"wet", savedAt:new Date().toISOString()};
+    try{ await S.db.collection("planTemplates").doc().set(tpl); S.tplSaveOpen=false; toast(`Saved as template “${name}”`); }catch(e1){ toast("That didn't save. Please try again."); } renderClients(); return true; }
+  if(act==="csvpay"){ csvPayments(); return true; }
+  if(act==="csvinv"){ csvInvoices(); return true; }
+  return false;
+}
+function startPlanFromTpl(tid){ const t=(S.planTpls||[]).find(x=>x.id===tid); if(!t) return;
+  S.editPlan={clientId:S.sel, id:null, data:{title:t.title||"Treatment plan", date:today(), status:"draft", form:t.form||"wet", instructions:t.instructions||cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS, extra:t.extra||"", bottles:JSON.parse(JSON.stringify(t.bottles||[]))}, dirty:true};
+  renderClients(); toast(`Started from “${t.name}”. Adjust it for this client, then save.`); }
+function planTplSettings(){
+  const t=S.planTpls||[];
+  return `<div class="formsec stack"><h3>Treatment plan templates</h3><p class="small muted">Save one from any plan with “Save as template”. Start a client's plan from one with “New plan from template”.</p>
+    ${t.length?t.map(x=>`<div class="row" style="gap:6px"><span class="grow"><b>${esc(x.name)}</b> <span class="small muted">· ${(x.bottles||[]).length} item${(x.bottles||[]).length===1?"":"s"}</span></span>${S.ptDel===x.id?`<button type="button" class="danger small" data-ptdel="${esc(x.id)}">Yes, delete</button>`:`<button type="button" class="ghost small" data-ptaskdel="${esc(x.id)}">Delete</button>`}</div>`).join(""):`<p class="small muted">No templates yet.</p>`}</div>`;
+}
+
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
   const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
@@ -1504,7 +1567,8 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   if(S.scan){ if(!document.getElementById("scan-root")) renderScan(); return; }
   const ids = Object.keys(S.clients).sort((a,b)=>((isNewForm(S.clients[b])||msgUnreadDawn(S.clients[b]))-(isNewForm(S.clients[a])||msgUnreadDawn(S.clients[a]))) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
-  const shown = ids.filter(id => !f || clientName(id).toLowerCase().includes(f));
+  const cf = CLIENT_FILTERS[S.cf||"all"] || CLIENT_FILTERS.all;
+  const shown = ids.filter(id => (!f || clientName(id).toLowerCase().includes(f)) && cf[1](S.clients[id], id));
   const sel = S.sel && S.clients[S.sel] ? S.sel : null;
   const list = !S.clientsLoaded ? `<div class="empty">Loading clients…</div>`
     : !ids.length ? `<div class="empty"><p>No clients yet.</p><p class="small">Add one with “New client”, or share this portal with a client and their intake appears here when they save it.</p></div>`
@@ -1518,12 +1582,15 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
         ${S.jotNew?`<div class="stack" style="gap:6px;padding:8px;border:1px solid var(--line);border-radius:8px"><p class="small muted" style="margin:0">Paste a Jotform submission (intake or Qest4). A new client is made from it.</p><textarea id="jotnew-text" class="small" style="min-height:100px" placeholder="Paste the whole submission"></textarea><div class="row"><button type="button" class="primary" data-act="jotnew">Create client</button><button type="button" class="ghost" data-act="jotnewopen">Cancel</button></div><div id="jotnew-report"></div></div>`:""}
         ${remindersPanel()}
         <input id="clientFilter" type="search" placeholder="Find a client" value="${esc(S.clientFilter||"")}" aria-label="Find a client">
+        <div class="row" style="gap:6px;flex-wrap:nowrap"><select id="clientFilterSel" aria-label="Show">${Object.entries(CLIENT_FILTERS).map(([k,[l]])=>`<option value="${k}" ${(S.cf||"all")===k?"selected":""}>${l}</option>`).join("")}</select>${(S.cf||"all")!=="all"&&S.clientsLoaded?`<span class="small muted" style="white-space:nowrap">${shown.length} shown</span>`:""}</div>
       </div>
       <div class="list">${list}</div>
     </section>
     <section class="detail-pane">${sel ? clientDetail(sel) : `<div class="sheet empty"><h2>Pick a client</h2><p class="small">Their intake, private notes and treatment plans open here.</p></div>`}</section>
   </div>`;
   bindClients();
+  const cfs=$("#clientFilterSel"); if(cfs) cfs.onchange=()=>{ S.cf=cfs.value; renderClients(); };
+  const pft=$("#pl-from-tpl"); if(pft) pft.onchange=()=>{ if(pft.value) startPlanFromTpl(pft.value); };
 }
 function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||"", c.followupSubmittedAt||""].sort().pop(); }
 function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
@@ -1744,7 +1811,7 @@ function plansPane(id){
   if(ep) return planEditor(ep);
   const rows = !S.plansLoaded ? `<div class="empty">Loading plans…</div>` : !S.plans.length ? `<div class="empty"><p>No treatment plans yet.</p></div>` :
     S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.replacedBy?'<span class="chip">Previous</span>':p.status==="shared"?'<span class="chip ok">Current · shared</span>':'<span class="chip warn">Draft</span>'}${p.previousId?`<span>updated from ${esc(fmtDate(p.previousDate))}</span>`:""}<span>${esc(itemCount(p))}</span></span></button>`).join("");
-  return `<div class="stack"><div class="row"><p class="grow small muted">A plan can mix wet dose bottles, TT-1 baskets and pellets.</p><button type="button" class="primary" data-act="newplan">New plan</button></div>${rows}</div>`;
+  return `<div class="stack"><div class="row"><p class="grow small muted">A plan can mix wet dose bottles, TT-1 baskets and pellets.</p><div class="row" style="gap:6px">${planTemplatePicker()}<button type="button" class="primary" data-act="newplan">New plan</button></div></div>${rows}</div>`;
 }
 function planEditor(ep){
   const p = ep.data;
@@ -1796,7 +1863,7 @@ function planEditor(ep){
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
     <label class="field"><span>Other recommendations</span><textarea id="pl-extra" style="min-height:80px" placeholder="Type anything here: a remedy, supplement, essence or product that isn't in the list. The client sees it exactly as you write it.">${esc(p.extra||"")}</textarea></label>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px" placeholder="How to take the remedies in this plan">${esc(p.instructions)}</textarea></label>
-    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${planTplSaveBox()}${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
   </div>`;
@@ -1878,6 +1945,7 @@ function bindClients(){
   app.onclick = async e => {
     if(await billingClick(e)) return;
     if(await progressClick(e)) return;
+    if(await planTplClick(e)) return;
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
@@ -3587,6 +3655,7 @@ function renderSettings(){
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     ${templatesSection()}
     ${autoMailSection()}
+    ${planTplSettings()}
     ${billingSettingsSection()}
     <div class="formsec stack">
       <h3>Inviting clients</h3>
@@ -3621,6 +3690,8 @@ function renderSettings(){
     try{ await S.db.doc("settings/practice").update({autoMail}); S.settings={...S.settings, autoMail}; toast(cb.checked?"Turned on":"Turned off"); }catch(e1){ cb.checked=!cb.checked; toast("That didn't save. Please try again."); } };
   $("#app").onclick = async e => {
     if(await billingSettingsClick(e)) return;
+    const pta=e.target.closest("[data-ptaskdel]"); if(pta){ S.ptDel=pta.dataset.ptaskdel; renderSettings(); return; }
+    const ptd=e.target.closest("[data-ptdel]"); if(ptd){ try{ await S.db.doc("planTemplates/"+ptd.dataset.ptdel).delete(); S.ptDel=null; toast("Template deleted"); }catch(e1){ toast("That didn't delete. Please try again."); } return; }
     const te=e.target.closest("[data-tpledit]"); if(te){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===te.dataset.tpledit); if(t){ S.tplEdit={...t}; S.tplDel=null; renderSettings(); $("#tp-name")?.focus(); } return; }
     const ta=e.target.closest("[data-tplaskdel]"); if(ta){ S.tplDel=ta.dataset.tplaskdel; renderSettings(); return; }
     const td=e.target.closest("[data-tpldel]"); if(td){ const list=(S.settings.emailTemplates||[]).filter(x=>x.id!==td.dataset.tpldel); try{ await S.db.doc("settings/practice").update({emailTemplates:list}); S.settings.emailTemplates=list; S.tplDel=null; renderSettings(); toast("Template deleted"); }catch(err){ toast("That didn't save. Try again."); } return; }
