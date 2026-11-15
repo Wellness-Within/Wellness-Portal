@@ -607,7 +607,7 @@ function startPractitioner(){
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
     if(S.tab==="library") render();
   }, e => console.warn(e));
-  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings" && !document.activeElement?.closest?.("#bill-set, #tpl-editor, #st-instr, #st-qcis, #pw-new")) render(); }, e=>console.warn(e));
+  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings" && !document.activeElement?.closest?.("#auto-set, #bill-set, #tpl-editor, #st-instr, #st-qcis, #pw-new")) render(); }, e=>console.warn(e));
   loadLibrary();
   render();
 }
@@ -658,7 +658,7 @@ function reminderDue(id){
 function remindersDue(){ return Object.keys(S.clients).map(id=>({id, kind:reminderDue(id)})).filter(x=>x.kind).sort((a,b)=>(S.clients[a.id].nextVisit||"").localeCompare(S.clients[b.id].nextVisit||"")); }
 function remindersPanel(){
   const due=remindersDue(); if(!due.length) return "";
-  return `<details class="hist" open><summary>Scan reminders to send (${due.length})</summary><div class="stack" style="gap:8px;margin-top:8px">
+  return `<details class="hist" ${autoOn("reminders")?"":"open"}><summary>${autoOn("reminders")?`Scan reminders due (${due.length}) · go out automatically tomorrow morning`:`Scan reminders to send (${due.length})`}</summary><div class="stack" style="gap:8px;margin-top:8px">
     ${due.map(({id,kind})=>{ const c=S.clients[id]; return `<div class="row" style="gap:6px;align-items:center">
       <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(c.nextVisit))}${scanFormIn(c)?' · <span class="chip ok">Form in</span>':""}</div></div>
       <button type="button" class="small" data-remind="${esc(id)}" data-kind="${kind}" title="Opens the email in your Mail app">Send</button>
@@ -791,7 +791,7 @@ async function logEmail(id, subject, kind){
   try{ const c=S.clients?.[id]||{}; const log=[{at:new Date().toISOString(), subject:String(subject||"").slice(0,200), kind}, ...(c.emailLog||[])].slice(0,50);
     await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
 }
-const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", invoice:"Invoice", receipt:"Receipt", auto:"New-message email (automatic)"};
+const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", invoice:"Invoice", receipt:"Receipt", welcome:"Website order welcome (automatic)", auto:"New-message email (automatic)"};
 function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`; }
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
@@ -888,7 +888,8 @@ async function saveAppts(id, list){
     if(a.type==="consult"){ o.mins=a.mins||60; o.how=a.how||""; }
     if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; } }
     return o; });
-  await S.db.doc("clients/"+id).update({appointments:clean, nextVisit:nextScanDate(clean), reschedReq:null});
+  const sts=(S.clients[id]||{}).scanToSchedule, done=sts && clean.some(a=>a.type==="scan" && a.date>=(sts.orderedAt||""));
+  await S.db.doc("clients/"+id).update({appointments:clean, nextVisit:nextScanDate(clean), reschedReq:null, ...(done?{scanToSchedule:null}:{})});
 }
 function renderSchedule(){
   const rows=[]; Object.keys(S.clients).forEach(id=>upcomingAppts(S.clients[id]).forEach(a=>rows.push({id,a})));
@@ -1419,7 +1420,8 @@ function renderHome(){
   const orders=invs.filter(v=>v.source==="website" && v.status!=="void" && (v.date||"")>=agoS).sort((a,b)=>(b.createdAt||b.date||"").localeCompare(a.createdAt||a.date||""));
   const open=invs.filter(invOpen), owed=r2(open.reduce((s,v)=>s+invMath(v).bal,0)), overdue=open.filter(v=>invStatus(v)[0]==="Overdue");
   // date-change requests, scan reminders
-  const asks=ids.filter(id=>S.clients[id].reschedReq), rem=remindersDue();
+  const asks=ids.filter(id=>S.clients[id].reschedReq), rem=autoOn("reminders")?[]:remindersDue();
+  const need=ids.filter(id=>S.clients[id].scanToSchedule).sort((a,b)=>(S.clients[a].scanToSchedule.by||"").localeCompare(S.clients[b].scanToSchedule.by||""));
   const card=(title, count, body, foot)=>`<section class="dash-card"><div class="head"><h2>${title}</h2>${count?`<span class="count">${count}</span>`:""}</div>${body}${foot||""}</section>`;
   const empty=s=>`<p class="small muted">${s}</p>`;
   const cards=[
@@ -1431,16 +1433,25 @@ function renderHome(){
     card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
+  if(need.length) cards.splice(1,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">Ordered ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span><span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
   if(asks.length) cards.splice(1,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
   if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(S.clients[id].nextVisit))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
   const hr=new Date().getHours(), hi=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
   $("#app").innerHTML=`<div class="stack" style="gap:20px;max-width:1180px;margin:0 auto">
     <div class="dash-hello"><h1>${hi}, Dawn</h1><p class="muted">${esc(new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}))}</p></div>
     ${!S.clientsLoaded?`<div class="empty">Loading…</div>`:`<div class="dash-grid">${cards.join("")}</div>`}</div>`;
-  $("#app").onclick=e=>{ const o=e.target.closest("[data-hopen]"); if(o){ openClientAt(o.dataset.hopen, o.dataset.hsub||""); return; }
+  $("#app").onclick=e=>{ const nd=e.target.closest("[data-hneed]"); if(nd){ const id=nd.dataset.hneed, n=S.clients[id].scanToSchedule||{}; openClientAt(id,"appts"); S.apptEdit={cid:id, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", ...(n.delivery?{delivery:n.delivery}:{})}}; renderClients(); $("#ap-date")?.focus(); return; }
+    const o=e.target.closest("[data-hopen]"); if(o){ openClientAt(o.dataset.hopen, o.dataset.hsub||""); return; }
     const tb=e.target.closest("[data-htab]"); if(tb){ S.tab=tb.dataset.htab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); } };
 }
 
+const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
+function autoMailSection(){
+  const items=[["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the pre-scan form link, right after a website scan order."]];
+  return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
+    <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
+    ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
+}
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
   const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
@@ -1658,7 +1669,7 @@ function filesPane(id){
     <div class="row" style="gap:8px;flex-wrap:wrap">
       <label class="btn primary" for="file-up" style="cursor:pointer">Upload files</label><input type="file" id="file-up" class="sr" multiple accept=".pdf,image/*,.doc,.docx">
       <label class="check small"><input type="checkbox" id="file-share-now" checked> Share with client right away</label>
-      ${clientEmail(id) && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto">Let client know</button>` : ""}
+      ${clientEmail(id) && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto" class="${autoOn("reports")?"ghost small":""}">${autoOn("reports")?"Email them again":"Let client know"}</button>` : ""}
     </div>
     <div id="file-status" class="small muted"></div>
     <div class="stack" style="gap:8px">${!S.filesLoaded&&S.filesFor===id?`<div class="empty">Loading…</div>`:files.length?files.map(f=>fileRow(f,true)).join(""):`<div class="empty small">No files yet.</div>`}</div>
@@ -3575,6 +3586,7 @@ function renderSettings(){
     <p class="small muted" style="margin-top:-6px">Where “Analyze with QCIS” opens. Leave blank for a new Claude chat, or paste the link of the Claude project you use for scan analysis.</p>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     ${templatesSection()}
+    ${autoMailSection()}
     ${billingSettingsSection()}
     <div class="formsec stack">
       <h3>Inviting clients</h3>
@@ -3605,6 +3617,8 @@ function renderSettings(){
       Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, bk:{}, remSrc:{}, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   bindBillingSettings();
+  const as=$("#auto-set"); if(as) as.onchange=async e=>{ const cb=e.target.closest("[data-automail]"); if(!cb) return; const autoMail={...(S.settings.autoMail||{}), [cb.dataset.automail]:cb.checked};
+    try{ await S.db.doc("settings/practice").update({autoMail}); S.settings={...S.settings, autoMail}; toast(cb.checked?"Turned on":"Turned off"); }catch(e1){ cb.checked=!cb.checked; toast("That didn't save. Please try again."); } };
   $("#app").onclick = async e => {
     if(await billingSettingsClick(e)) return;
     const te=e.target.closest("[data-tpledit]"); if(te){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===te.dataset.tpledit); if(t){ S.tplEdit={...t}; S.tplDel=null; renderSettings(); $("#tp-name")?.focus(); } return; }

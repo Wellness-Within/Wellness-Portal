@@ -4,13 +4,17 @@
 // For each paid order it:
 //   - finds the client by email (or adds a new client record that connects when they sign in),
 //   - adds a PAID invoice "Web <order number>" to their Billing, with the payment recorded,
-//   - voids that invoice if the order is later refunded or cancelled.
+//   - voids that invoice if the order is later refunded or cancelled,
+//   - for a scan order: puts "needs a scan date (by order date + 7 days)" on Dawn's Home page and emails the client
+//     a welcome with their pre-scan form link (Settings → Automatic emails → Welcome can switch the email off).
+// Secrets also used: SMTP_USER, SMTP_PASS (already set for message emails).
 //
 // Supabase → Edge Functions → Secrets needs:
 //   WOO_SECRET   the "Secret" shown on the WooCommerce webhook (Dawn copies it in herself)
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 // Safety: every request must carry WooCommerce's signature made with WOO_SECRET, or it is refused.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import nodemailer from "npm:nodemailer@6.9.16";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 type Rec = Record<string, any>;
@@ -104,5 +108,30 @@ Deno.serve(async (req) => {
   if (sum > total) inv.discount = { label: "Website discount", type: "amt", value: r2(sum - total) };
   const { error } = await save(path, inv);
   if (error) return new Response("save failed", { status: 500 });
+
+  // Scan orders: Dawn picks the day within the week; the client gets their next steps.
+  const isScan = items.some((i) => i.kind === "scan");
+  if (isScan) {
+    const by = new Date(day + "T12:00:00Z"); by.setUTCDate(by.getUTCDate() + 7);
+    await db.rpc("doc_merge", { p_path: "clients/" + cid, p_data: { scanToSchedule: { orderedAt: day, by: by.toISOString().slice(0, 10), invoice: "woo-" + o.id, delivery: allAttrs ? (shipped ? "ship" : /reports only/i.test(allAttrs) ? "none" : "imprint") : "" } } });
+    const { data: st } = await db.from("docs").select("data").eq("path", "settings/practice").maybeSingle();
+    const { data: cr } = await db.from("docs").select("data").eq("path", "clients/" + cid).maybeSingle();
+    const rec: Rec = cr?.data || {};
+    const to = email;
+    if (((st?.data || {}).autoMail || {}).welcome !== false && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      const first = (b.first_name || "").trim();
+      const returning = !!rec.qestSubmittedAt;
+      const link = "https://portal.dawnspain.com/#" + (returning ? "nextscan" : "qest");
+      const remote = !shipped && !/reports only/i.test(allAttrs);
+      const subject = "Thank you for your Qest4 scan order: next steps";
+      const text = `Hi ${first || "there"},\n\nThank you for your order! Here's what happens next.\n\n1. Fill out your ${returning ? "pre-scan form" : "intake form and add your photo"} in your client portal:\n${link}\nSign in with this email address (${to}). No password is needed; we'll email you a sign-in link.${returning ? " Your contact details carry over, so you'll only answer the questions about how you're feeling now." : ""}\n\n${remote ? "2. Prepare your remote balancing treatment: a 2 oz bottle with alcohol (vodka works well) topped with filtered or bottled water, or a small glass jar of blank pellets. Set it aside, add a photo of it in the form, and leave it in place until I let you know the imprint is complete.\n\n3. " : "2. "}I'll do your scan within 7 days of receiving your form and photo, and your reports will be waiting in your portal under \"My reports\". ${shipped ? "Your balancing treatment will then be shipped to you by USPS Priority Mail." : ""}\n\nIf you have any questions, just reply to this email or call me at 252-626-4104.\n\nWith warmth,\n\nDawn Spain, PHom\nWellness From Within\nA Roaring Fork Homeopathy Associate\n252-626-4104\nwww.dawnspain.com`;
+      try {
+        const mail = nodemailer.createTransport({ host: "smtp.hostinger.com", port: 465, secure: true, auth: { user: Deno.env.get("SMTP_USER"), pass: Deno.env.get("SMTP_PASS") } });
+        await mail.sendMail({ from: `"Dawn Spain, Wellness From Within" <${Deno.env.get("SMTP_USER")}>`, replyTo: "wellnessfromwithin@icloud.com", to, subject, text });
+        const log = [{ at: new Date().toISOString(), subject, kind: "welcome" }, ...(rec.emailLog || [])].slice(0, 50);
+        await db.rpc("doc_merge", { p_path: "clients/" + cid, p_data: { emailLog: log } });
+      } catch (e) { console.error("welcome email failed", (e as Error)?.message); }
+    }
+  }
   return Response.json({ ok: true, client: cid });
 });
