@@ -27,11 +27,13 @@ async function sq(path: string) {
   return await r.json();
 }
 async function signatureOk(raw: string, sig: string) {
-  const key = Deno.env.get("SQUARE_SIG_KEY") || ""; if (!key || !sig) return false;
+  const key = (Deno.env.get("SQUARE_SIG_KEY") || "").trim(); if (!key || !sig) { console.error("signature check: key set?", !!key, "sig present?", !!sig); return false; }
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(URL_SELF + raw)));
-  const want = btoa(String.fromCharCode(...mac)); if (want.length !== sig.length) return false;
-  let d = 0; for (let i = 0; i < want.length; i++) d |= want.charCodeAt(i) ^ sig.charCodeAt(i); return d === 0;
+  const want = btoa(String.fromCharCode(...mac)); if (want.length !== sig.length) { console.error("signature length differs", want.length, sig.length); return false; }
+  let d = 0; for (let i = 0; i < want.length; i++) d |= want.charCodeAt(i) ^ sig.charCodeAt(i);
+  if (d !== 0) console.error("signature mismatch (key length " + key.length + ")");
+  return d === 0;
 }
 async function findOrMakeClient(cust: Rec) {
   const email = lc(cust.email_address), name = [cust.given_name, cust.family_name].filter(Boolean).join(" ").trim();
