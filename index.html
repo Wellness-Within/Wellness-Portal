@@ -684,7 +684,7 @@ function scanMail(id, kind){
   const link = "https://portal.dawnspain.com/#nextscan";
   const signin = `Sign in with this email address (${to}).${named?` Then choose ${first} at the top.`:""} ${named?"Contact":"Your contact"} details carry over, so you'll only answer the questions about ${howYou} feeling now.`;
   const sign=`With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`;
-  const reach = `If you need to change the date or have any questions, just reply to this email or call me at ${PRACTICE.phone}.`;
+  const reach = `If you need to change the date or have any questions, just reply to this email or text me at ${PRACTICE.phone}.`;
   let subject, body;
   if(kind==="week"){
     subject = `${Your} next Qest4 scan is coming up`;
@@ -722,7 +722,7 @@ function sideHelp(on){
   document.body.classList.add("side");
   let h=$("#side-help"); if(!on){ h&&h.remove(); return; }
   if(!h){ h=document.createElement("div"); h.id="side-help"; h.className="side-help"; const so=$("#signout"); so ? so.before(h) : $("header.top .wrap").appendChild(h); }
-  h.innerHTML=`<b>Questions?</b><span>Call or text ${esc(PRACTICE.phone)}</span><a href="mailto:${esc(PRACTICE.email)}">Email Dawn</a>`;
+  h.innerHTML=`<b>Questions?</b><span>Text ${esc(PRACTICE.phone)}</span><a href="mailto:${esc(PRACTICE.email)}">Email Dawn</a>`;
 }
 /* ---------- appointments: kept on the person's record as appointments:[{id,type,date,time,mins,how,imprint,note}] ---------- */
 const APPT_TYPES = { scan:"Qest4 scan", consult:"Consult call", imprint:"Remote imprint" };
@@ -809,7 +809,7 @@ function followupMail(id){
   const when = next ? apptWhen(next) : "[date and time]";
   const hi = `Hi ${named ? "there" : (first && first!=="Unnamed" ? first : "there")},`;
   const subject = `${named?`${first}'s`:"Your"} follow-up form before our ${kindW}`;
-  const body = `${hi}\n\nI'm looking forward to our ${kindW} on ${when}. Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked.\n\nGo straight to the form here:\nhttps://portal.dawnspain.com/#followup\n\nOr sign in at portal.dawnspain.com and choose Forms. Sign in with this email address (${to})${named?`, then choose ${first} at the top`:""}, and your answers will come straight to me.\n\nIf you have any questions, just reply to this email or call me at ${PRACTICE.phone}.\n\n${emailSign()}`;
+  const body = `${hi}\n\nI'm looking forward to our ${kindW} on ${when}. Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked.\n\nGo straight to the form here:\nhttps://portal.dawnspain.com/#followup\n\nOr sign in at portal.dawnspain.com and choose Forms. Sign in with this email address (${to})${named?`, then choose ${first} at the top`:""}, and your answers will come straight to me.\n\nIf you have any questions, just reply to this email or text me at ${PRACTICE.phone}.\n\n${emailSign()}`;
   return {id, tpl:"_fu", kind:"followup", subject, body, noAppt:!next};
 }
 function openMail(to, subject, body){ location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }
@@ -1269,7 +1269,7 @@ function clientBillingView(){
       <div class="stack" style="gap:8px;margin-top:8px">${invLinesHtml(v)}${v.note?`<p class="small">${esc(v.note)}</p>`:""}
         <div class="row" style="gap:6px"><button type="button" class="ghost small" data-cinvprint="${esc(v.id)}">Print / save PDF</button></div></div></details>`; }).join("")
       :`<div class="empty small">No invoices yet.</div>`}
-    <p class="small muted">Questions about a bill? Send Dawn a message or call ${esc(PRACTICE.phone)}.</p></div>`;
+    <p class="small muted">Questions about a bill? Send Dawn a message or text ${esc(PRACTICE.phone)}.</p></div>`;
 }
 
 /* ---------- progress: ratings from forms (intake, Qest4 pre-scan, follow-ups) + Dawn's notes at clients/<id>/progress/<pid> ---------- */
@@ -3983,7 +3983,7 @@ function renderClient(){
   else if(S.cview==="progress"){ body = clientProgressView(); }
   else if(S.cview==="messages"){
     const fam = familyPeople().length > 1;
-    body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. Dawn's messages are also emailed to you. For anything urgent, please call ${esc(PRACTICE.phone)}.</p></div>
+    body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. Dawn's messages are also emailed to you. For anything urgent, please text ${esc(PRACTICE.phone)}.</p></div>
       ${S.msgsLoaded ? msgThread(S.myMsgs||[], "client", "Dawn") : `<div class="empty small">Loading messages…</div>`}
       <label class="field"><span>Your message</span><textarea id="cmsg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write to Dawn">${esc(S.cmsgDraft||"")}</textarea></label>
       <div class="row"><button type="button" class="primary" data-act="cmsgsend">Send to Dawn</button></div></div>`;

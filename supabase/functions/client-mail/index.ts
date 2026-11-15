@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
       const hi = named ? "Hi there," : `Hi ${first || "there"},`, your = named ? `${first}'s` : "your", Your = named ? `${first}'s` : "Your";
       const link = "https://portal.dawnspain.com/#nextscan";
       const how = `${signin(to, named, first)} Your contact details carry over, so you'll only answer the questions about how ${named ? `${first} is` : "you're"} feeling now.`;
-      const reach = `If you need to change the date or have any questions, just reply to this email or call me at ${PHONE}.`;
+      const reach = `If you need to change the date or have any questions, just reply to this email or text me at ${PHONE}.`;
       const subject = kind === "week" ? `${Your} next Qest4 scan is coming up` : `Time for ${your} next Qest4 scan`;
       const text = kind === "week"
         ? `${hi}\n\nIt's almost time for ${your} next Qest4 scan, on ${fmtDate(nv)}, when ${named ? "the" : "your"} current drops are due to finish.\n\n${formIn ? `Thank you for already sending ${named ? "the" : "your"} pre-scan form. I have everything I need.` : `Before the scan, please fill out a new pre-scan form in the client portal so I can see how ${named ? `${first} is` : "you're"} doing since the last one:\n${link}\n\n${how}`}\n\n${reach}\n\n${SIGN}`
