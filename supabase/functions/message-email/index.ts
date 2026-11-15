@@ -51,12 +51,18 @@ Deno.serve(async (req) => {
   const subject = family && first ? `A message from Dawn about ${first}` : "A message from Dawn";
   const text = `${String(m.body).trim()}
 
+With warmth,
+
+Dawn Spain, PHom
+Wellness From Within
+A Roaring Fork Homeopathy Associate
+${PHONE}
+www.dawnspain.com
+
 ————————————
 You can reply to this email, or read and answer in your Wellness From Within client portal:
 ${PORTAL}
-(Sign in with ${to}${family && first ? `, then choose ${first} at the top` : ""}.)
-
-Dawn Spain, PHom · Wellness From Within · ${PHONE} · www.dawnspain.com`;
+(Sign in with ${to}${family && first ? `, then choose ${first} at the top` : ""}.)`;
 
   try {
     await mail.sendMail({ from: `"Dawn Spain, Wellness From Within" <${Deno.env.get("SMTP_USER")}>`, replyTo: REPLY_TO, to, subject, text });

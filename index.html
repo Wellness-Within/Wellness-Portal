@@ -611,7 +611,7 @@ function notifyMail(id, kind){
   const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
   const hi = fam ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
   const whose = fam && first ? `${first}'s` : "Your";
-  const sign=`With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`;
+  const sign=`With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`;
   const signin=`Just go to https://portal.dawnspain.com and sign in with this email address (${to}).${fam&&first?` Then choose ${first} at the top.`:""}`;
   const subject = `${whose} ${kind==="files" ? "Qest4 scan reports are" : "treatment plan is"} ready`;
   const body = kind==="files"
@@ -657,7 +657,7 @@ function scanMail(id, kind){
   const when = c.nextVisit ? fmtDate(c.nextVisit) : "";
   const link = "https://portal.dawnspain.com/#nextscan";
   const signin = `Sign in with this email address (${to}).${named?` Then choose ${first} at the top.`:""} ${named?"Contact":"Your contact"} details carry over, so you'll only answer the questions about ${howYou} feeling now.`;
-  const sign=`With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`;
+  const sign=`With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`;
   const reach = `If you need to change the date or have any questions, just reply to this email or call me at ${PRACTICE.phone}.`;
   let subject, body;
   if(kind==="week"){
@@ -721,7 +721,7 @@ async function logEmail(id, subject, kind){
     await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
 }
 const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", auto:"New-message email (automatic)"};
-function emailSign(){ return `With warmth,\n${PRACTICE.name}\nWellness From Within\n${PRACTICE.phone}\n${PRACTICE.site}`; }
+function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`; }
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
