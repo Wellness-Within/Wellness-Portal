@@ -1062,7 +1062,7 @@ function invRow(id, v){
   return `<div class="formsec stack" style="gap:8px">
     <div class="row" style="gap:8px"><button type="button" class="ghost grow" style="justify-content:flex-start;text-align:left;padding:0" data-invtoggle="${esc(v.id)}">
       <span><b>#${esc(v.number||"—")}</b> · ${esc(fmtDate(v.date))} · ${esc(money(m.total))}${v.status==="sent"&&m.bal>0&&m.paid>0?` <span class="small muted">(${esc(money(m.bal))} left)</span>`:""}<br><span class="small muted">${esc((v.items||[]).map(i=>i.desc||BILL_KINDS[i.kind]).filter(Boolean).join(", ")||"No items")}</span></span></button>
-      ${v.source==="website"?'<span class="chip">Website order</span>':""}<span class="chip ${cls}">${st}</span></div>
+      ${v.source==="website"?'<span class="chip">Website order</span>':v.source==="square"?'<span class="chip">Square</span>':""}<span class="chip ${cls}">${st}</span></div>
     <div class="row" style="gap:6px">
       ${v.status!=="void"?`<button type="button" class="small" data-invedit="${esc(v.id)}">Edit</button>`:""}
       ${invOpen(v)?`<button type="button" class="small primary" data-invpay="${esc(v.id)}">Record payment</button><button type="button" class="small" data-invmail="${esc(v.id)}">Email invoice</button>`:""}
