@@ -85,6 +85,9 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .date-tile{width:72px;height:76px;flex:none;border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg)}
 .date-tile span{font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--muted)}.date-tile b{font-family:var(--f-display);font-weight:400;font-size:30px;line-height:1}
 .num-dot{width:32px;height:32px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.inv-tab{width:100%;border-collapse:collapse;font-size:14px}.inv-tab th,.inv-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.inv-tab th{font-weight:600;color:var(--muted);font-size:12px}.inv-tab .num{text-align:right;white-space:nowrap}.inv-tab tfoot td{border:0;padding:3px 4px}
+.inv-line{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr) minmax(110px,1fr) 64px 92px auto auto;gap:6px;align-items:center}
+@media (max-width:760px){.inv-line{grid-template-columns:1fr 1fr}.inv-line .li-desc{grid-column:1/-1}}
 .dash-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.dash-row:last-child{border-bottom:0}
 .avatar{width:40px;height:40px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
 .count{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
@@ -441,7 +444,7 @@ const S = {
   plans:[], plansFor:null, plansUnsub:null, notes:"", notesFor:null, notesUnsub:null,
   editPlan:null, // {clientId, id, data}
   lib:[], libLoaded:false, custom:[], combos:[], poly:[], settings:{},
-  q:"", src:"all", libSel:null, cq:"", profiles:{}, clientWrite:null
+  q:"", src:"all", libSel:null, cq:"", profiles:{}, clientWrite:null, inv:{}, invLoaded:false
 };
 
 /* ---------- Supabase data layer: a small document store on one "docs" table ---------- */
@@ -576,13 +579,18 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form")) render();
+    resolveNames(); renderTabs(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form")) render();
   }, e => console.warn(e));
+  S.db.collection("invoices").onSnapshot(snap => {
+    const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.inv = m; S.invLoaded = true;
+    if(S.tab==="billing") renderBilling();
+    if(S.tab==="clients" && S.sel && S.sub==="billing" && !document.activeElement?.closest?.("#inv-form, #pay-form")) renderClients();
+  }, e => { console.warn(e); S.invLoaded = true; });
   S.db.collection("custom").onSnapshot(snap => {
     S.custom = snap.docs.map(d => ({...d.data(), id:d.id, source:"My protocols", mine:true}));
     if(S.tab==="library") render();
   }, e => console.warn(e));
-  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings" && !document.activeElement?.closest?.("#tpl-editor, #st-instr, #st-qcis, #pw-new")) render(); }, e=>console.warn(e));
+  S.db.doc("settings/practice").onSnapshot(s => { S.settings = s.exists ? s.data() : {}; if(S.settings.instructions && COMBINE_RX.test(S.settings.instructions)){ COMBINE_RX.lastIndex=0; S.settings.instructions=cleanInstr(S.settings.instructions); S.db.doc("settings/practice").update({instructions:S.settings.instructions}).catch(()=>{}); } COMBINE_RX.lastIndex=0; if(S.tab==="settings" && !document.activeElement?.closest?.("#bill-set, #tpl-editor, #st-instr, #st-qcis, #pw-new")) render(); }, e=>console.warn(e));
   loadLibrary();
   render();
 }
@@ -680,6 +688,7 @@ const ICONS = {
   plans:'<path d="M10 3h4M11 3v4l-4 6v6a2 2 0 002 2h6a2 2 0 002-2v-6l-4-6V3"/><path d="M7 15h10"/>',
   reports:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 17v-3M12 17v-6M15 17v-2"/>',
   messages:'<path d="M4 5h16v11H9l-5 4z"/>',
+  billing:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h3"/>',
   calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   clients:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18.5 14.8c1.7.8 2.8 2.5 3 5.2"/>',
   repertory:'<path d="M4 4h11a3 3 0 013 3v13H7a3 3 0 01-3-3z"/><path d="M4 17a3 3 0 013-3h11"/>',
@@ -764,7 +773,7 @@ async function logEmail(id, subject, kind){
   try{ const c=S.clients?.[id]||{}; const log=[{at:new Date().toISOString(), subject:String(subject||"").slice(0,200), kind}, ...(c.emailLog||[])].slice(0,50);
     await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
 }
-const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", auto:"New-message email (automatic)"};
+const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", invoice:"Invoice", receipt:"Receipt", auto:"New-message email (automatic)"};
 function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`; }
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
@@ -828,6 +837,7 @@ function apptsPane(id){
       ${apptDelivery(a)==="ship"?`<span class="small" style="white-space:pre-line;margin-top:4px"><b>Ship to:</b> ${esc(a.shipTo||clientShipAddress(c)||"No address on file yet")}</span>
         ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>`:""}`:""}</div>
     <div class="row" style="gap:4px;flex-wrap:nowrap">${apptDelivery(a)==="ship"?(a.shippedAt?`<button type="button" class="ghost small" data-apptship="${esc(a.id)}" data-undo="1">Undo shipped</button>`:`<button type="button" class="small primary" data-apptship="${esc(a.id)}">Mark shipped</button>`):""}
+      ${Object.values(S.inv||{}).some(v=>v.apptId===a.id&&v.status!=="void")?'<span class="chip ok">Billed</span>':`<button type="button" class="ghost small" data-apptbill="${esc(a.id)}">Bill</button>`}
       <button type="button" class="ghost small" data-apptics="${esc(a.id)}">Add to calendar</button><button type="button" class="small" data-apptedit="${esc(a.id)}">Edit</button></div></div>`;
   const form = ed ? (()=>{ const a=ed.a; return `<div class="formsec stack" id="appt-form" style="gap:10px">
       <h3>${ed.isNew?"New appointment":"Edit appointment"}</h3>
@@ -903,9 +913,327 @@ function clientName(id){
   const c = S.clients[id] || {};
   return c.name || c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
 }
+/* ---------- billing: invoices/<id> = {clientId, number, date, due, items:[{kind,desc,qty,price,sessions,credit}], discount:{label,type,value}, status:"draft"|"sent"|"void", payments:[{id,date,amount,method,note}], note, pay:{...}, apptId} ---------- */
+const BILL_KINDS = {scan:"Qest4 scan", consult:"Consult", imprint:"Remote imprint", remedy:"Remedies", shipping:"Shipping", package:"Prepaid package", other:"Other"};
+const PAY_METHODS = ["Online payment","Venmo","Zelle","Cash App","Other"];
+const money = n => { const v=Math.round((+n||0)*100)/100; return (v<0?"-":"")+"$"+Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,","); };
+const r2 = n => Math.round((+n||0)*100)/100;
+function invMath(v){
+  const items=v?.items||[]; const sub=r2(items.reduce((t,i)=>t+(i.credit?0:(+i.qty||0)*(+i.price||0)),0));
+  const d=v?.discount||{}; const disc = !(+d.value) ? 0 : d.type==="pct" ? r2(sub*(+d.value)/100) : Math.min(sub, r2(d.value));
+  const total=Math.max(0, r2(sub-disc)); const paid=r2((v?.payments||[]).reduce((t,p)=>t+(+p.amount||0),0));
+  return {sub, disc, total, paid, bal:r2(total-paid)};
+}
+function invStatus(v){
+  if(v.status==="void") return ["Void",""]; if(v.status!=="sent") return ["Draft",""];
+  const m=invMath(v); if(m.bal<=0) return ["Paid","ok"]; if(m.paid>0) return ["Part paid","acc"];
+  if(v.due && v.due<today()) return ["Overdue","warn"]; return ["Unpaid","acc"];
+}
+const invOpen = v => v.status==="sent" && invMath(v).bal>0;
+function prepaidLeft(list){ let bought=0, used=0;
+  (list||[]).filter(v=>v.status==="sent").forEach(v=>(v.items||[]).forEach(i=>{ if(i.kind==="package") bought+=(+i.qty||1)*(+i.sessions||0); if(i.credit) used+=(+i.qty||1); }));
+  return {bought, used, left:bought-used}; }
+const billSet = () => S.settings.billing || {};
+function payInfo(){ const b=billSet(); const o={}; ["payLink","venmo","zelle","cashapp","payNote"].forEach(k=>{ if((b[k]||"").trim()) o[k]=b[k].trim(); }); return o; }
+const venmoUrl = h => "https://venmo.com/u/"+encodeURIComponent(String(h).replace(/^@/,""));
+const cashUrl = h => "https://cash.app/$"+encodeURIComponent(String(h).replace(/^\$/,""));
+function payLines(pay, no){
+  const L=[];
+  if(pay.payLink) L.push(`Pay online: ${pay.payLink}`);
+  if(pay.venmo) L.push(`Venmo: @${pay.venmo.replace(/^@/,"")} (${venmoUrl(pay.venmo)})`);
+  if(pay.zelle) L.push(`Zelle: ${pay.zelle}`);
+  if(pay.cashapp) L.push(`Cash App: $${pay.cashapp.replace(/^\$/,"")} (${cashUrl(pay.cashapp)})`);
+  return L.length ? `How to pay:\n${L.join("\n")}${no?`\nPlease include invoice #${no} in the payment note.`:""}${pay.payNote?`\n${pay.payNote}`:""}` : "";
+}
+function payBlock(pay, no, bal){
+  const b=[];
+  if(pay.payLink) b.push(`<a class="btn primary" href="${esc(pay.payLink)}" target="_blank" rel="noopener">Pay ${bal>0?esc(money(bal))+" ":""}online</a>`);
+  if(pay.venmo) b.push(`<a class="btn" href="${esc(venmoUrl(pay.venmo))}" target="_blank" rel="noopener">Venmo @${esc(pay.venmo.replace(/^@/,""))}</a>`);
+  if(pay.cashapp) b.push(`<a class="btn" href="${esc(cashUrl(pay.cashapp))}" target="_blank" rel="noopener">Cash App $${esc(pay.cashapp.replace(/^\$/,""))}</a>`);
+  const z = pay.zelle ? `<span class="small">Zelle: <b>${esc(pay.zelle)}</b></span>` : "";
+  if(!b.length && !z) return "";
+  return `<div class="stack" style="gap:6px"><div class="row" style="gap:6px">${b.join("")}</div>${z}<span class="small muted">${no?`Please include invoice #${esc(no)} in the payment note.`:""}${pay.payNote?` ${esc(pay.payNote)}`:""}</span></div>`;
+}
+function invLinesHtml(v){
+  const m=invMath(v);
+  return `<table class="inv-tab"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>
+    ${(v.items||[]).map(i=>`<tr><td>${esc(i.desc||BILL_KINDS[i.kind]||"Item")}${i.kind==="package"&&i.sessions?` <span class="muted">(${esc(i.sessions)} sessions)</span>`:""}${i.credit?` <span class="muted">(prepaid session)</span>`:""}</td><td class="num">${esc(i.qty||1)}</td><td class="num">${i.credit?"Prepaid":esc(money(i.price))}</td><td class="num">${i.credit?money(0):esc(money((+i.qty||0)*(+i.price||0)))}</td></tr>`).join("")}
+    </tbody><tfoot>
+    ${m.disc?`<tr><td colspan="3">Subtotal</td><td class="num">${money(m.sub)}</td></tr><tr><td colspan="3">${esc(v.discount?.label||"Discount")}${v.discount?.type==="pct"?` (${esc(v.discount.value)}%)`:""}</td><td class="num">-${money(m.disc)}</td></tr>`:""}
+    <tr><td colspan="3"><b>Total</b></td><td class="num"><b>${money(m.total)}</b></td></tr>
+    ${(v.payments||[]).map(p=>`<tr class="muted"><td colspan="3">Paid ${esc(fmtDate(p.date))}${p.method?` · ${esc(p.method)}`:""}</td><td class="num">-${money(p.amount)}</td></tr>`).join("")}
+    ${v.status==="sent"?`<tr><td colspan="3"><b>Balance due</b></td><td class="num"><b>${money(m.bal)}</b></td></tr>`:""}
+    </tfoot></table>`;
+}
+function invPrint(v, name){
+  const w=window.open("", "_blank"); if(!w){ toast("Allow pop-ups to print the invoice"); return; }
+  const m=invMath(v), pay=v.pay||payInfo();
+  const L=payLines(pay, v.number).split("\n").filter(Boolean);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${esc(v.number||"")}</title><style>
+    body{font:14px/1.5 Georgia,serif;color:#222;max-width:720px;margin:40px auto;padding:0 24px} h1{font-weight:normal;margin:0 0 4px} .muted{color:#777}
+    table{width:100%;border-collapse:collapse;margin:24px 0} th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left} .num{text-align:right} tfoot td{border:0}
+    .top{display:flex;justify-content:space-between;gap:24px} .acc{color:#087C9C}</style></head><body>
+    <div class="top"><div><h1 class="acc">Invoice</h1><div>#${esc(v.number||"")}</div><div class="muted">Date ${esc(fmtDate(v.date))}${v.due?` · Due ${esc(fmtDate(v.due))}`:""}</div></div>
+    <div style="text-align:right"><b>${esc(PRACTICE.name)}</b><br>Wellness From Within<br>${esc(PRACTICE.phone)}<br>${esc(PRACTICE.site)}</div></div>
+    <p><b>Bill to:</b> ${esc(name||"")}</p>
+    ${invLinesHtml(v)}
+    ${m.bal<=0&&v.status==="sent"?`<p><b>Paid in full. Thank you!</b></p>`:""}
+    ${v.note?`<p>${esc(v.note).replace(/\n/g,"<br>")}</p>`:""}
+    ${L.length&&m.bal>0?`<p>${L.map(esc).join("<br>")}</p>`:""}
+    <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+function invEmail(cid, v){
+  const to=clientEmail(cid); if(!to){ toast("This client has no email address on file"); return false; }
+  const first=clientFirst(cid), m=invMath(v), pay=v.pay||payInfo();
+  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${(+i.qty||1)>1?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money((+i.qty||0)*(+i.price||0))}`).join("\n");
+  const subject=`Invoice #${v.number} from Wellness From Within`;
+  const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nHere is your invoice #${v.number}, dated ${fmtDate(v.date)}.\n\n${lines}\n${m.disc?`${v.discount?.label||"Discount"}: -${money(m.disc)}\n`:""}Total: ${money(m.total)}\n${m.paid?`Paid so far: ${money(m.paid)}\n`:""}Balance due: ${money(m.bal)}${v.due?` by ${fmtDate(v.due)}`:""}\n\n${v.note?v.note+"\n\n":""}${payLines(pay, v.number)}\n\nYou can also see this invoice in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\nThank you!\n\n${emailSign()}`;
+  openMail(to, subject, body); logEmail(cid, subject, "invoice"); return true;
+}
+function receiptEmail(cid, v, p){
+  const to=clientEmail(cid); if(!to){ toast("This client has no email address on file"); return false; }
+  const first=clientFirst(cid), m=invMath(v);
+  const subject=`Receipt for invoice #${v.number}`;
+  const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nThank you! I received your payment of ${money(p.amount)} on ${fmtDate(p.date)}${p.method?` by ${p.method}`:""} for invoice #${v.number}.\n\n${m.bal<=0?"This invoice is now paid in full.":`Remaining balance: ${money(m.bal)}.`}\n\nYou can see your invoices any time in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\n${emailSign()}`;
+  openMail(to, subject, body); logEmail(cid, subject, "receipt"); return true;
+}
+/* practitioner: data */
+const invsOf = cid => Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filter(v=>v.clientId===cid).sort((a,b)=>(b.date||"").localeCompare(a.date||"") || (b.number||0)-(a.number||0));
+function clientBalance(cid){ return r2(invsOf(cid).filter(invOpen).reduce((t,v)=>t+invMath(v).bal,0)); }
+function blankInvoice(cid, appt){
+  const d=today(), due=new Date(d+"T12:00:00"); due.setDate(due.getDate()+14);
+  const v={clientId:cid, date:d, due:due.toISOString().slice(0,10), items:[], discount:{label:"", type:"pct", value:""}, status:"draft", payments:[], note:""};
+  if(appt){ v.apptId=appt.id; const price=billSet().items||[];
+    const kinds=[appt.type]; if(appt.type==="scan" && apptDelivery(appt)==="ship") kinds.push("shipping");
+    kinds.forEach(k=>{ const p=price.find(x=>x.kind===k); v.items.push(p?{kind:k, desc:p.name, qty:1, price:+p.price||0}:{kind:k, desc:(APPT_TYPES[k]||BILL_KINDS[k])+(k===appt.type?` · ${fmtDate(appt.date)}`:""), qty:1, price:0}); });
+  }
+  if(!v.items.length) v.items.push({kind:"other", desc:"", qty:1, price:0});
+  return v;
+}
+/* practitioner: client's Billing subtab */
+function billingPane(id){
+  const list=invsOf(id), ed=S.invEdit && S.invEdit.cid===id ? S.invEdit : null, pp=prepaidLeft(list), bal=clientBalance(id);
+  if(!S.invLoaded) return `<div class="empty small">Loading…</div>`;
+  const noPrices=!(billSet().items||[]).length;
+  return `<div class="stack">
+    <div class="row" style="gap:10px"><div class="grow row" style="gap:16px"><span><span class="small muted">Balance due</span><br><b style="font-size:20px">${money(bal)}</b></span>
+      ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
+      ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
+    ${noPrices?`<p class="small muted">Tip: add your prices and payment options under Settings → Billing, so invoices fill in for you.</p>`:""}
+    ${ed?invEditor(id, ed, pp):""}
+    ${list.length?`<div class="stack" style="gap:8px">${list.map(v=>invRow(id,v)).join("")}</div>`:ed?"":`<div class="empty small">No invoices yet.</div>`}
+  </div>`;
+}
+function invRow(id, v){
+  const [st,cls]=invStatus(v), m=invMath(v), open=S.invOpenId===v.id, paying=S.payFor===v.id;
+  const last=(v.payments||[]).slice(-1)[0];
+  return `<div class="formsec stack" style="gap:8px">
+    <div class="row" style="gap:8px"><button type="button" class="ghost grow" style="justify-content:flex-start;text-align:left;padding:0" data-invtoggle="${esc(v.id)}">
+      <span><b>#${esc(v.number||"—")}</b> · ${esc(fmtDate(v.date))} · ${esc(money(m.total))}${v.status==="sent"&&m.bal>0&&m.paid>0?` <span class="small muted">(${esc(money(m.bal))} left)</span>`:""}<br><span class="small muted">${esc((v.items||[]).map(i=>i.desc||BILL_KINDS[i.kind]).filter(Boolean).join(", ")||"No items")}</span></span></button>
+      <span class="chip ${cls}">${st}</span></div>
+    <div class="row" style="gap:6px">
+      ${v.status!=="void"?`<button type="button" class="small" data-invedit="${esc(v.id)}">Edit</button>`:""}
+      ${invOpen(v)?`<button type="button" class="small primary" data-invpay="${esc(v.id)}">Record payment</button><button type="button" class="small" data-invmail="${esc(v.id)}">Email invoice</button>`:""}
+      ${v.status==="sent"&&last?`<button type="button" class="small" data-invrcpt="${esc(v.id)}">Email receipt</button>`:""}
+      <button type="button" class="ghost small" data-invprint="${esc(v.id)}">Print / PDF</button></div>
+    ${paying?`<div class="stack" id="pay-form" style="gap:8px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
+      <div class="grid2"><label class="field"><span>Amount</span><input id="pf-amt" type="number" step="0.01" min="0" value="${esc(m.bal.toFixed(2))}"></label>
+        <label class="field"><span>Date received</span><input id="pf-date" type="date" value="${esc(today())}"></label>
+        <label class="field"><span>How they paid</span><select id="pf-method">${PAY_METHODS.map(x=>`<option>${x}</option>`).join("")}</select></label>
+        <label class="field"><span>Note (optional)</span><input id="pf-note" placeholder="e.g. confirmation number"></label></div>
+      <div class="row"><button type="button" class="primary" data-act="paysave">Save payment</button><button type="button" data-act="paycancel">Cancel</button></div></div>`:""}
+    ${open?`<div class="stack" style="gap:6px">${invLinesHtml(v)}${v.note?`<p class="small">${esc(v.note)}</p>`:""}
+      ${(v.payments||[]).length?`<div class="row small" style="gap:6px;flex-wrap:wrap">${v.payments.map(p=>`<span class="chip">${esc(money(p.amount))} · ${esc(fmtDate(p.date))}${p.method?` · ${esc(p.method)}`:""}${p.note?` · ${esc(p.note)}`:""} <button type="button" class="ghost small" style="padding:0 4px" title="Remove this payment" data-paydel="${esc(v.id)}" data-pid="${esc(p.id)}">×</button></span>`).join("")}</div>`:""}</div>`:""}
+  </div>`;
+}
+function invEditor(id, ed, pp){
+  const v=ed.v, price=billSet().items||[];
+  const line=(i,n)=>`<div class="inv-line" data-li="${n}">
+      <select class="li-pick" aria-label="From price list"><option value="">${price.length?"Price list…":"No price list yet"}</option>${price.map((p,k)=>`<option value="${k}">${esc(p.name)} · ${esc(money(p.price))}</option>`).join("")}</select>
+      <input class="li-desc" placeholder="Description" value="${esc(i.desc||"")}">
+      <select class="li-kind" aria-label="Type">${Object.entries(BILL_KINDS).map(([k,l])=>`<option value="${k}" ${i.kind===k?"selected":""}>${l}</option>`).join("")}</select>
+      <input class="li-qty" type="number" min="1" step="1" aria-label="Quantity" value="${esc(i.qty||1)}">
+      <input class="li-price" type="number" min="0" step="0.01" aria-label="Price" value="${esc(i.price??0)}">
+      <span class="li-extra">${i.kind==="package"?`<input class="li-sess" type="number" min="1" step="1" aria-label="Sessions in package" title="Sessions in this package" value="${esc(i.sessions||"")}" placeholder="Sessions">`
+        :["scan","consult","imprint"].includes(i.kind)&&(i.credit||pp.left>0)?`<label class="check small"><input type="checkbox" class="li-credit" ${i.credit?"checked":""}><span>Prepaid</span></label>`:""}</span>
+      <button type="button" class="ghost small" data-lidel="${n}" aria-label="Remove line">×</button></div>`;
+  return `<div class="formsec stack" id="inv-form" style="gap:10px">
+    <h3>${ed.isNew?"New invoice":`Invoice #${esc(v.number||"")}`}</h3>
+    <div class="grid2"><label class="field"><span>Date</span><input id="iv-date" type="date" value="${esc(v.date||today())}"></label>
+      <label class="field"><span>Due</span><input id="iv-due" type="date" value="${esc(v.due||"")}"></label></div>
+    <div class="stack" style="gap:6px"><span class="small muted">Items${pp.left>0?` · ${pp.left} prepaid session${pp.left===1?"":"s"} left: tick Prepaid to use one`:""}</span>${v.items.map(line).join("")}
+      <div><button type="button" class="small" data-act="liadd">Add line</button></div></div>
+    <div class="grid2"><label class="field"><span>Discount (optional)</span><input id="iv-dlabel" placeholder="e.g. Family discount" value="${esc(v.discount?.label||"")}"></label>
+      <div class="row" style="gap:6px;align-items:end"><label class="field" style="flex:1"><span>Amount</span><input id="iv-dval" type="number" min="0" step="0.01" value="${esc(v.discount?.value||"")}"></label>
+        <select id="iv-dtype" style="width:auto"><option value="pct" ${v.discount?.type!=="amt"?"selected":""}>%</option><option value="amt" ${v.discount?.type==="amt"?"selected":""}>$</option></select></div></div>
+    <label class="field"><span>Note to client (optional)</span><textarea id="iv-note" style="min-height:60px">${esc(v.note||"")}</textarea></label>
+    <div id="iv-totals" class="row" style="gap:16px"></div>
+    <div class="row">
+      ${v.status==="sent"?`<button type="button" class="primary" data-act="invsave" data-mode="sent">Save</button>`
+        :`<button type="button" class="primary" data-act="invsave" data-mode="send">Send to client</button><button type="button" data-act="invsave" data-mode="sendmail">Send and email it</button><button type="button" data-act="invsave" data-mode="draft">Save draft</button>`}
+      <button type="button" data-act="invcancel">Cancel</button><span class="grow"></span>
+      ${ed.isNew?"":v.status==="sent"?(S.invConfirm==="void"?`<button type="button" class="danger small" data-act="invvoid">Yes, void it</button>`:`<button type="button" class="ghost small" data-act="invaskvoid">Void invoice</button>`)
+        :(S.invConfirm==="del"?`<button type="button" class="danger small" data-act="invdel">Yes, delete</button>`:`<button type="button" class="ghost small" data-act="invaskdel">Delete draft</button>`)}</div>
+    <p class="small muted">${v.status==="sent"?"Changes show in their portal right away.":"“Send to client” puts it in their portal under Billing. Drafts are only visible to you."}</p>
+  </div>`;
+}
+function readInvForm(){
+  const ed=S.invEdit; if(!ed || !$("#inv-form")) return;
+  const v=ed.v;
+  v.date=$("#iv-date").value||today(); v.due=$("#iv-due").value||"";
+  v.items=[...document.querySelectorAll("#inv-form [data-li]")].map(el=>{ const q=c=>el.querySelector(c);
+    const i={kind:q(".li-kind").value, desc:q(".li-desc").value.trim(), qty:Math.max(1, Math.round(+q(".li-qty").value||1)), price:r2(q(".li-price").value)};
+    if(i.kind==="package") i.sessions=Math.max(0, Math.round(+(q(".li-sess")?.value||0)));
+    if(q(".li-credit")?.checked && ["scan","consult","imprint"].includes(i.kind)) i.credit=true;
+    return i; });
+  v.discount={label:$("#iv-dlabel").value.trim(), type:$("#iv-dtype").value, value:$("#iv-dval").value===""?"":r2($("#iv-dval").value)};
+  v.note=$("#iv-note").value.trim();
+}
+function paintInvTotals(){ const el=$("#iv-totals"); if(!el || !S.invEdit) return; readInvForm(); const m=invMath(S.invEdit.v);
+  el.innerHTML=`${m.disc?`<span class="small muted">Subtotal ${money(m.sub)} · Discount -${money(m.disc)}</span>`:""}<b>Total ${money(m.total)}</b>${m.paid?`<span class="small muted">Paid ${money(m.paid)} · Balance ${money(m.bal)}</span>`:""}`; }
+function bindBilling(){
+  const f=$("#inv-form"); if(!f) return; paintInvTotals();
+  f.oninput = e => { if(!e.target.closest(".li-pick")) paintInvTotals(); };
+  f.onchange = e => {
+    const pick=e.target.closest(".li-pick");
+    if(pick && pick.value!==""){ const p=(billSet().items||[])[+pick.value]; const n=+pick.closest("[data-li]").dataset.li; readInvForm();
+      if(p){ S.invEdit.v.items[n]={...S.invEdit.v.items[n], kind:p.kind||"other", desc:p.name, price:+p.price||0, ...(p.kind==="package"?{sessions:+p.sessions||0}:{})}; delete S.invEdit.v.items[n].credit; }
+      renderClients(); return; }
+    if(e.target.closest(".li-kind")){ readInvForm(); renderClients(); return; }
+    paintInvTotals(); };
+}
+async function nextInvNumber(){
+  const used=Object.values(S.inv||{}).map(v=>+v.number||0); const n=Math.max(+billSet().nextNo||1001, used.length?Math.max(...used)+1:0);
+  try{ await S.db.doc("settings/practice").update({billing:{...billSet(), nextNo:n+1}}); }catch(e){ console.warn(e); }
+  return n;
+}
+async function saveInvoice(mode){
+  readInvForm(); const ed=S.invEdit, v={...ed.v};
+  v.items=v.items.filter(i=>i.desc || +i.price || i.credit); if(!v.items.length){ toast("Add at least one item"); return; }
+  if(v.items.some(i=>i.kind==="package" && !(i.sessions>0))){ toast("Enter how many sessions the package includes"); return; }
+  if(!v.number) v.number=await nextInvNumber();
+  if(mode!=="draft" && v.status!=="sent"){ v.status="sent"; v.sentAt=new Date().toISOString(); }
+  if(v.status==="sent") v.pay=payInfo();
+  v.updatedAt=new Date().toISOString(); if(!v.createdAt) v.createdAt=v.updatedAt;
+  const {id:_x, ...data}=v;
+  try{ await S.db.doc("invoices/"+ed.id).set(data); }catch(e){ console.warn(e); toast("That didn't save. Please try again."); return; }
+  S.inv={...S.inv, [ed.id]:data}; S.invEdit=null; S.invConfirm=null; S.invOpenId=ed.id;
+  toast(mode==="draft"?"Draft saved":ed.v.status==="sent"?"Invoice updated":"Invoice sent to their portal");
+  if(mode==="sendmail") invEmail(data.clientId, data);
+  renderClients();
+}
+async function billingClick(e){
+  const g=x=>e.target.closest(x);
+  let b;
+  if((b=g("[data-invtoggle]"))){ S.invOpenId = S.invOpenId===b.dataset.invtoggle?null:b.dataset.invtoggle; renderClients(); return true; }
+  if((b=g("[data-invedit]"))){ const v=S.inv[b.dataset.invedit]; if(v){ S.invEdit={cid:S.sel, id:b.dataset.invedit, isNew:false, v:JSON.parse(JSON.stringify(v))}; S.invConfirm=null; S.payFor=null; renderClients(); $("#inv-form")?.scrollIntoView({block:"start"}); } return true; }
+  if((b=g("[data-invpay]"))){ S.payFor=b.dataset.invpay; renderClients(); $("#pf-amt")?.focus(); return true; }
+  if((b=g("[data-invmail]"))){ const v=S.inv[b.dataset.invmail]; if(v && invEmail(v.clientId, v)) toast("Opened in Mail. Noted in this client's email history."); return true; }
+  if((b=g("[data-invrcpt]"))){ const v=S.inv[b.dataset.invrcpt]; const p=(v?.payments||[]).slice(-1)[0]; if(v&&p&&receiptEmail(v.clientId, v, p)) toast("Opened in Mail. Noted in this client's email history."); return true; }
+  if((b=g("[data-invprint]"))){ const v=S.inv[b.dataset.invprint]; if(v) invPrint(v, clientName(v.clientId)); return true; }
+  if((b=g("[data-paydel]"))){ const id=b.dataset.paydel, v=S.inv[id]; if(!v) return true; const data={...v, payments:(v.payments||[]).filter(p=>p.id!==b.dataset.pid)};
+    try{ await S.db.doc("invoices/"+id).set(data); S.inv={...S.inv,[id]:data}; toast("Payment removed"); }catch(e1){ toast("That didn't save. Please try again."); } renderClients(); return true; }
+  if((b=g("[data-lidel]"))){ readInvForm(); S.invEdit.v.items.splice(+b.dataset.lidel,1); if(!S.invEdit.v.items.length) S.invEdit.v.items.push({kind:"other",desc:"",qty:1,price:0}); renderClients(); return true; }
+  if((b=g("[data-apptbill]"))){ const a=apptsOf(S.clients[S.sel]).find(x=>x.id===b.dataset.apptbill); S.sub="billing"; S.invEdit={cid:S.sel, id:genId(), isNew:true, v:blankInvoice(S.sel, a)}; S.apptEdit=null; renderClients(); window.scrollTo(0,0); return true; }
+  const a=g("[data-act]"); if(!a) return false;
+  const act=a.dataset.act;
+  if(act==="invnew"){ S.invEdit={cid:S.sel, id:genId(), isNew:true, v:blankInvoice(S.sel)}; S.invConfirm=null; S.payFor=null; renderClients(); return true; }
+  if(act==="invcancel"){ S.invEdit=null; S.invConfirm=null; renderClients(); return true; }
+  if(act==="liadd"){ readInvForm(); S.invEdit.v.items.push({kind:"other",desc:"",qty:1,price:0}); renderClients(); document.querySelector("#inv-form [data-li]:last-of-type .li-desc")?.focus(); return true; }
+  if(act==="invsave"){ a.disabled=true; await saveInvoice(a.dataset.mode); a.disabled=false; return true; }
+  if(act==="invaskvoid"){ readInvForm(); S.invConfirm="void"; renderClients(); return true; }
+  if(act==="invaskdel"){ readInvForm(); S.invConfirm="del"; renderClients(); return true; }
+  if(act==="invvoid"){ const ed=S.invEdit; const data={...S.inv[ed.id], status:"void", voidedAt:new Date().toISOString()};
+    try{ await S.db.doc("invoices/"+ed.id).set(data); S.inv={...S.inv,[ed.id]:data}; S.invEdit=null; S.invConfirm=null; toast("Invoice voided"); }catch(e1){ toast("That didn't save. Please try again."); } renderClients(); return true; }
+  if(act==="invdel"){ const ed=S.invEdit; try{ await S.db.doc("invoices/"+ed.id).delete(); const m={...S.inv}; delete m[ed.id]; S.inv=m; S.invEdit=null; S.invConfirm=null; toast("Draft deleted"); }catch(e1){ toast("That didn't delete. Please try again."); } renderClients(); return true; }
+  if(act==="paycancel"){ S.payFor=null; renderClients(); return true; }
+  if(act==="paysave"){ const id=S.payFor, v=S.inv[id]; const amt=r2($("#pf-amt").value); if(!(amt>0)){ toast("Enter the amount received"); return true; }
+    const p={id:genId().slice(0,10), date:$("#pf-date").value||today(), amount:amt, method:$("#pf-method").value, note:$("#pf-note").value.trim()};
+    const data={...v, payments:[...(v.payments||[]), p], updatedAt:new Date().toISOString()};
+    a.disabled=true; try{ await S.db.doc("invoices/"+id).set(data); S.inv={...S.inv,[id]:data}; S.payFor=null; toast(invMath(data).bal<=0?"Payment saved. Paid in full.":"Payment saved"); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); return true; }
+    renderClients(); return true; }
+  return false;
+}
+/* practitioner: Billing overview */
+function renderBilling(){
+  const all=Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filter(v=>S.clients[v.clientId] || v.clientId);
+  const f=S.billFilter||"unpaid";
+  const pick={unpaid:v=>invOpen(v), paid:v=>v.status==="sent"&&invMath(v).bal<=0, drafts:v=>v.status==="draft", all:v=>v.status!=="void"}[f]||(()=>true);
+  const rows=all.filter(pick).sort((a,b)=>f==="unpaid"?(a.due||a.date||"").localeCompare(b.due||b.date||""):(b.date||"").localeCompare(a.date||""));
+  const owed=r2(all.filter(invOpen).reduce((t,v)=>t+invMath(v).bal,0)), mo=today().slice(0,7);
+  const paidMo=r2(all.filter(v=>v.status==="sent").reduce((t,v)=>t+(v.payments||[]).filter(p=>(p.date||"").startsWith(mo)).reduce((s,p)=>s+(+p.amount||0),0),0));
+  const overdue=all.filter(v=>invStatus(v)[0]==="Overdue").length;
+  $("#app").innerHTML=`<div class="sheet stack" style="max-width:860px">
+    <div class="row"><h1 class="grow">Billing</h1></div>
+    <div class="row" style="gap:24px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${money(owed)}</b></span>
+      <span><span class="small muted">Received this month</span><br><b style="font-size:22px">${money(paidMo)}</b></span>
+      ${overdue?`<span><span class="small muted">Overdue</span><br><b style="font-size:22px">${overdue}</b></span>`:""}</div>
+    <div class="seg" role="tablist">${[["unpaid","Unpaid"],["paid","Paid"],["drafts","Drafts"],["all","All"]].map(([k,l])=>`<button type="button" data-bf="${k}" aria-current="${f===k}">${l}</button>`).join("")}</div>
+    ${!S.invLoaded?`<div class="empty">Loading…</div>`:!rows.length?`<div class="empty small">${f==="unpaid"?"Nothing outstanding.":"None yet."} To bill someone, open a client and choose Billing, or use “Bill” on an appointment.</div>`
+      :`<div class="list-pane">${rows.map(v=>{ const [st,cls]=invStatus(v), m=invMath(v); return `<button type="button" class="item" data-billopen="${esc(v.clientId)}" data-inv="${esc(v.id)}">
+        <div class="row" style="gap:10px;flex-wrap:nowrap"><div class="grow" style="min-width:0"><b>${esc(clientName(v.clientId))}</b><div class="small muted">#${esc(v.number||"—")} · ${esc(fmtDate(v.date))}${v.due&&invOpen(v)?` · due ${esc(fmtDate(v.due))}`:""}</div></div>
+        <b>${esc(money(f==="unpaid"?m.bal:m.total))}</b><span class="chip ${cls}">${st}</span></div></button>`; }).join("")}</div>`}
+    <p class="small muted">Payment options and your price list are in Settings → Billing.</p>
+  </div>`;
+  $("#app").onclick=e=>{ const bf=e.target.closest("[data-bf]"); if(bf){ S.billFilter=bf.dataset.bf; renderBilling(); return; }
+    const b=e.target.closest("[data-billopen]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.billopen; S.sub="billing"; S.invOpenId=b.dataset.inv; S.invEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
+}
+/* settings: prices and payment options */
+function billingSettingsSection(){
+  const b=billSet(), items=S.priceDraft || (b.items||[]);
+  return `<div class="formsec stack" id="bill-set">
+    <h3>Billing</h3>
+    <p class="small muted">How clients can pay you. These show on invoices and in their portal.</p>
+    <div class="grid2">
+      <label class="field"><span>Online payment link</span><input id="bs-link" type="url" placeholder="https://…" value="${esc(b.payLink||"")}"></label>
+      <label class="field"><span>Venmo username</span><input id="bs-venmo" placeholder="@yourname" value="${esc(b.venmo||"")}"></label>
+      <label class="field"><span>Zelle (email or phone)</span><input id="bs-zelle" value="${esc(b.zelle||"")}"></label>
+      <label class="field"><span>Cash App $cashtag</span><input id="bs-cash" placeholder="$yourname" value="${esc(b.cashapp||"")}"></label></div>
+    <label class="field"><span>Payment note (optional)</span><input id="bs-note" placeholder="e.g. Payment is due within 14 days." value="${esc(b.payNote||"")}"></label>
+    <h3 style="margin-top:6px">Price list</h3>
+    <p class="small muted">Pick these when making an invoice. For a package, enter how many sessions it includes; clients' prepaid sessions are counted for you.</p>
+    <div class="stack" style="gap:6px">${items.map((p,k)=>`<div class="row price-row" data-pi="${k}" style="gap:6px;flex-wrap:nowrap">
+        <input class="pi-name" placeholder="Name, e.g. Qest4 scan" value="${esc(p.name||"")}" style="flex:2">
+        <select class="pi-kind" style="flex:1">${Object.entries(BILL_KINDS).map(([kk,l])=>`<option value="${kk}" ${p.kind===kk?"selected":""}>${l}</option>`).join("")}</select>
+        <input class="pi-price" type="number" min="0" step="0.01" placeholder="Price" value="${esc(p.price??"")}" style="width:100px">
+        <input class="pi-sess" type="number" min="1" step="1" placeholder="Sessions" title="Sessions in package" value="${esc(p.sessions||"")}" style="width:90px" ${p.kind==="package"?"":"hidden"}>
+        <button type="button" class="ghost small" data-pidel="${k}" aria-label="Remove">×</button></div>`).join("")||`<p class="small muted">No prices yet.</p>`}</div>
+    <div class="row"><button type="button" class="small" data-act="piadd">Add price</button><span class="grow"></span><button type="button" class="primary" data-act="billsave">Save billing settings</button></div>
+  </div>`;
+}
+function readPriceRows(){ return [...document.querySelectorAll("#bill-set [data-pi]")].map(el=>{ const q=c=>el.querySelector(c); const p={id:genId().slice(0,8), name:q(".pi-name").value.trim(), kind:q(".pi-kind").value, price:r2(q(".pi-price").value)}; if(p.kind==="package") p.sessions=Math.max(0,Math.round(+q(".pi-sess").value||0)); return p; }); }
+async function billingSettingsClick(e){
+  const d=e.target.closest("[data-pidel]"); if(d){ const rows=readPriceRows(); rows.splice(+d.dataset.pidel,1); S.priceDraft=rows; renderSettings(); return true; }
+  const a=e.target.closest("[data-act]"); if(!a) return false;
+  if(a.dataset.act==="piadd"){ S.priceDraft=[...readPriceRows(), {name:"", kind:"scan", price:""}]; renderSettings(); const ins=document.querySelectorAll("#bill-set .pi-name"); ins[ins.length-1]?.focus(); return true; }
+  if(a.dataset.act==="billsave"){ const items=readPriceRows().filter(p=>p.name);
+    const billing={...billSet(), items, payLink:$("#bs-link").value.trim(), venmo:$("#bs-venmo").value.trim().replace(/^@/,""), zelle:$("#bs-zelle").value.trim(), cashapp:$("#bs-cash").value.trim().replace(/^\$/,""), payNote:$("#bs-note").value.trim()};
+    if(billing.payLink && !/^https?:\/\//i.test(billing.payLink)) billing.payLink="https://"+billing.payLink;
+    a.disabled=true; try{ await S.db.doc("settings/practice").update({billing}); S.settings={...S.settings, billing}; S.priceDraft=null; toast("Billing settings saved"); renderSettings(); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); }
+    return true; }
+  return false;
+}
+function bindBillingSettings(){ const el=$("#bill-set"); if(el) el.onchange=e=>{ const k=e.target.closest(".pi-kind"); if(k){ const s=k.closest("[data-pi]").querySelector(".pi-sess"); if(s) s.hidden=k.value!=="package"; } }; }
+/* client side */
+function clientBillingView(){
+  const list=(S.myInv||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const bal=r2(list.filter(invOpen).reduce((t,v)=>t+invMath(v).bal,0)), pp=prepaidLeft(list);
+  const firstOpen=list.filter(invOpen).slice(-1)[0];
+  return `<div class="sheet stack"><h2>Billing</h2>
+    <div class="row" style="gap:24px"><span><span class="small muted">Balance due</span><br><b style="font-size:22px">${money(bal)}</b></span>
+      ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:22px">${pp.left}</b></span>`:""}</div>
+    ${bal>0&&firstOpen?payBlock(firstOpen.pay||{}, list.filter(invOpen).length===1?firstOpen.number:"", bal):bal<=0&&list.length?`<p class="small">You're all paid up. Thank you!</p>`:""}
+    ${list.length?list.map(v=>{ const [st,cls]=invStatus(v), m=invMath(v); return `<details class="formsec" ${invOpen(v)?"open":""}><summary style="cursor:pointer;list-style:none"><div class="row" style="gap:8px"><span class="grow"><b>Invoice #${esc(v.number)}</b> · ${esc(fmtDate(v.date))}<br><span class="small muted">${esc(money(m.total))}${v.due&&invOpen(v)?` · due ${esc(fmtDate(v.due))}`:""}</span></span><span class="chip ${cls}">${st}</span></div></summary>
+      <div class="stack" style="gap:8px;margin-top:8px">${invLinesHtml(v)}${v.note?`<p class="small">${esc(v.note)}</p>`:""}
+        <div class="row" style="gap:6px"><button type="button" class="ghost small" data-cinvprint="${esc(v.id)}">Print / save PDF</button></div></div></details>`; }).join("")
+      :`<div class="empty small">No invoices yet.</div>`}
+    <p class="small muted">Questions about a bill? Send Dawn a message or call ${esc(PRACTICE.phone)}.</p></div>`;
+}
+
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
-  const tabs = [["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
+  const tabs = [["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
   const unread = Object.values(S.clients||{}).filter(msgUnreadDawn).length, asks = Object.values(S.clients||{}).filter(c=>c.reschedReq).length;
   t.innerHTML = tabs.map(([k,l]) => `<button type="button" data-tab="${k}" aria-current="${S.tab===k}">${icon(k==="inbox"?"messages":k==="schedule"?"calendar":k)}<span>${l}</span>${k==="inbox"&&unread?`<span class="count" aria-label="${unread} unread">${unread}</span>`:""}${k==="schedule"&&asks?`<span class="count" aria-label="${asks} date change requests">${asks}</span>`:""}</button>`).join(""); sideHelp(false);
   t.onclick = e => { const b=e.target.closest("[data-tab]"); if(!b) return; S.tab=b.dataset.tab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); };
@@ -913,7 +1241,7 @@ function renderTabs(){
 function render(){
   if(!S.prac) return renderClient();
   store("wfw.editPlan", S.editPlan||undefined);
-  (({clients:renderClients, schedule:renderSchedule, inbox:renderInbox, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
+  (({clients:renderClients, schedule:renderSchedule, inbox:renderInbox, billing:renderBilling, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
 }
 
 /* ---------- working-plan banner (shared by library & combos) ---------- */
@@ -991,13 +1319,14 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
+  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
   if(S.sub==="appts") body = apptsPane(id);
+  if(S.sub==="billing") body = billingPane(id);
   if(S.sub==="messages"){ body = messagesPane(id); if(msgUnreadDawn(c) && S.msgSeenMark!==c.lastMsg.at){ S.msgSeenMark=c.lastMsg.at; setTimeout(()=>S.db.doc("clients/"+id).update({msgSeenByDawn:new Date().toISOString()}).catch(e=>console.warn(e)),400); } }
   if(S.sub==="scans") body = scansPane(id);
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
@@ -1319,7 +1648,9 @@ function bindClients(){
     if(now==="pellets"){ const rs=remedyLines(b.remedies); if(rs.length>1) ep.data.bottles.splice(i,1,...rs.map(r=>({...b, form:"pellets", remedies:r}))); }
     ep.target=null; ep.dirty=true; renderClients(); });
   ["pl-title","pl-date","pl-status","pl-instr","pl-extra"].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener("input", ()=>{ if(S.editPlan) S.editPlan.dirty=true; }); });
+  bindBilling();
   app.onclick = async e => {
+    if(await billingClick(e)) return;
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
@@ -3028,6 +3359,7 @@ function renderSettings(){
     <p class="small muted" style="margin-top:-6px">Where “Analyze with QCIS” opens. Leave blank for a new Claude chat, or paste the link of the Claude project you use for scan analysis.</p>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     ${templatesSection()}
+    ${billingSettingsSection()}
     <div class="formsec stack">
       <h3>Inviting clients</h3>
       <p class="small">Send clients the portal address. They type their email, open the sign-in link we email them, and they're in, with no password and no account to set up.</p>
@@ -3056,7 +3388,9 @@ function renderSettings(){
       await flush(); st.textContent=`Done: ${done} items loaded.`; toast("Data loaded"); S.libLoaded=false; loadLibrary();
       Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, bk:{}, remSrc:{}, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
+  bindBillingSettings();
   $("#app").onclick = async e => {
+    if(await billingSettingsClick(e)) return;
     const te=e.target.closest("[data-tpledit]"); if(te){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===te.dataset.tpledit); if(t){ S.tplEdit={...t}; S.tplDel=null; renderSettings(); $("#tp-name")?.focus(); } return; }
     const ta=e.target.closest("[data-tplaskdel]"); if(ta){ S.tplDel=ta.dataset.tplaskdel; renderSettings(); return; }
     const td=e.target.closest("[data-tpldel]"); if(td){ const list=(S.settings.emailTemplates||[]).filter(x=>x.id!==td.dataset.tpldel); try{ await S.db.doc("settings/practice").update({emailTemplates:list}); S.settings.emailTemplates=list; S.tplDel=null; renderSettings(); toast("Template deleted"); }catch(err){ toast("That didn't save. Try again."); } return; }
@@ -3085,6 +3419,7 @@ function startClient(){
   S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest";
   S.wantNext = h==="#nextscan";
   if((location.hash||"").toLowerCase()==="#messages"){ S.cviewAuto=false; S.cview="messages"; }
+  if((location.hash||"").toLowerCase()==="#billing"){ S.cviewAuto=false; S.cview="billing"; }
   if(!S.me){ renderClient(); return; }
   S.family = {}; S.familyLoaded = false;
   S.db.collection("clients").onSnapshot(s => {
@@ -3107,12 +3442,13 @@ function familyPeople(){
 function watchPerson(id){
   (S.personUnsubs||[]).forEach(u => { try{ u&&u(); }catch(e){} });
   S.who = id; store("wfw.who", id);
-  S.myMsgs = []; S.msgsLoaded = false; S.cmsgDraft = "";
+  S.myMsgs = []; S.msgsLoaded = false; S.cmsgDraft = ""; S.myInv = [];
   S.myRec = (S.family||{})[id] || null; S.myPlans = []; S.myFiles = []; S.myPhoto = ""; S.myImprint = ""; S.myImprintAt = ""; S.recLoaded = false; S.qestNew = !!S.wantNext; S.qestEdit = false; S.clientWrite = null;
   const editing = clientEditing;
   S.personUnsubs = [
     S.db.doc("clients/"+id).onSnapshot(s => { if(S.who!==id) return; S.myRec = s.exists ? s.data() : null; if(!S.recLoaded && S.cviewAuto && S.myRec?.qestStatus!=="submitted" && S.myRec?.intakeStatus!=="submitted"){ S.cview="forms"; S.form="qest"; } S.recLoaded=true; if(editing()) return; renderClient(); }, e=>{ S.recLoaded=true; renderClient(); }),
     S.db.collection("clients/"+id+"/plans").onSnapshot(s => { if(S.who!==id) return; S.myPlans = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.status==="shared").sort((a,b)=>(b.date||"").localeCompare(a.date||"")); if(editing()) return; renderClient(); }, e=>console.warn(e)),
+    S.db.collection("invoices").onSnapshot(s => { if(S.who!==id) return; S.myInv = s.docs.map(d=>({id:d.id,...d.data()})).filter(v=>v.clientId===id && v.status==="sent"); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.collection(`clients/${id}/messages`).onSnapshot(s => { if(S.who!==id) return; S.myMsgs = s.docs.map(d=>({id:d.id,...d.data()})); S.msgsLoaded = true; if(editing()) return; renderClient(); }, e=>{ console.warn(e); S.msgsLoaded = true; }),
     S.db.collection(`clients/${id}/files`).onSnapshot(s => { if(S.who!==id) return; S.myFiles = s.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.status==="shared"); if(editing()) return; renderClient(); }, e=>console.warn(e)),
     S.db.doc(`clients/${id}/media/photo`).onSnapshot(s => { if(S.who!==id) return; S.myPhoto = s.exists ? (s.data().dataUrl||"") : ""; if(editing()) return; renderClient(); }, e=>console.warn(e)),
@@ -3190,11 +3526,13 @@ function renderClient(){
   const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.followup?.fullName || S.myRec?.name || "";
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
-  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${k==="messages"&&msgUnreadClient(S.myRec)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
+  const cBal = (S.myInv||[]).some(invOpen);
+  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"],...((S.myInv||[]).length||S.cview==="billing"?[["billing","Billing"]]:[])].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${(k==="messages"&&msgUnreadClient(S.myRec))||(k==="billing"&&cBal)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
   if(S.cview==="home"){ body = clientHome(first); }
+  else if(S.cview==="billing"){ body = clientBillingView(); }
   else if(S.cview==="messages"){
     const fam = familyPeople().length > 1;
     body = `<div class="sheet stack"><div><h2>Messages with Dawn</h2><p class="small muted">${fam?`This conversation is about ${esc(personName(S.who)||"this person")}. `:""}Only you and Dawn can see these messages. Dawn's messages are also emailed to you. For anything urgent, please call ${esc(PRACTICE.phone)}.</p></div>
@@ -3274,6 +3612,7 @@ function renderClient(){
       cp.disabled=true; cp.textContent="Making PDF…"; try{ saveBlob(await planPdf(p, nm), `Treatment plan${nm?" - "+nm:""} - ${p.date||today()}.pdf`); }catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); } cp.disabled=false; cp.textContent="Download PDF"; return; }
     const wb=e.target.closest("[data-who]"); if(wb){ if(wb.dataset.who!==S.who){ S.cviewAuto=true; S.cview="home"; S.form="qest"; watchPerson(wb.dataset.who); window.scrollTo(0,0); } return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); window.scrollTo(0,0); return; }
+    const cpi=e.target.closest("[data-cinvprint]"); if(cpi){ const v=(S.myInv||[]).find(x=>x.id===cpi.dataset.cinvprint); if(v) invPrint(v, personName(S.who)||S.myRec?.name||""); return; }
     const ic=e.target.closest("[data-ics]"); if(ic){ const a=apptsOf(S.myRec).find(x=>x.id===ic.dataset.ics); if(a) apptIcs(a); return; }
     const rq=e.target.closest("[data-resched]"); if(rq){ S.reschedFor=rq.dataset.resched; renderClient(); $("#resched-note")?.focus(); return; }
     const dz=e.target.closest("[data-dash]"); if(dz){ S.cview="forms"; if(dz.dataset.dash==="form-homeo"){ S.form="homeo"; } else { S.form="qest"; if(S.myRec?.qestStatus==="submitted"){ S.qestNew=true; } } renderClient(); window.scrollTo(0,0); return; }
