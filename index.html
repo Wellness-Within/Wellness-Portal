@@ -769,18 +769,20 @@ function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Wi
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
-    .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{signature\}/gi, emailSign());
+    .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
 }
+function nextFollowAppt(c){ const ups=upcomingAppts(c); return ups.find(a=>a.type==="consult") || ups[0] || null; }
 function followupMail(id){
   const to=clientEmail(id), c=S.clients[id]||{}, first=clientFirst(id);
   const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
   const named = fam && first && first!=="Unnamed";
-  const ups = upcomingAppts(c), next = ups.find(a=>a.type==="consult") || ups[0];
-  const when = next ? apptWhen(next) : "";
-  const hi = named ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
-  const subject = `${named?`${first}'s`:"Your"} follow-up form${next?` before our ${next.type==="consult"?"consult":"appointment"}`:""}`;
-  const body = `${hi}\n\n${next?`I'm looking forward to our ${next.type==="consult"?"consult":"appointment"} on ${when}. `:""}Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked:\nhttps://portal.dawnspain.com/#followup\n\nSign in with this email address (${to}).${named?` Then choose ${first} at the top.`:""} The link opens the follow-up form, and your answers come straight to me.\n\nIf you have any questions, just reply to this email or call me at ${PRACTICE.phone}.\n\n${emailSign()}`;
-  return {id, tpl:"", kind:"followup", subject, body};
+  const next = nextFollowAppt(c);
+  const kindW = next && next.type!=="consult" ? "appointment" : "follow-up";
+  const when = next ? apptWhen(next) : "[date and time]";
+  const hi = `Hi ${named ? "there" : (first && first!=="Unnamed" ? first : "there")},`;
+  const subject = `${named?`${first}'s`:"Your"} follow-up form before our ${kindW}`;
+  const body = `${hi}\n\nI'm looking forward to our ${kindW} on ${when}. Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked.\n\nGo straight to the form here:\nhttps://portal.dawnspain.com/#followup\n\nOr sign in at portal.dawnspain.com and choose Forms. Sign in with this email address (${to})${named?`, then choose ${first} at the top`:""}, and your answers will come straight to me.\n\nIf you have any questions, just reply to this email or call me at ${PRACTICE.phone}.\n\n${emailSign()}`;
+  return {id, tpl:"_fu", kind:"followup", subject, body, noAppt:!next};
 }
 function openMail(to, subject, body){ location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }
 function composePanel(id){
@@ -788,7 +790,8 @@ function composePanel(id){
   const tpls=S.settings.emailTemplates||[];
   return `<div class="formsec stack" id="compose" style="gap:10px">
     <div class="row"><h3 class="grow">Email ${esc(clientName(id))}</h3><span class="small muted">${esc(clientEmail(id))}</span></div>
-    ${tpls.length?`<label class="field"><span>Start from a template</span><select id="cm-tpl"><option value="">Blank email</option>${tpls.map(t=>`<option value="${esc(t.id)}" ${cp.tpl===t.id?"selected":""}>${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>`
+    ${cp.noAppt?`<div class="notice warn small">No upcoming appointment is on file for ${esc(clientName(id))}, so the date says [date and time]. Fill it in here, or add the appointment under Appointments first.</div>`:""}
+    ${true?`<label class="field"><span>Start from a template</span><select id="cm-tpl"><option value="">Blank email</option><option value="_fu" ${cp.tpl==="_fu"?"selected":""}>Follow-up form request</option>${tpls.map(t=>`<option value="${esc(t.id)}" ${cp.tpl===t.id?"selected":""}>${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>`
       :`<p class="small muted">Tip: save emails you send often as templates in Settings.</p>`}
     <label class="field"><span>Subject</span><input id="cm-subj" value="${esc(cp.subject||"")}"></label>
     <label class="field"><span>Message</span><textarea id="cm-body" style="min-height:200px">${esc(cp.body||"")}</textarea></label>
@@ -1305,7 +1308,7 @@ function bindClients(){
   const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=v!=="consult"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
   const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
-  const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
+  const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
       subject: t ? fillTemplate(t.subject, S.sel) : S.compose.subject, body: t ? fillTemplate(t.body, S.sel) : `Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
@@ -1345,7 +1348,7 @@ function bindClients(){
       else if(act==="fumail"){ S.compose=followupMail(S.sel); renderClients(); $("#compose")?.scrollIntoView({behavior:"smooth",block:"start"}); }
       else if(act==="cmstart"){ S.compose={id:S.sel, tpl:"", subject:"", body:`Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); $("#cm-subj")?.focus(); }
       else if(act==="cmcancel"){ S.compose=null; renderClients(); }
-      else if(act==="cmopen"){ const subj=$("#cm-subj").value.trim(), body=$("#cm-body").value; if(!subj){ toast("Add a subject first"); return; } const id=S.sel, kind=S.compose?.kind || (S.compose?.tpl?"template":"email");
+      else if(act==="cmopen"){ const subj=$("#cm-subj").value.trim(), body=$("#cm-body").value; if(!subj){ toast("Add a subject first"); return; } const id=S.sel, kind=S.compose?.tpl==="_fu" ? "followup" : S.compose?.tpl ? "template" : "email";
         openMail(clientEmail(id), subj, body); S.compose=null; await logEmail(id, subj, kind); renderClients(); toast("Opened in Mail. Noted in this client's email history."); }
       else if(act==="newclient"){ const id=rid("c-"); await S.db.doc("clients/"+id).set({name:"New client", createdAt:new Date().toISOString(), intake:{}}); S.sel=id; S.sub="details"; renderClients(); setTimeout(()=>{const n=$("#d-name"); if(n){n.value="";n.focus();}},50); }
       else if(act==="jotfill"){ const txt=$("#jot-text").value; const kind=a.dataset.kind; const def=kind==="qest"?QEST:INTAKE; const r=jotParse(txt, def);
@@ -3006,7 +3009,7 @@ function templatesSection(){
       <label class="field"><span>Template name (only you see this)</span><input id="tp-name" value="${esc(ed.name||"")}" placeholder="e.g. Appointment confirmation"></label>
       <label class="field"><span>Subject</span><input id="tp-subj" value="${esc(ed.subject||"")}"></label>
       <label class="field"><span>Message</span><textarea id="tp-body" style="min-height:180px">${esc(ed.body||"")}</textarea></label>
-      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> next appointment date, <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature, <span class="mono">{followup}</span> link to their follow-up form.</p>
+      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> next appointment date, <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature, <span class="mono">{followup}</span> link to their follow-up form, <span class="mono">{appointment}</span> their next consult (or appointment) date and time.</p>
       <div class="row"><button type="button" class="primary" data-act="tplsave">Save template</button><button type="button" data-act="tplcancel">Cancel</button></div></div>` : "";
   return `<div class="formsec stack">
       <h3>Email templates</h3>
