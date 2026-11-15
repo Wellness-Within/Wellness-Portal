@@ -721,7 +721,14 @@ function apptWhen(a, forClient){
     if(forClient){ try{ const loc=Intl.DateTimeFormat().resolvedOptions().timeZone; if(loc && loc!==PRAC_TZ){ const st=apptStart(a); s+=` (${st.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})} your time)`; } }catch(e){} } }
   return s;
 }
-function apptLabel(a){ return (APPT_TYPES[a.type]||"Appointment") + (a.type==="scan" && a.imprint ? " + imprint" : ""); }
+const apptDelivery = a => a.type!=="scan" ? "" : (a.delivery || (a.imprint===false ? "none" : "imprint"));
+function apptLabel(a){ const d=apptDelivery(a); return (APPT_TYPES[a.type]||"Appointment") + (d==="imprint" ? " + imprint" : d==="ship" ? " + shipped treatment" : ""); }
+function clientShipAddress(c){ const q=c?.qest||{};
+  const lines = q.shipDifferent ? [q.shipStreet, [q.shipCity, [q.shipState, q.shipZip].filter(Boolean).join(" ")].filter(Boolean).join(", ")]
+                                : [q.street, [q.city, [q.state, q.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")];
+  const name = q.fullName || c?.name || "";
+  return [name, ...lines].filter(x=>String(x||"").trim()).join("\n"); }
+const wantsShipped = c => (c?.qest?.delivery||"") === "Shipped to me";
 function apptIcs(a, who){
   const pad=n=>String(n).padStart(2,"0"), z=d=>`${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
   const title = (S.prac ? `${apptLabel(a)}: ${who}` : `${apptLabel(a)} with Dawn Spain`).replace(/[,;\\]/g," ");
@@ -802,18 +809,26 @@ function renderInbox(){
 function apptsPane(id){
   const c=S.clients[id]||{}, list=apptsOf(c), up=list.filter(a=>a.date>=today()), past=list.filter(a=>a.date<today()).reverse();
   const ed=S.apptEdit && S.apptEdit.cid===id ? S.apptEdit : null;
-  const row=a=>`<div class="dash-row"><div style="display:flex;flex-direction:column;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small muted">${esc(apptWhen(a))}${a.how?` · ${esc(a.how)}`:""}${a.note?` · ${esc(a.note)}`:""}</span></div>
-    <div class="row" style="gap:4px;flex-wrap:nowrap"><button type="button" class="ghost small" data-apptics="${esc(a.id)}">Add to calendar</button><button type="button" class="small" data-apptedit="${esc(a.id)}">Edit</button></div></div>`;
+  if(ed && ed.isNew && ed.a.type==="scan" && !ed.a.delivery) ed.a.delivery = wantsShipped(c) ? "ship" : "imprint";
+  const row=a=>`<div class="dash-row" style="align-items:flex-start"><div style="display:flex;flex-direction:column;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small muted">${esc(apptWhen(a))}${a.how?` · ${esc(a.how)}`:""}${a.note?` · ${esc(a.note)}`:""}</span>
+      ${apptDelivery(a)==="ship"?`<span class="small" style="white-space:pre-line;margin-top:4px"><b>Ship to:</b> ${esc(a.shipTo||clientShipAddress(c)||"No address on file yet")}</span>
+        ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>`:""}`:""}</div>
+    <div class="row" style="gap:4px;flex-wrap:nowrap">${apptDelivery(a)==="ship"?(a.shippedAt?`<button type="button" class="ghost small" data-apptship="${esc(a.id)}" data-undo="1">Undo shipped</button>`:`<button type="button" class="small primary" data-apptship="${esc(a.id)}">Mark shipped</button>`):""}
+      <button type="button" class="ghost small" data-apptics="${esc(a.id)}">Add to calendar</button><button type="button" class="small" data-apptedit="${esc(a.id)}">Edit</button></div></div>`;
   const form = ed ? (()=>{ const a=ed.a; return `<div class="formsec stack" id="appt-form" style="gap:10px">
       <h3>${ed.isNew?"New appointment":"Edit appointment"}</h3>
       <div class="grid2">
         <label class="field"><span>Type</span><select id="ap-type">${Object.entries(APPT_TYPES).map(([k,l])=>`<option value="${k}" ${a.type===k?"selected":""}>${l}</option>`).join("")}</select></label>
         <label class="field"><span>Date</span><input id="ap-date" type="date" value="${esc(a.date||"")}"></label>
-        <label class="field" id="ap-time-f" ${a.type==="consult"?"":"hidden"}><span>Time (Eastern)</span><input id="ap-time" type="time" value="${esc(a.time||"")}"></label>
+        <label class="field" id="ap-time-f"><span id="ap-time-l">Time (Eastern)${a.type==="consult"?"":" · optional"}</span><input id="ap-time" type="time" value="${esc(a.time||"")}"></label>
         <label class="field" id="ap-mins-f" ${a.type==="consult"?"":"hidden"}><span>Length</span><select id="ap-mins">${[30,45,60,90].map(m=>`<option value="${m}" ${(a.mins||60)===m?"selected":""}>${m} minutes</option>`).join("")}</select></label>
         <label class="field" id="ap-how-f" ${a.type==="consult"?"":"hidden"}><span>How</span><select id="ap-how">${["","Phone","Video"].map(h=>`<option value="${h}" ${a.how===h?"selected":""}>${h||"Not set"}</option>`).join("")}</select></label>
       </div>
-      <label class="check" id="ap-imp-f" ${a.type==="scan"?"":"hidden"}><input type="checkbox" id="ap-imp" ${a.imprint!==false?"checked":""}><span>Remote imprint right after the scan</span></label>
+      <div class="grid2" id="ap-imp-f" ${a.type==="scan"?"":"hidden"}>
+        <label class="field"><span>After the scan</span><select id="ap-deliv">${[["imprint","Remote imprint"],["ship","Ship treatment"],["none","Nothing"]].map(([v,l])=>`<option value="${v}" ${apptDelivery(a)===v?"selected":""}>${l}</option>`).join("")}</select></label>
+        <span class="small muted" style="align-self:end;padding-bottom:10px">${wantsShipped(c)?"Their Qest4 form says: shipped to them.":c.qest?.delivery?"Their Qest4 form says: remote imprint.":""}</span>
+      </div>
+      <label class="field" id="ap-ship-f" ${a.type==="scan"&&apptDelivery(a)==="ship"?"":"hidden"}><span>Ship to (from their Qest4 form; edit if needed)</span><textarea id="ap-ship" style="min-height:84px">${esc(a.shipTo||clientShipAddress(c))}</textarea></label>
       <label class="field"><span>Note for the client (optional, they see this)</span><input id="ap-note" value="${esc(a.note||"")}" placeholder="e.g. Please have your bottle ready"></label>
       <div class="row"><button type="button" class="primary" data-act="apsave">Save appointment</button><button type="button" data-act="apcancel">Cancel</button>
         ${ed.isNew?"":`<button type="button" class="ghost danger" data-act="apdel" style="margin-left:auto">Remove</button>`}</div></div>`; })() : "";
@@ -827,7 +842,10 @@ function apptsPane(id){
   </div>`;
 }
 async function saveAppts(id, list){
-  const clean=list.map(({id:aid,type,date,time,mins,how,imprint,note})=>({id:aid==="nv"?genId().slice(0,10):aid,type,date,...(type==="consult"?{time:time||"",mins:mins||60,how:how||""}:{}),...(type==="scan"?{imprint:imprint!==false}:{}),note:note||""}));
+  const clean=list.map(a=>{ const o={id:a.id==="nv"?genId().slice(0,10):a.id, type:a.type, date:a.date, time:a.time||"", note:a.note||""};
+    if(a.type==="consult"){ o.mins=a.mins||60; o.how=a.how||""; }
+    if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; } }
+    return o; });
   await S.db.doc("clients/"+id).update({appointments:clean, nextVisit:nextScanDate(clean), reschedReq:null});
 }
 function renderSchedule(){
@@ -843,7 +861,7 @@ function renderSchedule(){
       ["Today","Next 7 days","Later"].filter(g=>groups[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${groups[g].map(({id,a})=>`<button type="button" class="item" data-sched="${esc(id)}">
         <div class="row" style="gap:12px;flex-wrap:nowrap"><div class="date-tile" style="width:56px;height:58px"><span>${esc(new Date(a.date+"T12:00:00").toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b style="font-size:24px">${new Date(a.date+"T12:00:00").getDate()}</b></div>
         <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${esc(apptLabel(a))}${a.time?` · ${esc(fmtTime12(a.time))}`:""}${a.how?` · ${esc(a.how)}`:""}</div></div>
-        ${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></button>`).join("")}</div>`).join("")}
+        ${apptDelivery(a)==="ship"?(a.shippedAt?'<span class="chip ok">Shipped</span>':'<span class="chip acc">To ship</span>'):""}${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></button>`).join("")}</div>`).join("")}
   </div>`;
   $("#app").onclick=e=>{ const b=e.target.closest("[data-sched]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.sched; S.sub="appts"; S.apptEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
@@ -1272,7 +1290,9 @@ function bindClients(){
   if($("#remlist")) ensureRemedyList();
   app.querySelectorAll("[data-remname]").forEach(inp => inp.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); document.querySelector(`[data-act="addremedy"][data-i="${inp.dataset.remname}"]`)?.click(); } });
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
-  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-time-f","ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=v!=="consult"); $("#ap-imp-f").hidden=v!=="scan"; };
+  const apShip = () => { const sc=$("#ap-type")?.value==="scan", sh=$("#ap-deliv")?.value==="ship"; const f=$("#ap-ship-f"); if(f) f.hidden=!(sc&&sh); };
+  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=v!=="consult"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
+  const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
   const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
       subject: t ? fillTemplate(t.subject, S.sel) : S.compose.subject, body: t ? fillTemplate(t.body, S.sel) : `Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); };
@@ -1294,6 +1314,7 @@ function bindClients(){
     const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const ae = e.target.closest("[data-apptedit]"); if(ae){ const a=apptsOf(S.clients[S.sel]).find(x=>x.id===ae.dataset.apptedit); if(a){ S.apptEdit={cid:S.sel, isNew:false, a:{...a}}; renderClients(); } return; }
+    const as = e.target.closest("[data-apptship]"); if(as){ const list=apptsOf(S.clients[S.sel]); const a=list.find(x=>x.id===as.dataset.apptship); if(a){ if(as.dataset.undo) delete a.shippedAt; else a.shippedAt=today(); await saveAppts(S.sel, list); toast(as.dataset.undo?"Marked not shipped":"Marked as shipped"); } return; }
     const ai = e.target.closest("[data-apptics]"); if(ai){ const a=apptsOf(S.clients[S.sel]).find(x=>x.id===ai.dataset.apptics); if(a) apptIcs(a, clientName(S.sel)); return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const scn = e.target.closest("[data-scan]"); if(scn){ const x=S.scans.find(v=>v.id===scn.dataset.scan); if(x){ const {id:sid,...data}=x; openScan(S.sel, sid, data); } return; }
@@ -1304,7 +1325,7 @@ function bindClients(){
       if(act==="back"){ S.sel=null; S.compose=null; S.apptEdit=null; renderClients(); }
       else if(act==="apnew"){ S.apptEdit={cid:S.sel, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", imprint:true}}; renderClients(); }
       else if(act==="apcancel"){ S.apptEdit=null; renderClients(); }
-      else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-how")?.value||"", imprint:!!$("#ap-imp")?.checked, note:$("#ap-note").value.trim()};
+      else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-how")?.value||"", delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
         if(!/^\d{4}-\d{2}-\d{2}$/.test(a.date)){ toast("Choose a date"); return; } if(a.type==="consult" && !a.time){ toast("Choose a time for the call"); return; }
         const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null; toast("Appointment saved"); renderClients(); }
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
@@ -3106,7 +3127,8 @@ function clientHome(first){
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small">${esc(apptWhen(a,true))}</span>
       ${a.how?`<span class="small muted">By ${esc(a.how.toLowerCase())}</span>`:""}
       <span class="small muted">${dd>0?`In ${dd} day${dd===1?"":"s"}`:"Today"}${a.type==="scan"&&formIn?" · Your pre-scan form is in. Thank you!":""}</span>
-      ${a.note?`<span class="small">${esc(a.note)}</span>`:""}</div></div>
+      ${a.note?`<span class="small">${esc(a.note)}</span>`:""}
+      ${apptDelivery(a)==="ship"?(a.shippedAt?`<span class="small"><b>Your treatment was shipped ${esc(fmtDate(a.shippedAt))}.</b></span>`:`<span class="small" style="white-space:pre-line">Your treatment will be shipped to:\n${esc(a.shipTo||clientShipAddress(r))}</span><span class="small muted">Address changed? Let Dawn know in Messages.</span>`):""}</div></div>
       ${ups.length>1?`<div>${ups.slice(1,4).map(x=>`<div class="dash-row"><span class="small"><b>${esc(apptLabel(x))}</b> · ${esc(apptWhen(x,true))}</span></div>`).join("")}</div>`:""}
       ${rs?`<div class="stack" style="gap:8px" id="resched-form"><label class="field"><span>What date or time would work better?</span><textarea id="resched-note" style="min-height:70px" placeholder="e.g. Any day the week of Dec 8"></textarea></label>
           <div class="row"><button type="button" class="primary" data-act="reschedsend">Send to Dawn</button><button type="button" data-act="reschedcancel">Cancel</button></div></div>`
