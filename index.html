@@ -3113,6 +3113,11 @@ function clientHome(first){
         :`<div class="row" style="gap:8px"><button type="button" data-ics="${esc(a.id)}">Add to calendar</button><button type="button" class="ghost" data-resched="${esc(a.id)}">Need a different date?</button></div>`}
       ${r.reschedReq?`<p class="small muted">You asked Dawn for a different date ${esc(fmtWhen(r.reschedReq.at))}. She'll update it here.</p>`:""}
     </section>`); }
+  // reports
+  const fl=(S.myFiles||[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
+  cards.push(`<section class="dash-card"><div class="head"><h2>My reports</h2>${fl.length?`<button type="button" class="ghost" data-cv2="reports">View all</button>`:""}</div>
+    ${fl.length?`<div>${fl.slice(0,3).map(f=>`<div class="dash-row"><div style="display:flex;flex-direction:column;min-width:0"><b style="overflow-wrap:anywhere">${esc(f.name||"Report")}</b><span class="small muted">${esc(fmtDate(f.uploadedAt))}</span></div><button type="button" class="small" data-fopen="${esc(f.id)}">Open</button></div>`).join("")}</div>`
+      :`<p class="small muted">Dawn adds your Qest4 and wellness reports here after your session.</p>`}</section>`);
   // treatment plan
   const cur=(S.myPlans||[]).filter(x=>!x.replacedBy), plan=cur[0]||(S.myPlans||[])[0];
   if(plan){ const items=displayItems(plan); const meta=[plan.date?`Updated ${fmtDate(plan.date)}`:""].filter(Boolean).join(" · ");
@@ -3122,11 +3127,6 @@ function clientHome(first){
         <div style="display:flex;flex-direction:column;min-width:0"><b>${esc(b._label)}${b.issue?" · "+esc(b.issue):""}</b>${b.freq?`<span class="small muted">${esc(plainFreq(b.freq)||b.freq)}</span>`:""}</div></div>`).join("")}
         ${items.length>4?`<span class="small muted">and ${items.length-4} more</span>`:""}</div></section>`); }
   else cards.push(`<section class="dash-card"><div class="head"><h2>Your treatment plan</h2></div><p class="small muted">After your session, Dawn adds your treatment plan here.</p></section>`);
-  // reports
-  const fl=(S.myFiles||[]).slice().sort((a,b)=>(b.uploadedAt||"").localeCompare(a.uploadedAt||""));
-  cards.push(`<section class="dash-card"><div class="head"><h2>My reports</h2>${fl.length?`<button type="button" class="ghost" data-cv2="reports">View all</button>`:""}</div>
-    ${fl.length?`<div>${fl.slice(0,3).map(f=>`<div class="dash-row"><div style="display:flex;flex-direction:column;min-width:0"><b style="overflow-wrap:anywhere">${esc(f.name||"Report")}</b><span class="small muted">${esc(fmtDate(f.uploadedAt))}</span></div><button type="button" class="small" data-fopen="${esc(f.id)}">Open</button></div>`).join("")}</div>`
-      :`<p class="small muted">Dawn adds your Qest4 and wellness reports here after your session.</p>`}</section>`);
   // messages
   const ms=msgSort(S.myMsgs||[]), last=ms[ms.length-1];
   cards.push(`<section class="dash-card"><div class="head"><h2>Messages</h2>${ms.length?`<button type="button" class="ghost" data-cv2="messages">Open</button>`:""}</div>
@@ -3153,7 +3153,7 @@ function renderClient(){
   const name = S.myRec?.intake?.fullName || S.myRec?.qest?.fullName || S.myRec?.followup?.fullName || S.myRec?.name || "";
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
-  t.innerHTML = [["home","Home"],["forms","My forms"],["plans","Treatment plans"],["reports","My reports"],["messages","Messages"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${k==="messages"&&msgUnreadClient(S.myRec)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
+  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${k==="messages"&&msgUnreadClient(S.myRec)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
