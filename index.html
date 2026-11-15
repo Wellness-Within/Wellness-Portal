@@ -3705,7 +3705,7 @@ function clientHome(first){
   const ups=upcomingAppts(r);
   if(ups.length){ const a=ups[0], d=new Date(a.date+"T12:00:00"), dd=dayDiff(a.date, today());
     const rs=S.reschedFor===a.id;
-    cards.push(`<section class="dash-card"><div class="head"><h2>${ups.length>1?"Upcoming appointments":"Next appointment"}</h2><span class="chip ok">Scheduled</span></div>
+    cards.push(`<section class="dash-card"><div class="head"><h2>${ups.length>1?"Upcoming appointments":"Next appointment"}</h2><span class="chip ok">${(()=>{ const dd=dayDiff(ups[0].date, today()); return dd===0?"Today":dd===1?"Tomorrow":`In ${dd} days`; })()}</span></div>
       <div class="row" style="gap:16px;flex-wrap:nowrap;align-items:flex-start"><div class="date-tile"><span>${esc(d.toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b>${d.getDate()}</b></div>
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small">${esc(apptWhen(a,true))}</span>
       ${a.how?`<span class="small muted">By ${esc(a.how.toLowerCase())}</span>`:""}
@@ -3845,6 +3845,7 @@ function renderClient(){
       cp.disabled=true; cp.textContent="Making PDF…"; try{ saveBlob(await planPdf(p, nm), `Treatment plan${nm?" - "+nm:""} - ${p.date||today()}.pdf`); }catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); } cp.disabled=false; cp.textContent="Download PDF"; return; }
     const wb=e.target.closest("[data-who]"); if(wb){ if(wb.dataset.who!==S.who){ S.cviewAuto=true; S.cview="home"; S.form="qest"; watchPerson(wb.dataset.who); window.scrollTo(0,0); } return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); window.scrollTo(0,0); return; }
+    const cc=e.target.closest("[data-ccal]"); if(cc){ const p=(S.myPlans||[]).find(x=>x.id===cc.dataset.ccal); if(p) doseCalendar(p, personName(S.who)||""); return; }
     const cpi=e.target.closest("[data-cinvprint]"); if(cpi){ const v=(S.myInv||[]).find(x=>x.id===cpi.dataset.cinvprint); if(v) invPrint(v, personName(S.who)||S.myRec?.name||""); return; }
     const ic=e.target.closest("[data-ics]"); if(ic){ const a=apptsOf(S.myRec).find(x=>x.id===ic.dataset.ics); if(a) apptIcs(a); return; }
     const rq=e.target.closest("[data-resched]"); if(rq){ S.reschedFor=rq.dataset.resched; renderClient(); $("#resched-note")?.focus(); return; }
@@ -3918,9 +3919,44 @@ function renderClient(){
     }catch(err){ console.warn(err); a.disabled=false; if(err?.code==="invalid_argument"){ S.clientWrite="denied"; renderClient(); window.scrollTo(0,0); } else toast("That didn't save. Check your connection and try again."); }
   };
 }
+/* ---------- printable dose calendar from a treatment plan ---------- */
+function freqRule(f){ const t=String(f||"").replace(/\s+/g,""); let m;
+  if((m=t.match(/^(\d)D$/i))) return {every:1, times:+m[1]};
+  if(/^eOD$/i.test(t)||/^eOtherNight$/i.test(t)) return {every:2, times:1, night:/Night/i.test(t)};
+  if((m=t.match(/^e(\d+)D$/i))) return {every:+m[1], times:1};
+  if(/^1W$/i.test(t)) return {every:7, times:1};
+  if((m=t.match(/^e(\d+)W$/i))) return {every:7*+m[1], times:1};
+  if((m=t.match(/^e(\d+)(H|min|m)$/i))) return {every:1, times:1, note:plainFreq(f)};
+  if(/^SOS$/i.test(t)) return null;
+  const pf=String(f||"").toLowerCase(); if(/twice|2x/.test(pf)) return {every:1,times:2}; if(/three|3x/.test(pf)) return {every:1,times:3}; if(/daily|once a day/.test(pf)) return {every:1,times:1}; if(/other day/.test(pf)) return {every:2,times:1}; if(/week/.test(pf)) return {every:7,times:1};
+  return null; }
+function durDays(d){ const s=String(d||"").toLowerCase(); let m; if((m=s.match(/(\d+)\s*week/))) return 7*+m[1]; if((m=s.match(/(\d+)\s*month/))) return 30*+m[1]; if((m=s.match(/(\d+)\s*day/))) return +m[1]; return 0; }
+function doseCalendar(p, who){
+  const items=displayItems(p); if(!items.length) return;
+  const w=window.open("","_blank"); if(!w){ toast("Allow pop-ups to open the dose calendar"); return; }
+  const start=new Date(today()+"T12:00:00"); const pd=p.date?new Date(p.date+"T12:00:00"):null; if(pd && (start-pd)/864e5<=10 && pd<=start) start.setTime(pd.getTime());
+  const days=Math.min(56, Math.max(28, ...items.map(b=>durDays(b.duration)||28)));
+  const rows=items.map(b=>({b, r:freqRule(b.freq)}));
+  const weeks=[]; for(let i=0;i<days;i+=7) weeks.push([...Array(Math.min(7,days-i)).keys()].map(k=>{ const d=new Date(start); d.setDate(d.getDate()+i+k); return {d, n:i+k}; }));
+  const name=b=>`${b._label}${b.issue?" · "+b.issue:""}`;
+  const box=(r,n,b)=>{ const lim=durDays(b.duration); if(!r || (lim && n>=lim) || n%r.every) return ""; return "☐ ".repeat(r.times).trim(); };
+  const esc2=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Dose calendar</title><style>
+    body{font:13px/1.4 Georgia,serif;color:#222;margin:28px} h1{font-weight:normal;color:#087C9C;margin:0} .muted{color:#777}
+    table{width:100%;border-collapse:collapse;margin:14px 0;page-break-inside:avoid} th,td{border:1px solid #ccc;padding:6px;text-align:center;vertical-align:top} th:first-child,td:first-child{text-align:left;width:30%} td{font-size:16px} th{font-weight:normal;font-size:12px;background:#f3f9fa}
+    .key{font-size:12px} @media print{body{margin:12px}}</style></head><body>
+    <h1>Dose calendar</h1><div class="muted">${esc2(who||"")}${who?" · ":""}Treatment plan from ${esc2(fmtDate(p.date||today()))} · starting ${esc2(fmtDate(start.toISOString().slice(0,10)))}</div>
+    <p class="key">Tick a box ☐ each time you take a dose.${rows.some(x=>!x.r)?" Remedies marked “as needed” have no boxes: take them only when you need them.":""}</p>
+    ${weeks.map((wk,i)=>`<table><tr><th>Week ${i+1}</th>${wk.map(x=>`<th>${x.d.toLocaleDateString(undefined,{weekday:"short"})}<br>${x.d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</th>`).join("")}</tr>
+      ${rows.map(({b,r})=>`<tr><td>${esc2(name(b))}<br><span class="muted" style="font-size:11px">${esc2(r?(r.note||plainFreq(b.freq)||b.freq||""):"as needed")}</span></td>${wk.map(x=>`<td>${box(r,x.n,b)}</td>`).join("")}</tr>`).join("")}</table>`).join("")}
+    ${cleanInstr(p.instructions)?`<p class="key"><b>How to take your remedies:</b> ${esc2(cleanInstr(p.instructions))}</p>`:""}
+    <p class="muted key">Dawn Spain, PHom · Wellness From Within · ${esc2(PRACTICE.phone)}</p>
+    <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
 function planCard(p){
   return `<article class="sheet planview">
-    <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div><button type="button" data-cplanpdf="${esc(p.id||"")}">Download PDF</button></div>
+    <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div><div class="row" style="gap:6px"><button type="button" data-cplanpdf="${esc(p.id||"")}">Download PDF</button><button type="button" class="ghost" data-ccal="${esc(p.id||"")}">Dose calendar</button></div></div>
     ${(()=>{ const gs=displayGroups(p); return gs.map(g=>`${gs.length>1?`<h3 style="margin-top:4px">${esc(g.title)}</h3>`:g.form==="pellets"?`<p class="small muted" style="margin:0">Your remedies are pellets.</p>`:g.form==="tt1"?`<p class="small muted" style="margin:0">TT-1</p>`:""}`+g.items.map(b=>`<div class="bottle">
       <div class="bottle-head"><span class="bottle-num">${esc(b._label)}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
       ${b.remedies?`<ul class="rxlist">${remedyLines(b.remedies).map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
