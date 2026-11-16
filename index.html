@@ -705,10 +705,10 @@ function reminderZoom(o, nm, hi){
                : `I hope you've been feeling well! Your ${dr} should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
   const sched = o.booked
     ? `I'm looking forward to our Zoom call on ${o.booked}.`
-    : `This time, you're welcome to choose what feels right for you: a scan with our Zoom consult, or just the scan on its own.\n\nFor the scan and consult, just reply with a few days and times that work, or if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works for you, just reply or text me at ${o.phone} and we'll find one together.\n\nFor just the scan, simply fill out ${o.named?"the":"your"} pre-scan form and choose “Not this time, just the scan.” I'll take it from there.`;
+    : `This time, you're welcome to choose what feels right for you: a scan with our Zoom consult, or just the scan on its own.\n\nFor the scan and consult, just reply with a few days and times that work, or if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works for you, just reply or text me at ${o.phone} and we'll find one together.\n\nFor just the scan, simply fill out ${o.named?"the":"your"} Qest4 Scan Intake (pre-scan form) and choose “Not this time, just the scan.” I'll take it from there.`;
   const form = o.formIn
-    ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need.`
-    : `${o.booked?"Before we meet, please fill out":"Either way, here's where to fill out"} ${o.named?"the":"your"} pre-scan form in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+    ? `Thank you for already sending ${o.named?"the":"your"} Qest4 Scan Intake. I have everything I need.`
+    : `${o.booked?"Before we meet, please fill out":"Either way, here's where to fill out"} ${o.named?"the":"your"} Qest4 Scan Intake (${o.named?"the":"your"} pre-scan form) in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${sched}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
@@ -724,8 +724,8 @@ function reminderText(o){ // o: {kind, first, named, to, whenLong, formIn, link,
     : (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
                : `I hope you've been feeling well! Your ${dr} should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
   const form = o.formIn
-    ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
-    : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+    ? `Thank you for already sending ${o.named?"the":"your"} Qest4 Scan Intake. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
+    : `When you're ready, just fill out ${o.named?"the":"your"} Qest4 Scan Intake (${o.named?"the":"your"} pre-scan form) in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
@@ -740,8 +740,8 @@ function reminderGroup(o){ // o: {kind, people:[{first, holder, formIn, zoom}], 
     : `I hope you're all doing well! The ${dr} for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
   const zoom = ppl.some(p=>p.zoom) ? `This time, you're welcome to choose what feels right: scans with our Zoom consult, or just the scans on their own. For a Zoom consult, just reply with a few days and times that work, or book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works, just reply or text me and we'll find one together.\nFor just the scans, choose “Not this time, just the scan” on the pre-scan form.\n\n` : "";
   const done=ppl.filter(p=>p.formIn), need=ppl.filter(p=>!p.formIn);
-  const form = !need.length ? `Thank you for already sending the pre-scan forms. I have everything I need, and I'll be in touch soon with the scan dates.`
-    : `When you're ready, just fill out a pre-scan form for ${list(need.map(p=>p.holder?"yourself":p.first))} in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}), ${need.length===1?`then choose ${need[0].first} at the top. Details carry over, so it only takes a few minutes.`:"then choose each name at the top. Details carry over, so it only takes a few minutes each."}${done.length?` (Thank you, I already have the form for ${list(done.map(p=>p.holder?"you":p.first))}.)`:""}`;
+  const form = !need.length ? `Thank you for already sending the Qest4 Scan Intakes. I have everything I need, and I'll be in touch soon with the scan dates.`
+    : `When you're ready, just fill out a Qest4 Scan Intake (pre-scan form) for ${list(need.map(p=>p.holder?"yourself":p.first))} in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}), ${need.length===1?`then choose ${need[0].first} at the top. Details carry over, so it only takes a few minutes.`:"then choose each name at the top. Details carry over, so it only takes a few minutes each."}${done.length?` (Thank you, I already have the form for ${list(done.map(p=>p.holder?"you":p.first))}.)`:""}`;
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${zoom}${form}\n\n${close}\n\n${o.sign}` };
 }
@@ -1473,7 +1473,7 @@ function progressEntries(c, qhist, notes, forClient){
   if(c.intakeSubmittedAt && c.intake){ const f=c.intake; const v={main:n10(f.concern1Sev), stress:n10(f.stressLevel)};
     out.push({date:c.intakeSubmittedAt, src:"Homeopathy intake", vals:v, texts:{main:f.concern1||f.mainConcern||""}}); }
   const qs=(qhist||[]).slice(); if(!qs.length && c.qestSubmittedAt && c.qest) qs.push({form:c.qest, submittedAt:c.qestSubmittedAt});
-  qs.forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Qest4 pre-scan form",
+  qs.forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Qest4 Scan Intake",
     vals:{well:n10(f.wellbeing), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, note:f.sinceLast||""}); });
   (c.followupHistory||[]).forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Follow-up",
     vals:{main:n10(f.mainNow), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, overall:f.overall||"", note:f.changes||""}); });
@@ -1524,7 +1524,7 @@ function progressPane(id){
   const charts=progCharts(entries);
   const p=ed?ed.p:null;
   return `<div class="stack">
-    <div class="row"><p class="grow small muted">Ratings come from their intake, Qest4 pre-scan forms and follow-ups. Add your own note after a scan or consult, especially when they didn't send a form.</p>
+    <div class="row"><p class="grow small muted">Ratings come from their intake, Qest4 Scan Intakes and follow-ups. Add your own note after a scan or consult, especially when they didn't send a form.</p>
       ${ed?"":`<button type="button" class="primary" data-act="prognew">Add progress note</button>`}</div>
     ${ed?`<div class="formsec stack" id="prog-form" style="gap:10px">
       <h3>${ed.isNew?"New progress note":"Edit progress note"}</h3>
@@ -1599,7 +1599,7 @@ function renderHome(){
   const unread=ids.filter(id=>msgUnreadDawn(S.clients[id])).sort((a,b)=>(S.clients[b].lastMsg?.at||"").localeCompare(S.clients[a].lastMsg?.at||""));
   // new forms
   const forms=ids.filter(id=>isNewForm(S.clients[id])).sort((a,b)=>lastSubmitted(S.clients[b]).localeCompare(lastSubmitted(S.clients[a])));
-  const formKind=c=>{ const ls=lastSubmitted(c); return c.followupSubmittedAt===ls?"Follow-up":c.qestSubmittedAt===ls?"Qest4 pre-scan form":"Homeopathy intake"; };
+  const formKind=c=>{ const ls=lastSubmitted(c); return c.followupSubmittedAt===ls?"Follow-up":c.qestSubmittedAt===ls?"Qest4 Scan Intake":"Homeopathy intake"; };
   // orders + billing
   const invs=Object.entries(S.inv||{}).map(([id,v])=>({id,...v}));
   const orders=invs.filter(v=>v.source==="website" && v.status!=="void" && (v.date||"")>=agoS).sort((a,b)=>(b.createdAt||b.date||"").localeCompare(a.createdAt||a.date||""));
@@ -1634,7 +1634,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the pre-scan form link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
+  const items=[["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
@@ -1843,7 +1843,7 @@ function dueBox(id){
       <label class="field" style="flex:0 1 220px"><span>Drops finish / next scan due</span><input type="date" id="due-date" value="${esc(nv)}"></label>
       <button type="button" class="primary small" data-act="duesave">Save</button>${nv?`<button type="button" class="ghost small" data-act="dueclear">Clear</button>`:""}
       <span class="grow small">${nv?(d<0?`<span class="chip warn">${-d} day${d===-1?"":"s"} past due</span>`:d===0?`<span class="chip acc">Due today</span>`:`<span class="chip">In ${d} day${d===1?"":"s"}</span>`):""} ${booked?`<span class="chip ok">Scan booked ${esc(fmtDate(booked.date))}</span>`:c.scanToSchedule?`<span class="chip acc">Needs a scan date</span>`:""}</span></div>
-    <p class="small muted" style="margin:0">This isn't an appointment. ${autoOn("reminders")?"A reminder email goes out a week before and again on this date, asking them to fill in their pre-scan form.":"Reminders for this date appear on your Home page."} When their form comes in, they show up under “Needs a scan date” on your Home page.</p>
+    <p class="small muted" style="margin:0">This isn't an appointment. ${autoOn("reminders")?"A reminder email goes out a week before and again on this date, asking them to fill in their Qest4 Scan Intake.":"Reminders for this date appear on your Home page."} When their form comes in, they show up under “Needs a scan date” on your Home page.</p>
     ${nv?`<div class="row small muted" style="gap:6px">Reminders: week before ${st("week")} · drops finished ${st("day")}
       <button type="button" class="ghost small" data-remind="${esc(id)}" data-kind="${d>0?"week":"day"}" data-date="${esc(nv)}">Email a reminder now</button></div>`:""}
     ${bottlesBox(id)}
@@ -2380,8 +2380,8 @@ function bindClients(){
       else if(act==="jotnewopen"){ S.jotNew=!S.jotNew; renderClients(); }
       else if(act==="formpdf"){ const id=S.sel, c=S.clients[id]||{}, nm=clientName(id), k=a.dataset.kind; let def, vals, kind, date, photo="";
         if(k==="intake"){ def=INTAKE; vals=c.intake||{}; kind="Homeopathy intake"; date=c.intakeAt||c.intakeSubmittedAt||vals.sigDate; }
-        else if(k==="qest"){ def=QEST; vals=c.qest||{}; kind="Qest4 pre-scan form"; date=c.qestAt||c.qestSubmittedAt||vals.sigDate; photo=S.photoFor===id?S.photo:""; }
-        else if(k==="qesthist"){ const x=(S.qhistFor===id?S.qhist:[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=QEST; vals=x.form||{}; kind="Qest4 pre-scan form"; date=x.submittedAt; }
+        else if(k==="qest"){ def=QEST; vals=c.qest||{}; kind="Qest4 Scan Intake"; date=c.qestAt||c.qestSubmittedAt||vals.sigDate; photo=S.photoFor===id?S.photo:""; }
+        else if(k==="qesthist"){ const x=(S.qhistFor===id?S.qhist:[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=QEST; vals=x.form||{}; kind="Qest4 Scan Intake"; date=x.submittedAt; }
         else { const x=(c.followupHistory||[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=FOLLOWUP; vals=x.form||{}; kind="Homeopathy follow-up"; date=x.submittedAt; }
         const lbl=a.textContent; a.disabled=true; a.textContent="Making PDF…";
         try{ saveBlob(await formPdf(def, vals, {kind, who:nm, date, photo}), `${kind} - ${nm}${date?" - "+String(date).slice(0,10):""}.pdf`); }
@@ -2962,8 +2962,8 @@ function scanLeftPane(){
   const tabs=`<div class="subtabs" role="tablist"><button type="button" role="tab" data-left="qest" aria-current="${S.scanLeft==="qest"}">Client's Qest4 form</button><button type="button" role="tab" data-left="consult" aria-current="${S.scanLeft==="consult"}">Pre-scan consult notes</button></div>`;
   if(S.scanLeft==="consult") return tabs+consultForm(d);
   const q=c.qest||{}; const photo=S.photoFor===S.scan.clientId?S.photo:"";
-  if(!Object.keys(q).length) return tabs+`<div class="empty"><p>This client hasn't filled in the Qest4 pre-scan form.</p><p class="small">Use the pre-scan consult notes instead.</p></div>`;
-  return tabs+`<div class="stack"><div><p class="label">${esc(c.qestSubmittedAt?"Sent "+fmtDate(c.qestSubmittedAt):"Qest4 pre-scan form")}</p><h2>${esc(q.fullName||clientName(S.scan.clientId))}</h2></div>
+  if(!Object.keys(q).length) return tabs+`<div class="empty"><p>This client hasn't filled in the Qest4 Scan Intake.</p><p class="small">Use the pre-scan consult notes instead.</p></div>`;
+  return tabs+`<div class="stack"><div><p class="label">${esc(c.qestSubmittedAt?"Sent "+fmtDate(c.qestSubmittedAt):"Qest4 Scan Intake")}</p><h2>${esc(q.fullName||clientName(S.scan.clientId))}</h2></div>
     ${q.photoOnFile?`<div class="notice">Returning client: asked you to use the photo already on file.</div>`:""}
     ${photo?`<div class="row" style="align-items:flex-start"><img src="${photo}" alt="Client photo" class="photo" style="width:160px;height:auto;max-height:220px"><button type="button" data-sact="dlphoto">Download photo</button></div>`:""}
     ${intakeForm(q, "sq", true, QEST)}</div>`;
@@ -3067,8 +3067,8 @@ function ageFrom(dob){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dob||""); if(!m)
 const QEST_ANON = [{sec:"About the client", fields:[{id:"age",label:"Age",type:"text"},{id:"firstScan",label:"First scan with Dawn?",type:"text"}]}, ...QEST.slice(1).map(sec=>({...sec, fields:sec.fields.filter(f=>!["signature","sigDate"].includes(f.id))}))];
 async function scanCsvBlob(){ const d=S.scan.data; if(!d.csv) return null; const { data, error } = await SB.storage.from(FILE_BUCKET).download(d.csv.path); if(error) throw error; return data; }
 function qestPdfForScan(anon){ const id=S.scan.clientId, c=S.clients[id]||{};
-  if(anon){ const q=c.qest||{}; return formPdf(QEST_ANON, {...q, age:ageFrom(q.dob)}, {kind:"Qest4 pre-scan form", who:S.scan.data.caseId||"Case ID not entered", date:c.qestSubmittedAt||q.sigDate, photo:""}); }
-  return formPdf(QEST, c.qest||{}, {kind:"Qest4 pre-scan form", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:""}); }
+  if(anon){ const q=c.qest||{}; return formPdf(QEST_ANON, {...q, age:ageFrom(q.dob)}, {kind:"Qest4 Scan Intake", who:S.scan.data.caseId||"Case ID not entered", date:c.qestSubmittedAt||q.sigDate, photo:""}); }
+  return formPdf(QEST, c.qest||{}, {kind:"Qest4 Scan Intake", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:""}); }
 function hasConsult(d){ return !!(d.cNotes || (d.cSearch||[]).some(Boolean) || (d.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) || d.cItem || d.cShip || Object.values(d.cInto||{}).some(Boolean) || Object.values(d.cDel||{}).some(Boolean)); }
 
 async function uploadScanCsv(file){
@@ -4051,7 +4051,7 @@ function renderSettings(){
     <div class="formsec stack">
       <h3>Inviting clients</h3>
       <p class="small">Send clients the portal address. They type their email, open the sign-in link we email them, and they're in, with no password and no account to set up.</p>
-      <p class="small">To send a client straight to a form, add <span class="mono">#qest</span> (Qest4 pre-scan form) or <span class="mono">#intake</span> (homeopathy intake) to the end of the address, for example <span class="mono">${esc(location.origin+location.pathname)}#intake</span>.</p>
+      <p class="small">To send a client straight to a form, add <span class="mono">#qest</span> (Qest4 Scan Intake) or <span class="mono">#intake</span> (homeopathy intake) to the end of the address, for example <span class="mono">${esc(location.origin+location.pathname)}#intake</span>.</p>
       <p class="small muted">A client who signs in shows up in your Clients list under their email until they fill in their name.</p>
     </div>
     <div class="formsec stack">
@@ -4162,7 +4162,7 @@ function clientHome(first){
   // banner: a form to fill in
   let banner="";
   if(!qestIn && !homeoIn) banner = ["Please fill in your intake form","So Dawn has what she needs before your first session.","Fill out my form"];
-  else if(nv && days!==null && days<=14 && days>=-14 && !formIn) banner = ["Your pre-scan form is due",`Please send it${days>0?` by ${fmtDate(nv)}`:""} so Dawn has it before your scan.`,"Fill out my form"];
+  else if(nv && days!==null && days<=14 && days>=-14 && !formIn) banner = ["Your Qest4 Scan Intake is due",`Please send it${days>0?` by ${fmtDate(nv)}`:""} so Dawn has it before your scan.`,"Fill out my form"];
   const bannerHtml = banner.length ? `<div class="dash-banner"><span class="dash-ico">${icon("forms")}</span>
       <div class="grow" style="flex:1 1 260px;display:flex;flex-direction:column"><b style="font-size:16px">${esc(banner[0])}</b><span class="small muted">${esc(banner[1])}</span></div>
       <button type="button" class="primary" data-dash="${qestIn||!homeoIn?"form-qest-new":"form-homeo"}">${esc(banner[2])}</button></div>` : "";
@@ -4175,7 +4175,7 @@ function clientHome(first){
       <div class="row" style="gap:16px;flex-wrap:nowrap;align-items:flex-start"><div class="date-tile"><span>${esc(d.toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b>${d.getDate()}</b></div>
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small">${esc(apptWhen(a,true))}</span>
       ${a.how?`<span class="small muted">By ${esc(a.how.toLowerCase())}</span>`:""}
-      <span class="small muted">${dd>0?`In ${dd} day${dd===1?"":"s"}`:"Today"}${a.type==="scan"&&formIn?" · Your pre-scan form is in. Thank you!":""}</span>
+      <span class="small muted">${dd>0?`In ${dd} day${dd===1?"":"s"}`:"Today"}${a.type==="scan"&&formIn?" · Your Qest4 Scan Intake is in. Thank you!":""}</span>
       ${a.note?`<span class="small">${esc(a.note)}</span>`:""}
       ${apptDelivery(a)==="ship"?(a.shippedAt?`<span class="small"><b>Your treatment was shipped ${esc(fmtDate(a.shippedAt))}.</b></span>`:`<span class="small" style="white-space:pre-line">Your treatment will be shipped to:\n${esc(a.shipTo||clientShipAddress(r))}</span><span class="small muted">Address changed? Let Dawn know in Messages.</span>`):""}</div></div>
       ${ups.length>1?`<div>${ups.slice(1,4).map(x=>`<div class="dash-row"><span class="small"><b>${esc(apptLabel(x))}</b> · ${esc(apptWhen(x,true))}</span></div>`).join("")}</div>`:""}
@@ -4270,7 +4270,7 @@ function renderClient(){
         ${S.myPhoto ? "" : `<label class="check" style="margin-top:-4px"><input type="checkbox" id="cs-photoOnFile" ${S.myRec?.qest?.photoOnFile?"checked":""}><span>I'm a returning client. Please use the photo Dawn already has on file.</span></label>`}
         ${intakeForm(S.myRec?.qest||{}, "cs", false, QEST)}
         <div class="row"><button type="button" data-act="qeditcancel">Cancel</button><button type="button" class="primary" data-act="qsubmit">Send changes to Dawn</button></div>`
-        : qestIn && !S.myRec?.qestDraft && !S.qestNew ? `<div class="notice ok"><b>Thank you! Your pre-scan form was sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}.</b> Dawn has everything she needs for this scan.</div>
+        : qestIn && !S.myRec?.qestDraft && !S.qestNew ? `<div class="notice ok"><b>Thank you! Your Qest4 Scan Intake was sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}.</b> Dawn has everything she needs for this scan.</div>
           <div class="row"><button type="button" class="primary" data-act="qedit">Edit this form</button><button type="button" data-act="qnew">Start a new form for my next scan</button></div>
           <p class="small muted">Need to change or add something? Use Edit this form, and Dawn will see your changes.</p>
           <p class="small muted">Only start a new form when Dawn has scheduled your next scan. Your contact details carry over, so you only answer the questions about how you are now.</p>` : `
