@@ -83,6 +83,22 @@ function reminderText(o: Rec){ // o: {kind, first, named, to, whenLong, formIn, 
   return { subject, text:`${hi}\n\n${open}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
 
+function reminderGroup(o: Rec){ // o: {kind, people:[{first, holder, formIn, zoom}], greet, to, whenLong, link, phone, sign, bookUrl}
+  const nm=(p: Rec)=>p.holder?"you":p.first, list=(a: string[])=>a.length<3?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1];
+  const ppl=o.people.slice().sort((a,b)=>(b.holder?1:0)-(a.holder?1:0)), hasHolder=ppl.some(p=>p.holder);
+  const who=list(ppl.map(nm)), hi=`Hi ${o.greet||"there"},`;
+  const subject = o.kind==="week" ? "Your family's next Qest4 scans are coming up" : "Checking in: time for your family's next Qest4 scans";
+  const open = o.kind==="week"
+    ? `I hope you're all doing well! The drops for ${who} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for new Qest4 scans, to see how things have shifted and what's needed next.`
+    : `I hope you're all doing well! The drops for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
+  const zoom = ppl.some(p=>p.zoom) ? `Just reply with a few days and times that work for you, and I'll set up our Zoom call and send you the details. Or, if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\n\n` : "";
+  const done=ppl.filter(p=>p.formIn), need=ppl.filter(p=>!p.formIn);
+  const form = !need.length ? `Thank you for already sending the pre-scan forms. I have everything I need, and I'll be in touch soon with the scan dates.`
+    : `When you're ready, just fill out a pre-scan form for ${list(need.map(p=>p.holder?"yourself":p.first))} in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}), ${need.length===1?`then choose ${need[0].first} at the top. Details carry over, so it only takes a few minutes.`:"then choose each name at the top. Details carry over, so it only takes a few minutes each."}${done.length?` (Thank you, I already have the form for ${list(done.map(p=>p.holder?"you":p.first))}.)`:""}`;
+  const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
+  return { subject, text:`${hi}\n\n${open}\n\n${zoom}${form}\n\n${close}\n\n${o.sign}` };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
   let body: Rec = {}; try { body = await req.json(); } catch { /* empty */ }
@@ -113,22 +129,43 @@ Deno.serve(async (req) => {
     if (!on("reminders")) return Response.json({ ok: true, why: "switched off" });
     const t = nyToday(); let sent = 0;
     const { data: rows } = await db.from("docs").select("id,data").eq("parent", "clients");
+    // 1. who is due today
+    const due: Rec[] = [];
     for (const r of rows || []) {
       const c: Rec = r.data || {}, nv = c.nextVisit;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(nv || "")) continue;
       const d = dayDiff(nv, t), done = (c.reminders || {})[nv] || {};
       const kind = d <= 0 && d >= -2 && !done.day ? "day" : d >= 1 && d <= 7 && !done.week && !done.day ? "week" : "";
       if (!kind) continue;
-      const { to, first, named, greet, pick } = await who(r.id); if (!to) continue;
+      const w = await who(r.id); if (!w.to) continue;
       const formIn = (() => { if (!c.qestSubmittedAt) return false; const cut = new Date(nv + "T12:00:00Z"); cut.setUTCDate(cut.getUTCDate() - 14); return c.qestSubmittedAt >= cut.toISOString(); })();
-      const bk = (Array.isArray(c.appointments) ? c.appointments : []).filter((a: Rec) => (a.type === "consult" || a.type === "qfu") && a.date >= t).sort((a: Rec, b: Rec) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))[0];
-      const bookedTxt = bk ? `${fmtDate(bk.date)}${bk.time ? " at " + (() => { const [h, m] = String(bk.time).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"} Eastern`; })() : ""}` : "";
-      const { subject, text } = reminderText({ kind, first, named, to, whenLong: fmtDate(nv), formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN,
-        zoom: !!c.zoomClient, greet, pick, booked: bookedTxt, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" });
-      try { const at = await send(r.id, c, to, subject, text, kind);
-        const all = { ...(c.reminders || {}) }; all[nv] = { ...(all[nv] || {}), [kind]: at };
-        await merge("clients/" + r.id, { reminders: all }); sent++;
-      } catch (e) { console.error("reminder failed", r.id, (e as Error)?.message); }
+      due.push({ id: r.id, c, nv, kind, formIn, ...w });
+    }
+    // 2. family members on one sign-in with the same date get one email together
+    const groups = new Map<string, Rec[]>();
+    for (const x of due) { const k = `${String(x.to).toLowerCase()}|${x.kind}|${x.nv}`; groups.set(k, [...(groups.get(k) || []), x]); }
+    for (const g of groups.values()) {
+      const x = g[0];
+      let subject: string, text: string;
+      if (g.length > 1) {
+        ({ subject, text } = reminderGroup({ kind: x.kind, people: g.map((y) => ({ first: y.first, holder: y.pick && !y.named, formIn: y.formIn, zoom: !!y.c.zoomClient })), greet: g.find((y) => y.pick && !y.named)?.first || x.greet, to: x.to, whenLong: fmtDate(x.nv), link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" }));
+      } else {
+        const c = x.c;
+        const bk = (Array.isArray(c.appointments) ? c.appointments : []).filter((a: Rec) => (a.type === "consult" || a.type === "qfu") && a.date >= t).sort((a: Rec, b: Rec) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))[0];
+        const bookedTxt = bk ? `${fmtDate(bk.date)}${bk.time ? " at " + (() => { const [h, m] = String(bk.time).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"} Eastern`; })() : ""}` : "";
+        ({ subject, text } = reminderText({ kind: x.kind, first: x.first, named: x.named, to: x.to, whenLong: fmtDate(x.nv), formIn: x.formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN,
+          zoom: !!c.zoomClient, greet: x.greet, pick: x.pick, booked: bookedTxt, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" }));
+      }
+      try {
+        const at = await send(x.id, x.c, x.to, subject, text, x.kind);
+        for (const y of g) {
+          const rec = y.id === x.id ? ((await get("clients/" + y.id)) || y.c) : y.c;
+          const all = { ...(rec.reminders || {}) }; all[y.nv] = { ...(all[y.nv] || {}), [y.kind]: at };
+          const patch: Rec = { reminders: all };
+          if (y.id !== x.id) patch.emailLog = [{ at, subject, kind: y.kind }, ...(rec.emailLog || [])].slice(0, 50);
+          await merge("clients/" + y.id, patch); sent++;
+        }
+      } catch (e) { console.error("reminder failed", x.id, (e as Error)?.message); }
     }
     return Response.json({ ok: true, sent });
   }
