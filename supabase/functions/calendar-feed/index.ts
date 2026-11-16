@@ -31,19 +31,24 @@ Deno.serve(async (req) => {
   const want = String(srow?.data?.calKey || "");
   if (!want || key.length < 20 || key !== want) return new Response("Not found", { status: 404 });
 
-  const { data: rows } = await db.from("docs").select("id,data").eq("parent", "clients");
+  const { data: rows } = await db.from("docs").select("id,data,updated_at").eq("parent", "clients");
   const now = new Date(), stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const from = new Date(now.getTime() - 60 * 864e5).toISOString().slice(0, 10);
   const L: string[] = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Wellness From Within//Client portal//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     "X-WR-CALNAME:Wellness From Within", "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT15M", "X-PUBLISHED-TTL:PT15M"];
+  // SEQUENCE + LAST-MODIFIED change whenever an event's details change, so calendar apps replace their copy
+  const hash = (t: string) => { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return h >>> 0; };
+  let mod = stamp;
   const ev = (uid: string, start: string[], summary: string, desc: string, url = "") => {
-    L.push("BEGIN:VEVENT", `UID:${uid}@portal.dawnspain.com`, `DTSTAMP:${stamp}`, ...start, `SUMMARY:${esc(summary)}`);
+    const seq = Math.floor((hash(start.join() + summary + desc + url) % 1000000));
+    L.push("BEGIN:VEVENT", `UID:${uid}@portal.dawnspain.com`, `DTSTAMP:${stamp}`, `LAST-MODIFIED:${mod}`, `SEQUENCE:${seq}`, ...start, `SUMMARY:${esc(summary)}`);
     if (desc) L.push(`DESCRIPTION:${esc(desc)}`);
     if (url) L.push(`URL:${url}`);
     L.push("END:VEVENT");
   };
   for (const r of rows || []) {
     const c: Rec = r.data || {}, nm = nameOf(c);
+    mod = r.updated_at ? new Date(r.updated_at).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "") : stamp;
     for (const a of (Array.isArray(c.appointments) ? c.appointments : [])) {
       if (!isDay(a.date) || a.date < from) continue;
       const zoom = /zoom|video/i.test(a.how || "") ? (a.zoomUrl || srow?.data?.zoomUrl || "") : "";
