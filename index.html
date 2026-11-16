@@ -1711,6 +1711,14 @@ async function dueClick(e){
   try{ await S.db.doc("clients/"+id).update({nextVisit:v}); toast(v?`Next scan due ${fmtDate(v)}`:"Cleared"); }catch(e1){ toast("That didn't save. Please try again."); }
   return true;
 }
+/* The sign-in record behind a family account: no forms, plans or bookings of its own, with family members under it.
+   It holds the login, so it stays in the database but is left out of the client list. */
+function isFamilyShell(id){
+  if(id.includes("~") || id.startsWith("c-")) return false;
+  const c=S.clients[id]||{}; if(!Object.keys(S.clients).some(x=>x.startsWith(id+"~"))) return false;
+  const filled=k=>c[k] && typeof c[k]==="object" && Object.values(c[k]).some(v=>v!=="" && v!=null && v!==false);
+  return !(c.intakeSubmittedAt||c.qestSubmittedAt||c.followupSubmittedAt||filled("intake")||filled("qest")||(c.appointments||[]).length||c.nextVisit||c.lastMsg||c.name);
+}
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
   const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
@@ -1762,7 +1770,7 @@ document.addEventListener("change", e => { if(e.target && e.target.id==="plan-ta
 function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   if(S.scan){ if(!document.getElementById("scan-root")) renderScan(); return; }
   if(S.hc){ if(!document.getElementById("hc-root")) renderHConsult(); return; }
-  const ids = Object.keys(S.clients).sort((a,b)=>((isNewForm(S.clients[b])||msgUnreadDawn(S.clients[b]))-(isNewForm(S.clients[a])||msgUnreadDawn(S.clients[a]))) || clientName(a).localeCompare(clientName(b)));
+  const ids = Object.keys(S.clients).filter(id => !isFamilyShell(id)).sort((a,b)=>((isNewForm(S.clients[b])||msgUnreadDawn(S.clients[b]))-(isNewForm(S.clients[a])||msgUnreadDawn(S.clients[a]))) || clientName(a).localeCompare(clientName(b)));
   const f = (S.clientFilter||"").toLowerCase();
   const cf = CLIENT_FILTERS[S.cf||"all"] || CLIENT_FILTERS.all;
   const shown = ids.filter(id => (!f || clientName(id).toLowerCase().includes(f)) && cf[1](S.clients[id], id));
