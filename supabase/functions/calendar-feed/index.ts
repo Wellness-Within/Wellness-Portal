@@ -38,9 +38,9 @@ Deno.serve(async (req) => {
     "X-WR-CALNAME:Wellness From Within", "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT15M", "X-PUBLISHED-TTL:PT15M"];
   // SEQUENCE + LAST-MODIFIED change whenever an event's details change, so calendar apps replace their copy
   const hash = (t: string) => { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return h >>> 0; };
-  let mod = stamp;
+  let mod = stamp, seqNow = 0;
   const ev = (uid: string, start: string[], summary: string, desc: string, url = "") => {
-    const seq = Math.floor((hash(start.join() + summary + desc + url) % 1000000));
+    const seq = seqNow; void hash;
     L.push("BEGIN:VEVENT", `UID:${uid}@portal.dawnspain.com`, `DTSTAMP:${stamp}`, `LAST-MODIFIED:${mod}`, `SEQUENCE:${seq}`, ...start, `SUMMARY:${esc(summary)}`);
     if (desc) L.push(`DESCRIPTION:${esc(desc)}`);
     if (url) L.push(`URL:${url}`);
@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
   };
   for (const r of rows || []) {
     const c: Rec = r.data || {}, nm = nameOf(c);
+    seqNow = r.updated_at ? Math.floor(Date.parse(r.updated_at) / 60000) : 0;
     mod = r.updated_at ? new Date(r.updated_at).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "") : stamp;
     for (const a of (Array.isArray(c.appointments) ? c.appointments : [])) {
       if (!isDay(a.date) || a.date < from) continue;
