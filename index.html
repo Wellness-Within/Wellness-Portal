@@ -855,6 +855,9 @@ function apptWhen(a, forClient){
     if(forClient){ try{ const loc=Intl.DateTimeFormat().resolvedOptions().timeZone; if(loc && loc!==PRAC_TZ){ const st=apptStart(a); s+=` (${st.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})} your time)`; } }catch(e){} } }
   return s;
 }
+const isZoom = a => /zoom|video/i.test(a?.how||"");
+const zoomUrlOf = a => isZoom(a) ? (a.zoomUrl || (S.prac ? (S.settings?.zoomUrl||"") : "")) : "";
+const zoomLink = (a, cls) => { const u=zoomUrlOf(a); return u ? `<a class="btn ${cls||"small"}" href="${esc(u)}" target="_blank" rel="noopener" data-zoomlink>Join Zoom</a>` : ""; };
 const apptDelivery = a => a.type!=="scan" ? "" : (a.delivery || (a.imprint===false ? "none" : "imprint"));
 function apptLabel(a){ const d=apptDelivery(a); return (APPT_TYPES[a.type]||"Appointment") + (d==="imprint" ? " + imprint" : d==="ship" ? " + shipped treatment" : ""); }
 function clientShipAddress(c){ const q=c?.qest||{};
@@ -972,7 +975,8 @@ function apptsPane(id){
         <label class="field"><span>Date</span><input id="ap-date" type="date" value="${esc(a.date||"")}"></label>
         <label class="field" id="ap-time-f"><span id="ap-time-l">Time (Eastern)${a.type==="consult"?"":" · optional"}</span><input id="ap-time" type="time" value="${esc(a.time||"")}"></label>
         <label class="field" id="ap-mins-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>Length</span><select id="ap-mins">${[30,45,60,90].map(m=>`<option value="${m}" ${(a.mins||60)===m?"selected":""}>${m} minutes</option>`).join("")}</select></label>
-        <label class="field" id="ap-how-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>How</span><select id="ap-how">${["","Phone","Video"].map(h=>`<option value="${h}" ${a.how===h?"selected":""}>${h||"Not set"}</option>`).join("")}</select></label>
+        <label class="field" id="ap-how-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>How</span><select id="ap-how">${["","Zoom","Phone"].map(h=>`<option value="${h}" ${(a.how==="Video"?"Zoom":a.how)===h?"selected":""}>${h||"Not set"}</option>`).join("")}</select></label>
+        <label class="field" id="ap-zoom-f" ${(a.type==="consult"||a.type==="qfu")&&isZoom(a)?"":"hidden"} style="grid-column:1/-1"><span>Zoom link <span class="muted">(clients see a Join button)</span></span><input id="ap-zoom" type="url" placeholder="${esc(S.settings?.zoomUrl||"https://zoom.us/j/…")}" value="${esc(a.zoomUrl||"")}"></label>
       </div>
       <div class="grid2" id="ap-imp-f" ${a.type==="scan"?"":"hidden"}>
         <label class="field"><span>After the scan</span><select id="ap-deliv">${[["imprint","Remote imprint"],["ship","Ship treatment"],["none","Nothing"]].map(([v,l])=>`<option value="${v}" ${apptDelivery(a)===v?"selected":""}>${l}</option>`).join("")}</select></label>
@@ -1008,10 +1012,10 @@ function renderSchedule(){
   const tile=d=>`<div class="date-tile" style="width:52px;height:54px;flex:none"><span>${esc(new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b style="font-size:22px">${new Date(d+"T12:00:00").getDate()}</b></div>`;
   const ag=grp(rows, r=>r.a.date, "Earlier");
   const booked = !rows.length?`<div class="empty small">Nothing booked. Add appointments from a client's Appointments tab.</div>`:
-    ["Today","Next 7 days","Later"].filter(g=>ag[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${ag[g].map(({id,a})=>`<button type="button" class="item" data-sched="${esc(id)}">
+    ["Today","Next 7 days","Later"].filter(g=>ag[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${ag[g].map(({id,a})=>`<div role="button" tabindex="0" class="item" style="cursor:pointer;text-align:left;width:100%" data-sched="${esc(id)}">
       <div class="row" style="gap:12px;flex-wrap:nowrap">${tile(a.date)}
-      <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${esc(apptLabel(a))}${a.time?` · ${esc(fmtTime12(a.time))}`:""}${a.how?` · ${esc(a.how)}`:""}</div></div>
-      ${apptDelivery(a)==="ship"?(a.shippedAt?'<span class="chip ok">Shipped</span>':'<span class="chip acc">To ship</span>'):""}${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></button>`).join("")}</div>`).join("");
+      <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${esc(apptLabel(a))}${a.time?` · ${esc(fmtTime12(a.time))}`:""}${a.how&&!isZoom(a)?` · ${esc(a.how)}`:""}</div></div>
+      ${isZoom(a)?(zoomLink(a)||'<span class="chip acc">Zoom</span>'):""}${apptDelivery(a)==="ship"?(a.shippedAt?'<span class="chip ok">Shipped</span>':'<span class="chip acc">To ship</span>'):""}${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></div>`).join("")}</div>`).join("");
   const dues=Object.keys(S.clients).flatMap(id=>dueDates(S.clients[id]).map(d=>({id, nv:d.date, bottle:d.name}))).sort((a,b)=>a.nv.localeCompare(b.nv));
   const dg=grp(dues, r=>r.nv, "Past due");
   const drops = !dues.length?`<div class="empty small">No next-scan-due dates set. Add one on a client's Details or Appointments tab.</div>`:
@@ -1026,7 +1030,8 @@ function renderSchedule(){
       <section class="sheet stack"><div class="row"><h2 class="grow" style="margin:0">Booked appointments</h2><span class="small muted">${rows.length} upcoming</span></div>${booked}</section>
       <section class="sheet stack"><div class="row"><h2 class="grow" style="margin:0">Next scan due</h2><span class="small muted">when drops finish</span></div>${drops}</section>
     </div></div>`;
-  $("#app").onclick=e=>{ const b=e.target.closest("[data-sched]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.sched; S.sub="appts"; S.apptEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
+  $("#app").onkeydown=e=>{ if((e.key==="Enter"||e.key===" ") && e.target.matches?.('div[data-sched]')){ e.preventDefault(); e.target.click(); } };
+  $("#app").onclick=e=>{ if(e.target.closest("[data-zoomlink]")) return; const b=e.target.closest("[data-sched]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.sched; S.sub="appts"; S.apptEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
 function messagesPane(id){
   const c=S.clients[id]||{}, loaded=S.msgsFor===id && S.msgsLoaded;
@@ -1661,7 +1666,7 @@ function renderHome(){
   const card=(title, count, body, foot)=>`<section class="dash-card"><div class="head"><h2>${title}</h2>${count?`<span class="count">${count}</span>`:""}</div>${body}${foot||""}</section>`;
   const empty=s=>`<p class="small muted">${s}</p>`;
   const cards=[
-    card("This week", week.length, week.length?`<div>${week.slice(0,8).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${esc(dayLbl(a.date))}${a.time?` · ${esc(fmtTime12(a.time))}`:""} · ${esc(apptLabel(a))}</span>`, a.date===t?'<span class="chip acc">Today</span>':"")).join("")}</div>${week.length>8?`<p class="small muted">and ${week.length-8} more</p>`:""}`:empty("Nothing scheduled in the next 7 days."), `<button type="button" class="ghost" data-htab="schedule">Full schedule</button>`),
+    card("This week", week.length, week.length?`<div>${week.slice(0,8).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${esc(dayLbl(a.date))}${a.time?` · ${esc(fmtTime12(a.time))}`:""} · ${esc(apptLabel(a))}${isZoom(a)?" · Zoom":""}</span>`, a.date===t?'<span class="chip acc">Today</span>':"")).join("")}</div>${week.length>8?`<p class="small muted">and ${week.length-8} more</p>`:""}`:empty("Nothing scheduled in the next 7 days."), `<button type="button" class="ghost" data-htab="schedule">Full schedule</button>`),
     card("Messages", unread.length, unread.length?`<div>${unread.slice(0,6).map(id=>row(id,"messages",`<b>${nm(id)}</b><span class="small muted">${esc(fmtWhen(S.clients[id].lastMsg.at))}</span>`,'<span class="dot" aria-label="unread"></span>')).join("")}</div>`:empty("All caught up."), `<button type="button" class="ghost" data-htab="inbox">All messages</button>`),
     card("New forms in", forms.length, forms.length?`<div>${forms.slice(0,6).map(id=>row(id,"",`<b>${nm(id)}</b><span class="small muted">${esc(formKind(S.clients[id]))} · ${esc(fmtWhen(lastSubmitted(S.clients[id])))}</span>`,'<span class="chip acc">New</span>')).join("")}</div>`:empty("No new forms since you last looked.")),
     card("Website orders", orders.length, orders.length?`<div>${orders.slice(0,6).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">${esc(fmtDate(v.date))} · ${esc((v.items||[])[0]?.desc||"Order")}</span>`,`<b>${esc(money(invMath(v).total))}</b>`)).join("")}</div>`:empty("No website orders in the last 7 days.")),
@@ -2362,7 +2367,8 @@ function bindClients(){
   app.querySelectorAll("[data-remname]").forEach(inp => inp.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); document.querySelector(`[data-act="addremedy"][data-i="${inp.dataset.remname}"]`)?.click(); } });
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
   const apShip = () => { const sc=$("#ap-type")?.value==="scan", sh=$("#ap-deliv")?.value==="ship"; const f=$("#ap-ship-f"); if(f) f.hidden=!(sc&&sh); };
-  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=!(v==="consult"||v==="qfu")); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
+  const aph = $("#ap-how"); if(aph) aph.onchange = () => { const zf=$("#ap-zoom-f"), v=$("#ap-type").value; if(zf) zf.hidden=!((v==="consult"||v==="qfu") && aph.value==="Zoom"); };
+  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=!(v==="consult"||v==="qfu")); const zf=$("#ap-zoom-f"); if(zf) zf.hidden=!((v==="consult"||v==="qfu") && $("#ap-how").value==="Zoom"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
   const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
   const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
@@ -2403,7 +2409,7 @@ function bindClients(){
       if(act==="back"){ S.sel=null; S.compose=null; S.apptEdit=null; renderClients(); }
       else if(act==="apnew"){ S.apptEdit={cid:S.sel, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", imprint:true}}; renderClients(); }
       else if(act==="apcancel"){ S.apptEdit=null; renderClients(); }
-      else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-how")?.value||"", delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
+      else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-how")?.value||"", zoomUrl:($("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
         if(!/^\d{4}-\d{2}-\d{2}$/.test(a.date)){ toast("Choose a date"); return; } if(a.type==="consult" && !a.time){ toast("Choose a time for the call"); return; }
         const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null; toast("Appointment saved"); renderClients(); }
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
@@ -4094,6 +4100,9 @@ function renderSettings(){
     <p class="small muted" style="margin-top:-6px">Where “Analyze with QCIS” opens. Leave blank for a new Claude chat, or paste the link of the Claude project you use for scan analysis.</p>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     ${templatesSection()}
+    <div class="formsec stack" id="zoom-set"><h3>Zoom</h3>
+      <p class="small muted">Your usual Zoom meeting link. It's added to Zoom appointments (including Square bookings), so you and the client get a “Join Zoom” button. You can change it on any single appointment.</p>
+      <div class="row" style="gap:8px;align-items:end"><label class="field grow"><span>Zoom meeting link</span><input id="zs-url" type="url" placeholder="https://us02web.zoom.us/j/…" value="${esc(S.settings?.zoomUrl||"")}"></label><button type="button" class="primary" id="zs-save">Save</button></div></div>
     ${autoMailSection()}
     ${planTplSettings()}
     ${backupSection()}
@@ -4127,6 +4136,8 @@ function renderSettings(){
       Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, bk:{}, remSrc:{}, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   bindBillingSettings();
+  const zs=$("#zs-save"); if(zs) zs.onclick=async()=>{ const v=($("#zs-url").value||"").trim(); if(v && !/^https:\/\/\S+$/.test(v)){ toast("That link should start with https://"); return; }
+    try{ await S.db.doc("settings/practice").update({zoomUrl:v}); S.settings={...S.settings, zoomUrl:v}; toast(v?"Zoom link saved":"Zoom link cleared"); }catch(e1){ toast("That didn't save. Please try again."); } };
   const as=$("#auto-set"); if(as) as.onchange=async e=>{ const cb=e.target.closest("[data-automail]"); if(!cb) return; const autoMail={...(S.settings.autoMail||{}), [cb.dataset.automail]:cb.checked};
     try{ await S.db.doc("settings/practice").update({autoMail}); S.settings={...S.settings, autoMail}; toast(cb.checked?"Turned on":"Turned off"); }catch(e1){ cb.checked=!cb.checked; toast("That didn't save. Please try again."); } };
   $("#app").onclick = async e => {
@@ -4225,7 +4236,7 @@ function clientHome(first){
     cards.push(`<section class="dash-card"><div class="head"><h2>${ups.length>1?"Upcoming appointments":"Next appointment"}</h2><span class="chip ok">${(()=>{ const dd=dayDiff(ups[0].date, today()); return dd===0?"Today":dd===1?"Tomorrow":`In ${dd} days`; })()}</span></div>
       <div class="row" style="gap:16px;flex-wrap:nowrap;align-items:flex-start"><div class="date-tile"><span>${esc(d.toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b>${d.getDate()}</b></div>
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small">${esc(apptWhen(a,true))}</span>
-      ${a.how?`<span class="small muted">By ${esc(a.how.toLowerCase())}</span>`:""}
+      ${isZoom(a)?`<span class="small muted">On Zoom</span>${zoomLink(a,"primary small")?`<span style="margin-top:6px">${zoomLink(a,"primary small")}</span>`:""}`:a.how?`<span class="small muted">By ${esc(a.how.toLowerCase())}</span>`:""}
       <span class="small muted">${dd>0?`In ${dd} day${dd===1?"":"s"}`:"Today"}${a.type==="scan"&&formIn?" · Your Qest4 Scan Intake is in. Thank you!":""}</span>
       ${a.note?`<span class="small">${esc(a.note)}</span>`:""}
       ${apptDelivery(a)==="ship"?(a.shippedAt?`<span class="small"><b>Your treatment was shipped ${esc(fmtDate(a.shippedAt))}.</b></span>`:`<span class="small" style="white-space:pre-line">Your treatment will be shipped to:\n${esc(a.shipTo||clientShipAddress(r))}</span><span class="small muted">Address changed? Let Dawn know in Messages.</span>`):""}</div></div>

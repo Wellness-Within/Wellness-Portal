@@ -126,7 +126,9 @@ Deno.serve(async (req) => {
     if (!cancelled && full.start_at) {
       const { date, time } = ny(full.start_at);
       const mins = (full.appointment_segments || []).reduce((t: number, s: Rec) => t + (+s.duration_minutes || 0), 0) || 30;
-      list.push({ id: aid, type: "consult", date, time, mins, how: "Zoom", note: "Booked in Square" });
+      const prevA = (Array.isArray(rec.appointments) ? rec.appointments : []).find((a: Rec) => a.id === aid) || {};
+      const zoomUrl = String(prevA.zoomUrl || ((await get("settings/practice")) || {}).zoomUrl || "");
+      list.push({ id: aid, type: "consult", date, time, mins, how: "Zoom", ...(zoomUrl ? { zoomUrl } : {}), note: "Booked in Square" });
     }
     list = list.sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
     const today = new Date().toISOString().slice(0, 10);
