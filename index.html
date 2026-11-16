@@ -1620,7 +1620,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the pre-scan form link, right after a website scan order."]];
+  const items=[["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the pre-scan form link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
