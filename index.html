@@ -88,18 +88,18 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .prog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}.prog-chart{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}.prog-chart figcaption{margin-bottom:4px}.prog-chart svg{width:100%;height:auto;display:block;margin-top:6px}
 .prog-chart .grid{stroke:var(--line);stroke-width:1}.prog-chart .ax{font-size:11px;fill:var(--muted)}.prog-chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.prog-chart .dot{fill:var(--accent);stroke:var(--surface);stroke-width:2}.prog-chart .hit{fill:transparent}.prog-chart .pt:hover .dot{r:8}
 .prog-up{color:#2f7d4f}
-:root{--zg:#639922;--zg-s:#EAF3DE;--zg-i:#27500A;--zm:#EF9F27;--zm-s:#FAEEDA;--zm-i:#633806;--zl:#E24B4A;--zl-s:#FCEBEB;--zl-i:#791F1F}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--zg-s:#27500A;--zg-i:#C0DD97;--zm-s:#633806;--zm-i:#FAC775;--zl-s:#791F1F;--zl-i:#F7C1C1}}
-.zb-good{fill:var(--zg);opacity:.16}.zb-mid{fill:var(--zm);opacity:.16}.zb-low{fill:var(--zl);opacity:.13}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .zb-good{opacity:.34}:root:not([data-theme="light"]) .zb-mid{opacity:.30}:root:not([data-theme="light"]) .zb-low{opacity:.30}:root:not([data-theme="light"]) .prog-chart .zl-t{fill:var(--ink)}}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .prog-up{color:#97C459}:root:not([data-theme="light"]) .prog-down{color:#F0997B}}[data-theme="dark"] .prog-up{color:#97C459}[data-theme="dark"] .prog-down{color:#F0997B}
-:root[data-theme="dark"]{--zg-s:#27500A;--zg-i:#C0DD97;--zm-s:#633806;--zm-i:#FAC775;--zl-s:#791F1F;--zl-i:#F7C1C1}[data-theme="dark"] .prog-chart .zl-t{fill:var(--ink)}
-[data-theme="dark"] .zb-good{opacity:.34}[data-theme="dark"] .zb-mid{opacity:.30}[data-theme="dark"] .zb-low{opacity:.30}
+:root{--zg:#6CBFAE;--zg-s:#E1F2EE;--zg-i:#1F5E55;--zm:#E2C27D;--zm-s:#F7EEDB;--zm-i:#76571C;--zl:#E39A8B;--zl-s:#F9E6E0;--zl-i:#8A4134}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--zg-s:rgba(108,191,174,.15);--zg-i:#A9E2D6;--zm-s:rgba(226,194,125,.13);--zm-i:#EBD5A3;--zl-s:rgba(227,154,139,.13);--zl-i:#F1BCB0}}
+.zb-good{fill:var(--zg);opacity:.22}.zb-mid{fill:var(--zm);opacity:.2}.zb-low{fill:var(--zl);opacity:.18}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .zb-good{opacity:.2}:root:not([data-theme="light"]) .zb-mid{opacity:.15}:root:not([data-theme="light"]) .zb-low{opacity:.15}:root:not([data-theme="light"]) .prog-chart .zl-t{fill:var(--ink)}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .prog-up{color:#A9E2D6}:root:not([data-theme="light"]) .prog-down{color:#F1BCB0}}[data-theme="dark"] .prog-up{color:#A9E2D6}[data-theme="dark"] .prog-down{color:#F1BCB0}
+:root[data-theme="dark"]{--zg-s:rgba(108,191,174,.15);--zg-i:#A9E2D6;--zm-s:rgba(226,194,125,.13);--zm-i:#EBD5A3;--zl-s:rgba(227,154,139,.13);--zl-i:#F1BCB0}[data-theme="dark"] .prog-chart .zl-t{fill:var(--ink)}
+[data-theme="dark"] .zb-good{opacity:.2}[data-theme="dark"] .zb-mid{opacity:.15}[data-theme="dark"] .zb-low{opacity:.15}
 .prog-chart .zl-t{font-size:10px;fill:var(--muted)}.prog-chart .ln2{fill:none;stroke:var(--ink);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.7}
 .prog-chart .dz{stroke:var(--surface);stroke-width:2}.dz-good{fill:var(--zg)}.dz-mid{fill:var(--zm)}.dz-low{fill:var(--zl)}
 .prog-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
-.prog-tile{border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:1px}
-.prog-tile .v{font-size:26px;font-weight:600;line-height:1.15}.prog-tile .t{font-size:12px}.prog-tile .c{font-size:11.5px}
+.prog-tile{border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;border:1px solid rgba(255,255,255,.06)}
+.prog-tile .v{font-size:28px;font-weight:600;line-height:1.15;font-family:var(--f-display)}.prog-tile .t{font-size:12px}.prog-tile .c{font-size:11.5px}
 .pt-good{background:var(--zg-s);color:var(--zg-i)}.pt-mid{background:var(--zm-s);color:var(--zm-i)}.pt-low{background:var(--zl-s);color:var(--zl-i)}
 .zone-key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.zone-key i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}.prog-down{color:#a8562a}.dash-wide{grid-column:1/-1}.prog-row{gap:10px}.prog-row>span:first-child{flex:1;min-width:0}.spark{flex:none}.spark .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}.spark .dot{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
 .dash-link{width:100%;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 0;font:inherit;color:inherit;cursor:pointer;text-align:left}.dash-link:hover b{color:var(--accent)}.dash-link:last-child{border-bottom:0}
@@ -1546,7 +1546,7 @@ function progChart(m, pts){
       <text x="${L}" y="${H-6}" class="ax">${esc(fmt(first.date))}</text>${pts.length>1?`<text x="${W-R}" y="${H-6}" text-anchor="end" class="ax">${esc(fmt(last.date))}</text>`:""}
     </svg></figure>`;
 }
-const zoneKey = `<div class="zone-key"><span><i style="background:var(--zg)"></i>Good zone</span><span><i style="background:var(--zm)"></i>Middle</span><span><i style="background:var(--zl)"></i>Low</span><span>For stress and concerns, lower is better, so the good zone is at the bottom.</span></div>`;
+const zoneKey = `<div class="zone-key"><span><i style="background:var(--zg)"></i>Good zone (sea glass)</span><span><i style="background:var(--zm)"></i>Middle (sand)</span><span><i style="background:var(--zl)"></i>Low (coral)</span><span>For stress and concerns, lower is better, so the good zone is at the bottom.</span></div>`;
 function progCharts(entries, keys){
   return PROG_MEASURES.filter(m=>!keys||keys.includes(m.k)).map(m=>{ const pts=entries.filter(e=>e.vals&&e.vals[m.k]!=null).map(e=>({date:e.date, v:e.vals[m.k], src:e.src, text:(e.texts||{})[m.k]||""}));
     return pts.length ? progChart(m, pts) : ""; }).join("");
@@ -1615,7 +1615,7 @@ function clientProgressCard(){
   const tiles=progTiles(e, 6);
   if(!tiles.length) return "";
   return `<section class="dash-card prog-card"><div class="head"><h2>My progress</h2><button type="button" class="ghost" data-cv2="progress">See charts</button></div>
-    <div class="prog-tiles">${tiles.join("")}</div><p class="small muted">Latest ratings, out of 10. Green is the good zone, amber the middle, soft red low.</p></section>`;
+    <div class="prog-tiles">${tiles.join("")}</div><p class="small muted">Latest ratings, out of 10. Sea glass is the good zone, sand the middle, coral low.</p></section>`;
 }
 function clientProgressView(){
   const e=progressEntries(S.myRec, S.myQhist, S.myProg, true);
