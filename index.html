@@ -671,6 +671,21 @@ async function markReminder(id, kind){
   Object.keys(all).sort().slice(0,-6).forEach(k=>delete all[k]);
   await S.db.doc("clients/"+id).update({reminders:all});
 }
+function reminderText(o){ // o: {kind, first, named, to, whenLong, formIn, link, phone, sign}
+  const nm=o.first||"", hi=o.named?"Hi there,":`Hi ${nm||"there"},`;
+  const subject = o.kind==="week" ? (o.named?`${nm}'s next Qest4 scan is coming up`:"Your next Qest4 scan is coming up")
+                                  : (o.named?`Checking in: time for ${nm}'s next Qest4 scan`:"Checking in: time for your next Qest4 scan");
+  const open = o.kind==="week"
+    ? (o.named ? `I hope you and ${nm} are doing well! The drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for a new Qest4 scan, to see how things have shifted and what's needed next.`
+               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for your next Qest4 scan, to see how things have shifted and what your body needs next.`)
+    : (o.named ? `I hope you and ${nm} are doing well! The drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
+               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
+  const form = o.formIn
+    ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
+    : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${o.named?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+  const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
+  return { subject, text:`${hi}\n\n${open}\n\n${form}\n\n${close}\n\n${o.sign}` };
+}
 function scanMail(id, kind){
   const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return false; }
   const c=S.clients[id]||{}, first=clientFirst(id);
@@ -678,22 +693,9 @@ function scanMail(id, kind){
   const named = fam && first && first!=="Unnamed";
   const hi = named ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
   const your = named ? `${first}'s` : "your", Your = named ? `${first}'s` : "Your";
-  const howYou = named ? `how ${first} is` : "how you're";
-  const when = c.nextVisit ? fmtDate(c.nextVisit) : "";
-  const link = "https://portal.dawnspain.com/#nextscan";
-  const signin = `Sign in with this email address (${to}).${named?` Then choose ${first} at the top.`:""} ${named?"Contact":"Your contact"} details carry over, so you'll only answer the questions about ${howYou} feeling now.`;
-  const sign=`With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`;
-  const reach = `If you need to change the date or have any questions, just reply to this email or text me at ${PRACTICE.phone}.`;
-  let subject, body;
-  if(kind==="week"){
-    subject = `${Your} next Qest4 scan is coming up`;
-    body = `${hi}\n\nIt's almost time for ${your} next Qest4 scan${when?`, on ${when}`:""}, when ${named?"the":"your"} current drops are due to finish.\n\nBefore the scan, please fill out a new pre-scan form in the client portal so I can see ${howYou} doing since the last one:\n${link}\n\n${signin}\n\n${reach}\n\n${sign}`;
-  } else {
-    subject = `Time for ${your} next Qest4 scan`;
-    body = `${hi}\n\n${Your} drops are finished, which means it's time for ${your} next Qest4 scan.\n\n` +
-      (scanFormIn(c) ? `Thank you for sending ${named?"the":"your"} pre-scan form. I have everything I need for the scan.` : `If you haven't yet, please fill out the pre-scan form in the client portal before the scan:\n${link}\n\n${signin}`) +
-      `\n\n${reach}\n\n${sign}`;
-  }
+  const sign=emailSign();
+  const whenLong = c.nextVisit ? new Date(c.nextVisit+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}) : "";
+  const { subject, text: body } = reminderText({kind, first:named?first:(first&&first!=="Unnamed"?first:""), named, to, whenLong, formIn:scanFormIn(c), link:"https://portal.dawnspain.com/#nextscan", phone:PRACTICE.phone, sign});
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   logEmail(id, subject, kind);
   return true;

@@ -41,6 +41,22 @@ async function send(cid: string, rec: Rec, to: string, subject: string, text: st
 }
 const signin = (to: string, named: boolean, first: string) => `Sign in with this email address (${to}).${named ? ` Then choose ${first} at the top.` : ""}`;
 
+function reminderText(o: Rec){ // o: {kind, first, named, to, whenLong, formIn, link, phone, sign}
+  const nm=o.first||"", hi=o.named?"Hi there,":`Hi ${nm||"there"},`;
+  const subject = o.kind==="week" ? (o.named?`${nm}'s next Qest4 scan is coming up`:"Your next Qest4 scan is coming up")
+                                  : (o.named?`Checking in: time for ${nm}'s next Qest4 scan`:"Checking in: time for your next Qest4 scan");
+  const open = o.kind==="week"
+    ? (o.named ? `I hope you and ${nm} are doing well! The drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for a new Qest4 scan, to see how things have shifted and what's needed next.`
+               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for your next Qest4 scan, to see how things have shifted and what your body needs next.`)
+    : (o.named ? `I hope you and ${nm} are doing well! The drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
+               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
+  const form = o.formIn
+    ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
+    : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${o.named?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+  const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
+  return { subject, text:`${hi}\n\n${open}\n\n${form}\n\n${close}\n\n${o.sign}` };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
   let body: Rec = {}; try { body = await req.json(); } catch { /* empty */ }
@@ -79,14 +95,7 @@ Deno.serve(async (req) => {
       if (!kind) continue;
       const { to, first, named } = await who(r.id); if (!to) continue;
       const formIn = (() => { if (!c.qestSubmittedAt) return false; const cut = new Date(nv + "T12:00:00Z"); cut.setUTCDate(cut.getUTCDate() - 14); return c.qestSubmittedAt >= cut.toISOString(); })();
-      const hi = named ? "Hi there," : `Hi ${first || "there"},`, your = named ? `${first}'s` : "your", Your = named ? `${first}'s` : "Your";
-      const link = "https://portal.dawnspain.com/#nextscan";
-      const how = `${signin(to, named, first)} Your contact details carry over, so you'll only answer the questions about how ${named ? `${first} is` : "you're"} feeling now.`;
-      const reach = `If you need to change the date or have any questions, just reply to this email or text me at ${PHONE}.`;
-      const subject = kind === "week" ? `${Your} next Qest4 scan is coming up` : `Time for ${your} next Qest4 scan`;
-      const text = kind === "week"
-        ? `${hi}\n\nIt's almost time for ${your} next Qest4 scan, on ${fmtDate(nv)}, when ${named ? "the" : "your"} current drops are due to finish.\n\n${formIn ? `Thank you for already sending ${named ? "the" : "your"} pre-scan form. I have everything I need.` : `Before the scan, please fill out a new pre-scan form in the client portal so I can see how ${named ? `${first} is` : "you're"} doing since the last one:\n${link}\n\n${how}`}\n\n${reach}\n\n${SIGN}`
-        : `${hi}\n\n${Your} drops are finished, which means it's time for ${your} next Qest4 scan.\n\n${formIn ? `Thank you for sending ${named ? "the" : "your"} pre-scan form. I have everything I need for the scan.` : `If you haven't yet, please fill out the pre-scan form in the client portal before the scan:\n${link}\n\n${how}`}\n\n${reach}\n\n${SIGN}`;
+      const { subject, text } = reminderText({ kind, first, named, to, whenLong: fmtDate(nv), formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN });
       try { const at = await send(r.id, c, to, subject, text, kind);
         const all = { ...(c.reminders || {}) }; all[nv] = { ...(all[nv] || {}), [kind]: at };
         await merge("clients/" + r.id, { reminders: all }); sent++;
