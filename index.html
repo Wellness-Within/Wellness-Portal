@@ -152,6 +152,9 @@ legend{font-family:var(--f-display);font-size:17px;padding:0;margin-bottom:8px}
 .photo{width:132px;height:132px;object-fit:cover;border-radius:var(--r);border:1px solid var(--line);background:var(--sunk)}
 .empty-photo{display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;color:var(--muted)}
 .seg{display:flex;gap:4px;padding:4px;background:var(--sunk);border-radius:10px;flex-wrap:wrap}
+.fu-pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.fu-pick button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:12px 14px;border-radius:12px;height:auto;white-space:normal}
+.fu-pick button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;background:var(--soft)}
 .seg button{border:0;background:none;flex:1 1 180px}
 .seg button[aria-current="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .hist{border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--bg)}
@@ -428,6 +431,28 @@ const FOLLOWUP = [
     {id:"questions",label:"Questions for Dawn",type:"textarea",wide:true}]}
 ];
 
+/* Qest4 check-in: between scans, how things are going on the drops (also feeds Progress) */
+const QEST_FU = [
+  {sec:"About you", fields:[
+    {id:"fullName",label:"Full name",type:"text",req:true},
+    {id:"lastScan",label:"About when was your last Qest4 scan?",type:"text"}]},
+  {sec:"How you're doing now", note:"Your answers are added to “My progress”, so you can see how things change from one check-in to the next.", fields:[
+    {id:"overall",label:"Overall, how are you feeling compared with before your last scan?",type:"choice",options:["Much better","A little better","About the same","A little worse","Much worse"]},
+    {id:"wellbeing",label:"Overall wellbeing (1 = very poor, 10 = excellent)",type:"scale"},
+    {id:"energy",label:"Energy (1 = very low, 10 = great)",type:"scale"},
+    {id:"sleep",label:"Sleep (1 = very poor, 10 = great)",type:"scale"},
+    {id:"mood",label:"Mood (1 = very low, 10 = great)",type:"scale"},
+    {id:"stress",label:"Stress (1 = very calm, 10 = very stressed)",type:"scale"}]},
+  {sec:"Since your last scan", note:"Short answers are fine.", fields:[
+    {id:"changes",label:"What changes have you noticed since starting your drops?",type:"textarea",wide:true,hint:"Better, worse, different, or anything you've noticed"},
+    {id:"drops",label:"How is taking your drops going? Any doses missed?",type:"textarea",wide:true},
+    {id:"newThings",label:"Anything new: symptoms, stress, big events, or new medications or supplements?",type:"textarea",wide:true},
+    {id:"questions",label:"Questions or anything else for Dawn",type:"textarea",wide:true}]}
+];
+const fuIsQ = h => (h||{}).kind==="qest";
+const fuDef = h => fuIsQ(h) ? QEST_FU : FOLLOWUP;
+const fuName = h => fuIsQ(h) ? "Qest4 check-in" : "Homeopathy follow-up";
+
 /* Photo: resized in the browser and kept in the client's own private record */
 function resizePhoto(file){
   return new Promise((res, rej) => {
@@ -563,15 +588,15 @@ function addSignOut(){
 }
 
 window.addEventListener("hashchange", () => {
-  const h=(location.hash||"").toLowerCase(); if(!/^#(qest|intake|followup|nextscan)$/.test(h)) return;
+  const h=(location.hash||"").toLowerCase(); if(!/^#(qest|intake|followup|checkin|nextscan)$/.test(h)) return;
   store("wfw.wantForm", {h, t:Date.now()});
-  if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; if(h==="#nextscan"){ S.wantNext=true; S.qestNew=true; } renderClient(); window.scrollTo(0,0); }
+  if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : (h==="#followup"||h==="#checkin") ? "followup" : "qest"; if(h==="#followup") S.fuKind="homeo"; if(h==="#checkin") S.fuKind="qest"; if(h==="#nextscan"){ S.wantNext=true; S.qestNew=true; } renderClient(); window.scrollTo(0,0); }
 });
 function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip","shipDifferent","shipStreet","shipCity","shipState","shipZip","delivery","rxForm","rxOther","quartz"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
-  { const h0=(location.hash||"").toLowerCase(); const q0=new URLSearchParams(location.search).get("f"); if(/^#(qest|intake|followup|nextscan)$/.test(h0)) store("wfw.wantForm", {h:h0, t:Date.now()}); else if(/^(qest|intake|followup|nextscan)$/.test(q0||"")) store("wfw.wantForm", {h:"#"+q0, t:Date.now()}); }
+  { const h0=(location.hash||"").toLowerCase(); const q0=new URLSearchParams(location.search).get("f"); if(/^#(qest|intake|followup|checkin|nextscan)$/.test(h0)) store("wfw.wantForm", {h:h0, t:Date.now()}); else if(/^(qest|intake|followup|checkin|nextscan)$/.test(q0||"")) store("wfw.wantForm", {h:"#"+q0, t:Date.now()}); }
   const hashErr = /error_code=otp_expired|error=access_denied/.test(location.hash);
   const { data:{ session } } = await SB.auth.getSession();
   if(!session){ renderSignIn(hashErr?`<p class="notice warn">That sign-in link has expired or was already used. Enter your email for a new one.</p>`:""); SB.auth.onAuthStateChange((ev,sess)=>{ if(sess) location.replace(location.pathname); }); return; }
@@ -1475,8 +1500,8 @@ function progressEntries(c, qhist, notes, forClient){
   const qs=(qhist||[]).slice(); if(!qs.length && c.qestSubmittedAt && c.qest) qs.push({form:c.qest, submittedAt:c.qestSubmittedAt});
   qs.forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Qest4 Scan Intake",
     vals:{well:n10(f.wellbeing), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, note:f.sinceLast||""}); });
-  (c.followupHistory||[]).forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Follow-up",
-    vals:{main:n10(f.mainNow), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, overall:f.overall||"", note:f.changes||""}); });
+  (c.followupHistory||[]).forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:fuIsQ(h)?"Qest4 check-in":"Follow-up",
+    vals:{well:n10(f.wellbeing), main:n10(f.mainNow), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, overall:f.overall||"", note:f.changes||""}); });
   (notes||[]).filter(p=>!forClient||p.shared).forEach(p=>out.push({date:p.date||p.at, src:"Dawn's note", vals:{dawn:n10(p.rating)}, note:p.note||"", id:p.id, shared:!!p.shared}));
   return out.filter(e=>e.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 }
@@ -1721,7 +1746,7 @@ const HC_SECTIONS = [
 ];
 function hcLeftPane(){
   const id=S.hc.clientId, c=S.clients[id]||{}, L=S.hcLeft||"intake";
-  const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
+  const hist=(c.followupHistory||[]).filter(h=>!fuIsQ(h)).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
   const prev=(S.hcList||[]).filter(x=>x.id!==S.hc.id).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const tab=(k,l)=>`<button type="button" role="tab" data-hleft="${k}" aria-current="${L===k}">${l}</button>`;
   const tabs=`<div class="subtabs" role="tablist">${tab("intake","Homeopathy intake")}${tab("followup","Follow-up")}${tab("both","Both")}${tab("prev","Earlier consults")}${tab("progress","Progress")}</div>`;
@@ -2004,16 +2029,16 @@ function clientDetail(id){
   if(S.sub==="followups"){ const hist=(c.followupHistory||[]).slice().sort((a,b)=>(b.submittedAt||"").localeCompare(a.submittedAt||""));
     const ed = S.fuEditFor===id ? S.fuEdit : null;
     if(ed){
-      const cur = ed==="new" ? {fullName:clientName(id)} : (hist.find(h=>h.submittedAt===ed)?.form||{});
+      const curH = ed==="new" ? null : hist.find(h=>h.submittedAt===ed), cur = ed==="new" ? {fullName:clientName(id)} : (curH?.form||{});
       body = `<div class="stack">
         <div class="notice ok small">${ed==="new" ? "Filling in a follow-up during the appointment. It's saved to this client's follow-up history." : `Editing the follow-up from ${esc(fmtDate(ed))}.`}</div>
-        ${intakeForm(cur, "pfu", false, FOLLOWUP)}
+        ${intakeForm(cur, "pfu", false, fuDef(curH))}
         <label class="field"><span>Your notes from this follow-up (optional)</span><textarea id="pfu-dawn" style="min-height:90px" placeholder="Added to this client's Private notes with today's date. The client never sees them."></textarea></label>
         <div class="row"><button type="button" class="primary" data-act="fusave">Save follow-up</button><button type="button" data-act="fucancel">Cancel</button></div></div>`;
     } else {
       body = `<div class="stack">
         <div class="row"><p class="grow small muted">Fill one in yourself during the appointment, or have the client send theirs before the session at <span class="mono">portal.dawnspain.com/#followup</span>.</p><div class="row" style="gap:6px;flex-wrap:nowrap">${clientEmail(id)?`<button type="button" data-act="fumail">Email follow-up link</button>`:""}<button type="button" data-act="hcnew" title="Split screen: their forms beside your notes">Start consult</button><button type="button" class="primary" data-act="funew">New follow-up</button></div></div>
-        ${hist.length ? hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b>${h.form?.overall?` · ${esc(h.form.overall)}`:""} <span class="small muted">· ${h.by==="practitioner"?"filled in by you":"sent by client"}</span></summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" data-act="fuedit" data-i="${esc(h.submittedAt||"")}">Edit</button><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, FOLLOWUP)}</div></details>`).join("")
+        ${hist.length ? hist.map((h,i)=>`<details class="hist" ${i===0?"open":""}><summary><b>${esc(fmtDate(h.submittedAt))}</b> · ${esc(fuName(h))}${h.form?.overall?` · ${esc(h.form.overall)}`:""} <span class="small muted">· ${h.by==="practitioner"?"filled in by you":"sent by client"}</span></summary><div style="margin-top:8px"><div class="row" style="justify-content:flex-end;gap:6px"><button type="button" data-act="fuedit" data-i="${esc(h.submittedAt||"")}">Edit</button><button type="button" data-act="formpdf" data-kind="followup" data-i="${esc(h.submittedAt||"")}">Download PDF</button></div>${intakeForm(h.form||{}, "fu"+i, true, fuDef(h))}</div></details>`).join("")
           : `<div class="empty small">No follow-ups yet.</div>`}
       </div>`;
     }
@@ -2382,7 +2407,7 @@ function bindClients(){
         if(k==="intake"){ def=INTAKE; vals=c.intake||{}; kind="Homeopathy intake"; date=c.intakeAt||c.intakeSubmittedAt||vals.sigDate; }
         else if(k==="qest"){ def=QEST; vals=c.qest||{}; kind="Qest4 Scan Intake"; date=c.qestAt||c.qestSubmittedAt||vals.sigDate; photo=S.photoFor===id?S.photo:""; }
         else if(k==="qesthist"){ const x=(S.qhistFor===id?S.qhist:[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=QEST; vals=x.form||{}; kind="Qest4 Scan Intake"; date=x.submittedAt; }
-        else { const x=(c.followupHistory||[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=FOLLOWUP; vals=x.form||{}; kind="Homeopathy follow-up"; date=x.submittedAt; }
+        else { const x=(c.followupHistory||[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=fuDef(x); vals=x.form||{}; kind=fuName(x); date=x.submittedAt; }
         const lbl=a.textContent; a.disabled=true; a.textContent="Making PDF…";
         try{ saveBlob(await formPdf(def, vals, {kind, who:nm, date, photo}), `${kind} - ${nm}${date?" - "+String(date).slice(0,10):""}.pdf`); }
         catch(e1){ console.warn(e1); toast("Couldn't make the PDF. Check your connection and try again."); }
@@ -2435,7 +2460,7 @@ function bindClients(){
       else if(act==="fuedit"){ S.fuEditFor=S.sel; S.fuEdit=a.dataset.i; renderClients(); }
       else if(act==="fucancel"){ S.fuEdit=null; renderClients(); }
       else if(act==="fusave"){ const id=S.sel, c=S.clients[id]||{}, ed=S.fuEdit; if(!ed) return;
-        const vals=readIntake("pfu", FOLLOWUP), notes=($("#pfu-dawn")?.value||"").trim(), now=new Date().toISOString();
+        const vals=readIntake("pfu", fuDef(ed==="new"?null:(c.followupHistory||[]).find(h=>h.submittedAt===ed))), notes=($("#pfu-dawn")?.value||"").trim(), now=new Date().toISOString();
         let hist=(c.followupHistory||[]).slice(); const patch={};
         const key = ed==="new" ? now : ed;
         if(ed==="new"){ hist.push({form:vals, submittedAt:now, by:"practitioner"}); patch.seenAt=now; }
@@ -4108,11 +4133,12 @@ function startClient(){
   $("#sub").textContent = "Client portal";
   S.myRec = null; S.myPlans = []; S.myPhoto = ""; S.recLoaded=false;
   let h = (location.hash||"").toLowerCase();
-  if(!/^#(qest|intake|followup|nextscan)$/.test(h)){ const w=recall("wfw.wantForm",null); if(w && Date.now()-w.t < 7*864e5) h=w.h; }
+  if(!/^#(qest|intake|followup|checkin|nextscan)$/.test(h)){ const w=recall("wfw.wantForm",null); if(w && Date.now()-w.t < 7*864e5) h=w.h; }
   if(S.me) store("wfw.wantForm", undefined);
-  S.cviewAuto = !/^#(qest|intake|followup|nextscan)$/.test(h);
+  S.cviewAuto = !/^#(qest|intake|followup|checkin|nextscan)$/.test(h);
   S.cview = S.cviewAuto ? "home" : "forms";
-  S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest";
+  S.form = h==="#intake" ? "homeo" : (h==="#followup"||h==="#checkin") ? "followup" : "qest";
+  if(h==="#followup") S.fuKind="homeo"; if(h==="#checkin") S.fuKind="qest";
   S.wantNext = h==="#nextscan";
   if((location.hash||"").toLowerCase()==="#messages"){ S.cviewAuto=false; S.cview="messages"; }
   if((location.hash||"").toLowerCase()==="#billing"){ S.cviewAuto=false; S.cview="billing"; }
@@ -4260,7 +4286,7 @@ function renderClient(){
     const seg = `<div class="seg" role="tablist" aria-label="Which form">
       <button type="button" role="tab" data-form="qest" aria-current="${S.form==="qest"}">Qest4 Scan Intake${qestIn?" ✓":""}</button>
       <button type="button" role="tab" data-form="homeo" aria-current="${S.form==="homeo"}">Homeopathy intake${homeoIn?" ✓":""}</button>
-      <button type="button" role="tab" data-form="followup" aria-current="${S.form==="followup"}">Homeopathy follow-up</button></div>`;
+      <button type="button" role="tab" data-form="followup" aria-current="${S.form==="followup"}">Follow-up</button></div>`;
     if(S.form==="qest"){
       body = `${seg}<div class="sheet stack">
         <div><h2>Qest4 Scan Intake</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
@@ -4281,12 +4307,18 @@ function renderClient(){
         <div class="row"><button type="button" data-act="qdraft">Save and finish later</button><button type="button" class="primary" data-act="qsubmit">Send to Dawn</button></div>`}
       </div>`;
     } else if(S.form==="followup"){
-      const lastFu=(S.myRec?.followupHistory||[]).filter(h=>h.by!=="practitioner").slice(-1)[0];
+      const r=S.myRec||{}; if(!S.fuKind) S.fuKind = (r.qestSubmittedAt && !(r.intakeSubmittedAt && (r.followupHistory||[]).some(h=>!fuIsQ(h)))) ? "qest" : r.intakeSubmittedAt ? "homeo" : "qest";
+      const fq=S.fuKind==="qest", mine=(r.followupHistory||[]).filter(h=>h.by!=="practitioner" && fuIsQ(h)===fq), lastFu=mine.slice(-1)[0];
+      const pick=`<div class="fu-pick">
+        <button type="button" data-fukind="qest" aria-pressed="${fq}"><b>Qest4 check-in</b><span class="small muted">How you're doing on your drops between scans</span></button>
+        <button type="button" data-fukind="homeo" aria-pressed="${!fq}"><b>Homeopathy follow-up</b><span class="small muted">Before your homeopathy follow-up session</span></button></div>`;
+      const nm=r.followup?.fullName||r.intake?.fullName||r.qest?.fullName||"";
       body = `${seg}<div class="sheet stack">
-        <div><h2>Homeopathy follow-up</h2><p class="small muted">A quick update before your follow-up session. Only you and Dawn can see your answers.</p></div>
-        ${lastFu?`<div class="notice ok">Your last follow-up was sent ${esc(fmtDate(lastFu.submittedAt))}. Thank you! Before your next visit, fill this in again with how you are now.</div>`:""}
+        ${pick}
+        <div><h2>${fq?"Qest4 check-in":"Homeopathy follow-up"}</h2><p class="small muted">${fq?"Check in any time between scans, as often as you like. Your answers go to Dawn and are added to “My progress”, so you can watch how things change.":"A quick update before your follow-up session. Only you and Dawn can see your answers."}</p></div>
+        ${lastFu?`<div class="notice ok">Your last ${fq?"check-in":"follow-up"} was sent ${esc(fmtDate(lastFu.submittedAt))}. Thank you!${fq?` <button type="button" class="ghost small" data-cv2="progress">See my progress</button>`:" Before your next visit, fill this in again with how you are now."}</div>`:""}
         ${denied}
-        ${intakeForm(S.myRec?.followup||{fullName:S.myRec?.intake?.fullName||S.myRec?.qest?.fullName||""}, "cf", false, FOLLOWUP)}
+        ${fq ? intakeForm(r.qcheck||{fullName:nm}, "cf", false, QEST_FU) : intakeForm(r.followup||{fullName:nm}, "cf", false, FOLLOWUP)}
         <div class="row"><button type="button" data-act="fdraft">Save and finish later</button><button type="button" class="primary" data-act="fsubmit">Send to Dawn</button></div>
       </div>`;
     } else {
@@ -4318,6 +4350,7 @@ function renderClient(){
     const cp=e.target.closest("[data-cplanpdf]"); if(cp){ const p=(S.myPlans||[]).find(x=>x.id===cp.dataset.cplanpdf); if(!p) return; const nm=S.myRec?.intake?.fullName||S.myRec?.qest?.fullName||S.myRec?.followup?.fullName||S.myRec?.name||"";
       cp.disabled=true; cp.textContent="Making PDF…"; try{ saveBlob(await planPdf(p, nm), `Treatment plan${nm?" - "+nm:""} - ${p.date||today()}.pdf`); }catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); } cp.disabled=false; cp.textContent="Download PDF"; return; }
     const wb=e.target.closest("[data-who]"); if(wb){ if(wb.dataset.who!==S.who){ S.cviewAuto=true; S.cview="home"; S.form="qest"; watchPerson(wb.dataset.who); window.scrollTo(0,0); } return; }
+    const fk=e.target.closest("[data-fukind]"); if(fk){ S.fuKind=fk.dataset.fukind; renderClient(); return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); window.scrollTo(0,0); return; }
     const cc=e.target.closest("[data-ccal]"); if(cc){ const p=(S.myPlans||[]).find(x=>x.id===cc.dataset.ccal); if(p) doseCalendar(p, personName(S.who)||""); return; }
     const cpy=e.target.closest("[data-cpay]"); if(cpy){ const lbl=cpy.textContent; cpy.disabled=true; cpy.textContent="Opening secure checkout…"; const url=await squarePayLink(cpy.dataset.cpay);
@@ -4352,7 +4385,8 @@ function renderClient(){
       return; }
     if(!["cdraft","csubmit","qdraft","qsubmit","fdraft","fsubmit"].includes(act)) return;
     const isQ = act[0]==="q", isF = act[0]==="f", submit = act.endsWith("submit");
-    const def = isQ ? QEST : isF ? FOLLOWUP : INTAKE, pre = isQ ? "cs" : isF ? "cf" : "ci";
+    const fq = isF && S.fuKind==="qest";
+    const def = isQ ? QEST : isF ? (fq ? QEST_FU : FOLLOWUP) : INTAKE, pre = isQ ? "cs" : isF ? "cf" : "ci";
     const vals = readIntake(pre, def);
     if(submit){
       const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id]);
@@ -4368,17 +4402,17 @@ function renderClient(){
     if(isQ && vals.delivery===IMPRINT_REMOTE && S.myImprint && !imprintStale()) vals.imprintPic = `Uploaded ${fmtDate(S.myImprintAt)}`;
     a.disabled=true;
     const now=new Date().toISOString();
-    const key = isQ ? "qest" : isF ? "followup" : "intake", stKey = key + "Status";
+    const key = isQ ? "qest" : isF ? (fq ? "qcheck" : "followup") : "intake", stKey = key + "Status";
     let patch = {[key]:vals, [stKey]: submit ? "submitted" : (S.myRec?.[stKey]==="submitted" ? "submitted" : "draft"), [key+"UpdatedAt"]:now};
     if(isQ && !submit && S.myRec?.qestStatus==="submitted") patch = {qestDraft:vals, qestUpdatedAt:now};
     const editing = isQ && submit && S.qestEdit && S.myRec?.qestStatus==="submitted";
     if(isQ && submit && !editing){ patch.qestDraft = null; S.qestNew = false; }
     if(editing) patch.qestEditedAt = now;
-    if(isF && submit) patch.followup = {fullName: vals.fullName||""};
+    if(isF && submit){ patch[key] = {fullName: vals.fullName||""}; patch.followupSubmittedAt = now; }
     if(submit) patch[key+"SubmittedAt"] = now;
     if(isQ && submit && !editing && !(S.myRec?.appointments||[]).some(a=>a.type==="scan" && a.date>=today()) && !S.myRec?.scanToSchedule){
       const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":"", zoom: /^yes/i.test(vals.zoomThis||"") ? "yes" : vals.zoomThis ? "no" : ""}; }
-    if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now}].slice(-60);
+    if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now, ...(fq?{kind:"qest"}:{})}].slice(-60);
     try{
       const who=S.who||S.me;
       if(S.myRec) await S.db.doc("clients/"+who).update(patch);
@@ -4394,7 +4428,7 @@ function renderClient(){
       else if(isQ && submit) await S.db.collection(`clients/${who}/qestForms`).doc().set({form:vals, submittedAt:now});
       S.myRec = {...(S.myRec||{}), ...patch}; if(S.myRec.qestDraft===null) delete S.myRec.qestDraft;
       S.clientWrite="ok"; toast(editing?"Your changes were sent to Dawn. Thank you!":submit?"Sent to Dawn. Thank you!":"Saved");
-      if(submit) S.cview="plans";
+      if(submit) S.cview = fq ? "progress" : "plans";
       renderClient(); window.scrollTo(0,0);
     }catch(err){ console.warn(err); a.disabled=false; if(err?.code==="invalid_argument"){ S.clientWrite="denied"; renderClient(); window.scrollTo(0,0); } else toast("That didn't save. Check your connection and try again."); }
   };
