@@ -723,11 +723,11 @@ function sideHelp(on){
   h.innerHTML=`<b>Questions?</b><span>Text ${esc(PRACTICE.phone)}</span><a href="mailto:${esc(PRACTICE.email)}">Email Dawn</a>`;
 }
 /* ---------- appointments: kept on the person's record as appointments:[{id,type,date,time,mins,how,imprint,note}] ---------- */
-const APPT_TYPES = { scan:"Qest4 scan", consult:"Consult call", imprint:"Remote imprint" };
+const APPT_TYPES = { scan:"Qest4 scan", consult:"Consult call", qfu:"Qest4 follow-up", imprint:"Remote imprint" };
 const PRAC_TZ = "America/New_York";
 function apptsOf(c){
   if(Array.isArray(c?.appointments)) return c.appointments.slice().sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
-  return /^\d{4}-\d{2}-\d{2}$/.test(c?.nextVisit||"") ? [{id:"nv", type:"scan", date:c.nextVisit, imprint:true}] : [];
+  return [];
 }
 const upcomingAppts = c => apptsOf(c).filter(a => a.date >= today());
 function nextScanDate(list){ return (list||[]).filter(a=>a.type==="scan" && a.date>=today()).map(a=>a.date).sort()[0] || ""; }
@@ -855,6 +855,7 @@ function apptsPane(id){
         ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>`:""}`:""}</div>
     <div class="row" style="gap:4px;flex-wrap:nowrap">${apptDelivery(a)==="ship"?(a.shippedAt?`<button type="button" class="ghost small" data-apptship="${esc(a.id)}" data-undo="1">Undo shipped</button>`:`<button type="button" class="small primary" data-apptship="${esc(a.id)}">Mark shipped</button>`):""}
       ${a.type==="consult"&&a.date<=today()?`<button type="button" class="small primary" data-hcstart="${esc(a.id)}">Start consult</button>`:""}
+      ${a.type==="scan"&&!a.time?`<button type="button" class="ghost small" data-dropsdue="${esc(a.id)}" title="Turn this into the drops-finish date instead of a booked scan">Just the drops date</button>`:""}
       ${Object.values(S.inv||{}).some(v=>v.apptId===a.id&&v.status!=="void")?'<span class="chip ok">Billed</span>':`<button type="button" class="ghost small" data-apptbill="${esc(a.id)}">Bill</button>`}
       <button type="button" class="ghost small" data-apptics="${esc(a.id)}">Add to calendar</button><button type="button" class="small" data-apptedit="${esc(a.id)}">Edit</button></div></div>`;
   const form = ed ? (()=>{ const a=ed.a; return `<div class="formsec stack" id="appt-form" style="gap:10px">
@@ -863,8 +864,8 @@ function apptsPane(id){
         <label class="field"><span>Type</span><select id="ap-type">${Object.entries(APPT_TYPES).map(([k,l])=>`<option value="${k}" ${a.type===k?"selected":""}>${l}</option>`).join("")}</select></label>
         <label class="field"><span>Date</span><input id="ap-date" type="date" value="${esc(a.date||"")}"></label>
         <label class="field" id="ap-time-f"><span id="ap-time-l">Time (Eastern)${a.type==="consult"?"":" · optional"}</span><input id="ap-time" type="time" value="${esc(a.time||"")}"></label>
-        <label class="field" id="ap-mins-f" ${a.type==="consult"?"":"hidden"}><span>Length</span><select id="ap-mins">${[30,45,60,90].map(m=>`<option value="${m}" ${(a.mins||60)===m?"selected":""}>${m} minutes</option>`).join("")}</select></label>
-        <label class="field" id="ap-how-f" ${a.type==="consult"?"":"hidden"}><span>How</span><select id="ap-how">${["","Phone","Video"].map(h=>`<option value="${h}" ${a.how===h?"selected":""}>${h||"Not set"}</option>`).join("")}</select></label>
+        <label class="field" id="ap-mins-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>Length</span><select id="ap-mins">${[30,45,60,90].map(m=>`<option value="${m}" ${(a.mins||60)===m?"selected":""}>${m} minutes</option>`).join("")}</select></label>
+        <label class="field" id="ap-how-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>How</span><select id="ap-how">${["","Phone","Video"].map(h=>`<option value="${h}" ${a.how===h?"selected":""}>${h||"Not set"}</option>`).join("")}</select></label>
       </div>
       <div class="grid2" id="ap-imp-f" ${a.type==="scan"?"":"hidden"}>
         <label class="field"><span>After the scan</span><select id="ap-deliv">${[["imprint","Remote imprint"],["ship","Ship treatment"],["none","Nothing"]].map(([v,l])=>`<option value="${v}" ${apptDelivery(a)===v?"selected":""}>${l}</option>`).join("")}</select></label>
@@ -885,11 +886,11 @@ function apptsPane(id){
 }
 async function saveAppts(id, list){
   const clean=list.map(a=>{ const o={id:a.id==="nv"?genId().slice(0,10):a.id, type:a.type, date:a.date, time:a.time||"", note:a.note||""};
-    if(a.type==="consult"){ o.mins=a.mins||60; o.how=a.how||""; }
+    if(a.type==="consult"||a.type==="qfu"){ o.mins=a.mins||60; o.how=a.how||""; }
     if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; } }
     return o; });
   const sts=(S.clients[id]||{}).scanToSchedule, done=sts && clean.some(a=>a.type==="scan" && a.date>=(sts.orderedAt||""));
-  await S.db.doc("clients/"+id).update({appointments:clean, nextVisit:nextScanDate(clean), reschedReq:null, ...(done?{scanToSchedule:null}:{})});
+  await S.db.doc("clients/"+id).update({appointments:clean, reschedReq:null, ...(done?{scanToSchedule:null}:{})});
 }
 function renderSchedule(){
   const rows=[]; Object.keys(S.clients).forEach(id=>upcomingAppts(S.clients[id]).forEach(a=>rows.push({id,a})));
@@ -1423,6 +1424,7 @@ function renderHome(){
   const open=invs.filter(invOpen), owed=r2(open.reduce((s,v)=>s+invMath(v).bal,0)), overdue=open.filter(v=>invStatus(v)[0]==="Overdue");
   // date-change requests, scan reminders
   const asks=ids.filter(id=>S.clients[id].reschedReq), rem=autoOn("reminders")?[]:remindersDue();
+  const dueSoon=ids.map(id=>({id, nv:S.clients[id].nextVisit})).filter(({id,nv})=>/^\d{4}-\d{2}-\d{2}$/.test(nv||"") && nv<=wkS && !S.clients[id].scanToSchedule && !upcomingAppts(S.clients[id]).some(a=>a.type==="scan") && !apptsOf(S.clients[id]).some(a=>a.type==="scan" && a.date>=nv)).sort((a,b)=>a.nv.localeCompare(b.nv));
   const need=ids.filter(id=>S.clients[id].scanToSchedule).sort((a,b)=>(S.clients[a].scanToSchedule.by||"").localeCompare(S.clients[b].scanToSchedule.by||""));
   const card=(title, count, body, foot)=>`<section class="dash-card"><div class="head"><h2>${title}</h2>${count?`<span class="count">${count}</span>`:""}</div>${body}${foot||""}</section>`;
   const empty=s=>`<p class="small muted">${s}</p>`;
@@ -1435,6 +1437,7 @@ function renderHome(){
     card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
+  if(dueSoon.length) cards.splice(1,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id])?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
   if(need.length) cards.splice(1,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">Ordered ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span><span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
   if(asks.length) cards.splice(1,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
   if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(S.clients[id].nextVisit))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
@@ -1648,6 +1651,31 @@ function consultsPane(id){
   </div>`;
 }
 
+/* ---------- next scan due (when the drops finish): not an appointment; drives the scan reminder emails ---------- */
+function dueBox(id){
+  const c=S.clients[id]||{}, nv=/^\d{4}-\d{2}-\d{2}$/.test(c.nextVisit||"")?c.nextVisit:"", d=nv?dayDiff(nv,today()):null;
+  const booked=upcomingAppts(c).find(a=>a.type==="scan");
+  const sent=nv?((c.reminders||{})[nv]||{}):{}, st=k=>sent[k]?`sent ${esc(fmtDate(sent[k]))}`:"not sent yet";
+  return `<div class="formsec stack" id="due-box" style="gap:8px">
+    <div class="row" style="gap:10px;align-items:end">
+      <label class="field" style="flex:0 1 220px"><span>Drops finish / next scan due</span><input type="date" id="due-date" value="${esc(nv)}"></label>
+      <button type="button" class="primary small" data-act="duesave">Save</button>${nv?`<button type="button" class="ghost small" data-act="dueclear">Clear</button>`:""}
+      <span class="grow small">${nv?(d<0?`<span class="chip warn">${-d} day${d===-1?"":"s"} past due</span>`:d===0?`<span class="chip acc">Due today</span>`:`<span class="chip">In ${d} day${d===1?"":"s"}</span>`):""} ${booked?`<span class="chip ok">Scan booked ${esc(fmtDate(booked.date))}</span>`:c.scanToSchedule?`<span class="chip acc">Needs a scan date</span>`:""}</span></div>
+    <p class="small muted" style="margin:0">This isn't an appointment. ${autoOn("reminders")?"A reminder email goes out a week before and again on this date, asking them to fill in their pre-scan form.":"Reminders for this date appear on your Home page."} When their form comes in, they show up under “Needs a scan date” on your Home page.</p>
+    ${nv?`<div class="row small muted" style="gap:6px">Reminders: week before ${st("week")} · drops finished ${st("day")}
+      <button type="button" class="ghost small" data-remind="${esc(id)}" data-kind="${d>0?"week":"day"}">Email a reminder now</button></div>`:""}
+  </div>`;
+}
+async function dueClick(e){
+  const a=e.target.closest('[data-act="duesave"],[data-act="dueclear"],[data-dropsdue]'); if(!a) return false;
+  const id=S.sel, c=S.clients[id]||{};
+  if(a.dataset.dropsdue){ const list=apptsOf(c); const x=list.find(y=>y.id===a.dataset.dropsdue); if(!x) return true;
+    await S.db.doc("clients/"+id).update({appointments:list.filter(y=>y.id!==x.id), nextVisit:x.date}); toast(`Saved ${fmtDate(x.date)} as the drops-finish date, not a booked scan`); return true; }
+  const v=a.dataset.act==="dueclear" ? "" : ($("#due-date")?.value||"");
+  if(a.dataset.act==="duesave" && !/^\d{4}-\d{2}-\d{2}$/.test(v)){ toast("Choose a date"); return true; }
+  try{ await S.db.doc("clients/"+id).update({nextVisit:v}); toast(v?`Next scan due ${fmtDate(v)}`:"Cleared"); }catch(e1){ toast("That didn't save. Please try again."); }
+  return true;
+}
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
   const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
@@ -1707,7 +1735,7 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   const list = !S.clientsLoaded ? `<div class="empty">Loading clients…</div>`
     : !ids.length ? `<div class="empty"><p>No clients yet.</p><p class="small">Add one with “New client”, or share this portal with a client and their intake appears here when they save it.</p></div>`
     : shown.map(id => { const c=S.clients[id]; const st=intakeChip(c);
-        return `<button type="button" class="item" data-client="${esc(id)}" aria-current="${id===sel}"><b>${esc(clientName(id))}</b><span class="meta">${st}${id.includes("~")?'<span class="chip acc">Family account</span>':!id.startsWith("c-")?'<span class="chip acc">Portal account</span>':""}${c.nextVisit?`<span>Next: ${esc(fmtDate(c.nextVisit))}</span>`:""}</span></button>`; }).join("") || `<div class="empty">No match.</div>`;
+        return `<button type="button" class="item" data-client="${esc(id)}" aria-current="${id===sel}"><b>${esc(clientName(id))}</b><span class="meta">${st}${id.includes("~")?'<span class="chip acc">Family account</span>':!id.startsWith("c-")?'<span class="chip acc">Portal account</span>':""}${c.nextVisit?`<span>Next scan due: ${esc(fmtDate(c.nextVisit))}</span>`:""}</span></button>`; }).join("") || `<div class="empty">No match.</div>`;
   $("#app").innerHTML = `
   <div class="panes ${sel?"has-sel":""}">
     <section class="list-pane" aria-label="Clients">
@@ -1747,7 +1775,7 @@ function clientDetail(id){
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
-  if(S.sub==="appts") body = apptsPane(id);
+  if(S.sub==="appts") body = dueBox(id) + apptsPane(id);
   if(S.sub==="billing") body = billingPane(id);
   if(S.sub==="progress") body = progressPane(id);
   if(S.sub==="consults") body = consultsPane(id);
@@ -1824,7 +1852,7 @@ function detailsPane(id,c){
   return `<div class="stack">
     <div class="grid2">
       <label class="field"><span>Display name</span><input id="d-name" value="${esc(c.name||"")}" placeholder="${esc(nm)}"></label>
-      <div class="field"><span>Next Qest4 scan</span><div style="padding:8px 0">${c.nextVisit?esc(fmtDate(c.nextVisit)):"Not scheduled"} <button type="button" class="ghost small" data-sub="appts">Appointments →</button></div></div>
+      <label class="field"><span>Next scan due (drops finish)</span><input id="d-next" type="date" value="${esc(c.nextVisit||"")}"></label>
       ${mine ? `<label class="field"><span>Email they'll sign in with</span><input id="d-email" type="email" inputmode="email" value="${esc(c.email || clientEmail(id))}" placeholder="name@example.com"></label>` : ""}
     </div>
     <div class="row"><button type="button" class="primary" data-act="savedetails">Save details</button></div>
@@ -2062,7 +2090,7 @@ function bindClients(){
   app.querySelectorAll("[data-remname]").forEach(inp => inp.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); document.querySelector(`[data-act="addremedy"][data-i="${inp.dataset.remname}"]`)?.click(); } });
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
   const apShip = () => { const sc=$("#ap-type")?.value==="scan", sh=$("#ap-deliv")?.value==="ship"; const f=$("#ap-ship-f"); if(f) f.hidden=!(sc&&sh); };
-  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=v!=="consult"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
+  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=!(v==="consult"||v==="qfu")); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
   const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
   const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
@@ -2081,6 +2109,7 @@ function bindClients(){
     if(await billingClick(e)) return;
     if(await progressClick(e)) return;
     if(await planTplClick(e)) return;
+    if(await dueClick(e)) return;
     { const ho=e.target.closest("[data-hcopen]"); if(ho){ const p=(S.hcList||[]).find(x=>x.id===ho.dataset.hcopen); if(p){ const {id:_i,...d}=p; openHConsult(S.sel, p.id, d); } return; }
       const hs=e.target.closest('[data-act="hcnew"],[data-hcstart]'); if(hs){ hs.disabled=true; await newHConsult(S.sel); return; } }
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
@@ -2146,7 +2175,7 @@ function bindClients(){
       else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
       else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; if(qest.delivery===IMPRINT_REMOTE && S.imprintFor===S.sel && S.imprint) qest.imprintPic=`Uploaded ${fmtDate(S.imprintAt)}`; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
       else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
-      else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim()}; const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
+      else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim()}; const dn=$("#d-next"); if(dn) patch.nextVisit=dn.value||""; const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
       else if(act==="askmerge"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to}; renderClients(); }
       else if(act==="askfamily"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to, family:true}; renderClients(); }
       else if(act==="addfamily"){ const cm=S.confirmMerge; if(!cm || cm.from!==S.sel || !cm.family) return; a.disabled=true;
@@ -4111,6 +4140,8 @@ function renderClient(){
     if(editing) patch.qestEditedAt = now;
     if(isF && submit) patch.followup = {fullName: vals.fullName||""};
     if(submit) patch[key+"SubmittedAt"] = now;
+    if(isQ && submit && !editing && !(S.myRec?.appointments||[]).some(a=>a.type==="scan" && a.date>=today()) && !S.myRec?.scanToSchedule){
+      const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":""}; }
     if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now}].slice(-60);
     try{
       const who=S.who||S.me;

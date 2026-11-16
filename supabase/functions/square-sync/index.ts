@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     list = list.sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
     const today = new Date().toISOString().slice(0, 10);
     const nextScan = list.filter((a) => a.type === "scan" && a.date >= today).map((a) => a.date).sort()[0] || "";
-    const patch: Rec = { appointments: list, nextVisit: nextScan };
+    const patch: Rec = { appointments: list };
     if (!cancelled && type === "booking.created" && !rec.scanToSchedule) {
       const { date } = ny(full.start_at || new Date().toISOString()); const by = new Date(date + "T12:00:00Z"); by.setUTCDate(by.getUTCDate() + 7);
       patch.scanToSchedule = { orderedAt: today, by: by.toISOString().slice(0, 10), source: "square", delivery: "" };
