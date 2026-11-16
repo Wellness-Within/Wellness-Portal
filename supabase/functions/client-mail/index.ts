@@ -30,7 +30,7 @@ async function who(cid: string) {
   if (!to && cid.includes("~")) to = emailOf((await get("clients/" + base)) || {});
   const first = String(nameOf(rec)).trim().split(/\s+/)[0] || "";
   // Family account: who is the person behind the sign-in (the account holder)?
-  const { data: rows } = await db.from("docs").select("id,data").eq("parent", "clients").or(`id.eq.${base},id.like.${base}~%`);
+  const { data: rows } = await db.from("docs").select("id,data").eq("parent", "clients").or(`id.eq.${base},id.like.${base}~*`);
   const isShell = (r: Rec) => !r.id.includes("~") && (rows || []).some((x: Rec) => x.id.startsWith(r.id + "~")) && !(r.data?.intakeSubmittedAt || r.data?.qestSubmittedAt || r.data?.followupSubmittedAt || r.data?.name || r.data?.nextVisit || (r.data?.appointments || []).length);
   const people = (rows || []).filter((r: Rec) => !isShell(r));
   const fam = people.length > 1;
