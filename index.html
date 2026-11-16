@@ -1580,7 +1580,7 @@ function progressPane(id){
       <label class="check"><input type="checkbox" id="pg-share" ${p.shared?"checked":""}><span>Show this note and rating to ${esc(clientFirst(id)||"the client")} in their portal</span></label>
       <div class="row"><button type="button" class="primary" data-act="progsave">Save note</button><button type="button" data-act="progcancel">Cancel</button><span class="grow"></span>
         ${ed.isNew?"":S.progDel?`<button type="button" class="danger small" data-act="progdel">Yes, delete</button>`:`<button type="button" class="ghost small" data-act="progaskdel">Delete note</button>`}</div></div>`:""}
-    ${charts?`${zoneKey}<div class="prog-grid">${charts}</div>`:`<div class="empty small">No ratings yet. They appear once ${esc(clientFirst(id)||"this client")} sends a form with ratings, or when you add a note with a rating.</div>`}
+    ${charts?`<div class="prog-tiles">${progTiles(entries).join("")}</div><h3 style="margin:8px 0 0">Over time</h3>${zoneKey}<div class="prog-grid">${charts}</div>`:`<div class="empty small">No ratings yet. They appear once ${esc(clientFirst(id)||"this client")} sends a form with ratings, or when you add a note with a rating.</div>`}
     ${entries.length?`<div class="formsec stack" style="gap:0"><h3>Timeline</h3>${progTimeline(entries,false)}</div>`:""}
   </div>`;
 }
@@ -1622,7 +1622,7 @@ function clientProgressView(){
   const charts=progCharts(e);
   return `<div class="sheet stack"><h2>My progress</h2>
     <p class="small muted">Each time you fill in a Qest4 Scan Intake, a check-in or a follow-up, your ratings are added here so you and Dawn can see how things are changing.</p>
-    ${charts?`${zoneKey}<div class="prog-grid">${charts}</div>`:`<div class="empty small">Nothing yet. Your ratings appear after your next form.</div>`}
+    ${charts?`<div class="prog-tiles">${progTiles(e).join("")}</div><h3 style="margin:8px 0 0">Over time</h3>${zoneKey}<div class="prog-grid">${charts}</div>`:`<div class="empty small">Nothing yet. Your ratings appear after your next form.</div>`}
     ${e.length?`<div class="stack" style="gap:0"><h3>Timeline</h3>${progTimeline(e,true)}</div>`:""}</div>`;
 }
 
