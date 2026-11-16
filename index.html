@@ -87,7 +87,17 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .num-dot{width:32px;height:32px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
 .prog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}.prog-chart{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}.prog-chart figcaption{margin-bottom:4px}.prog-chart svg{width:100%;height:auto;display:block;margin-top:6px}
 .prog-chart .grid{stroke:var(--line);stroke-width:1}.prog-chart .ax{font-size:11px;fill:var(--muted)}.prog-chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.prog-chart .dot{fill:var(--accent);stroke:var(--surface);stroke-width:2}.prog-chart .hit{fill:transparent}.prog-chart .pt:hover .dot{r:8}
-.prog-up{color:#2f7d4f}.prog-down{color:#a8562a}.dash-wide{grid-column:1/-1}.prog-row{gap:10px}.prog-row>span:first-child{flex:1;min-width:0}.spark{flex:none}.spark .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}.spark .dot{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
+.prog-up{color:#2f7d4f}
+:root{--zg:#639922;--zg-s:#EAF3DE;--zg-i:#27500A;--zm:#EF9F27;--zm-s:#FAEEDA;--zm-i:#633806;--zl:#E24B4A;--zl-s:#FCEBEB;--zl-i:#791F1F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--zg-s:#27500A;--zg-i:#C0DD97;--zm-s:#633806;--zm-i:#FAC775;--zl-s:#791F1F;--zl-i:#F7C1C1}}
+.zb-good{fill:var(--zg);opacity:.16}.zb-mid{fill:var(--zm);opacity:.16}.zb-low{fill:var(--zl);opacity:.13}
+.prog-chart .zl-t{font-size:10px;fill:var(--muted)}.prog-chart .ln2{fill:none;stroke:var(--ink);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.7}
+.prog-chart .dz{stroke:var(--surface);stroke-width:2}.dz-good{fill:var(--zg)}.dz-mid{fill:var(--zm)}.dz-low{fill:var(--zl)}
+.prog-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.prog-tile{border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:1px}
+.prog-tile .v{font-size:26px;font-weight:600;line-height:1.15}.prog-tile .t{font-size:12px}.prog-tile .c{font-size:11.5px}
+.pt-good{background:var(--zg-s);color:var(--zg-i)}.pt-mid{background:var(--zm-s);color:var(--zm-i)}.pt-low{background:var(--zl-s);color:var(--zl-i)}
+.zone-key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.zone-key i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}.prog-down{color:#a8562a}.dash-wide{grid-column:1/-1}.prog-row{gap:10px}.prog-row>span:first-child{flex:1;min-width:0}.spark{flex:none}.spark .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}.spark .dot{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
 .dash-link{width:100%;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 0;font:inherit;color:inherit;cursor:pointer;text-align:left}.dash-link:hover b{color:var(--accent)}.dash-link:last-child{border-bottom:0}
 .sched-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start}
 .inv-tab{width:100%;border-collapse:collapse;font-size:14px}.inv-tab th,.inv-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.inv-tab th{font-weight:600;color:var(--muted);font-size:12px}.inv-tab .num{text-align:right;white-space:nowrap}.inv-tab tfoot td{border:0;padding:3px 4px}
@@ -1505,27 +1515,34 @@ function progressEntries(c, qhist, notes, forClient){
   (notes||[]).filter(p=>!forClient||p.shared).forEach(p=>out.push({date:p.date||p.at, src:"Dawn's note", vals:{dawn:n10(p.rating)}, note:p.note||"", id:p.id, shared:!!p.shared}));
   return out.filter(e=>e.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 }
+/* zones: good / middle / low, flipped for measures where lower is better (stress, concerns) */
+const zoneOf = (m, v) => { const g = m.low ? 11-v : v; return g>=8 ? "good" : g>=5 ? "mid" : "low"; };
+const ZONE_WORD = {good:"good zone", mid:"middle zone", low:"low zone"};
 function progChart(m, pts){
-  // single series, 1–10 scale; pts: [{date, v, text}]
-  const W=320, H=150, L=26, R=10, T=12, B=26, iw=W-L-R, ih=H-T-B;
+  // single series, 1–10 scale; pts: [{date, v, text}]; colored bands show where "good" is
+  const W=320, H=160, L=26, R=44, T=10, B=26, iw=W-L-R, ih=H-T-B;
   const t=pts.map(p=>Date.parse(String(p.date).slice(0,10)+"T12:00:00")); const t0=Math.min(...t), t1=Math.max(...t);
   const x=i=> pts.length===1 ? L+iw/2 : L+(t1===t0 ? i/(pts.length-1) : (t[i]-t0)/(t1-t0))*iw;
   const y=v=> T+ih-(v-1)/9*ih;
+  const bands = m.low ? [["good",1,3.5],["mid",3.5,6.5],["low",6.5,10]] : [["low",1,4.5],["mid",4.5,7.5],["good",7.5,10]];
   const line=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
   const first=pts[0], last=pts[pts.length-1], d=last.v-first.v;
   const better = pts.length>1 && d!==0 ? (m.low ? d<0 : d>0) : null;
   const fmt=s=>new Date(String(s).slice(0,10)+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"});
+  const z=zoneOf(m, last.v);
   return `<figure class="prog-chart">
     <figcaption><b>${esc(m.label)}</b> <span class="small muted">${esc(m.hint)}</span></figcaption>
-    <div class="row" style="gap:10px;align-items:baseline"><b style="font-size:22px">${last.v}</b><span class="small muted">of 10 · ${esc(fmt(last.date))}</span>
+    <div class="row" style="gap:10px;align-items:baseline"><b style="font-size:22px">${last.v}</b><span class="small muted">of 10 · ${esc(fmt(last.date))} · ${ZONE_WORD[z]}</span>
       ${better===null?"":`<span class="small ${better?"prog-up":"prog-down"}">${better?"▲ better":"▼ harder"} than ${esc(fmt(first.date))} (${first.v})</span>`}</div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(m.label)}: ${pts.map(p=>`${fmt(p.date)} ${p.v}`).join(", ")}">
-      ${[1,5,10].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}</text>`).join("")}
-      ${pts.length>1?`<path d="${line}" class="ln"/>`:""}
-      ${pts.map((p,i)=>`<g class="pt"><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="12" class="hit"/><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="6" class="dot"/><title>${esc(fmt(p.date))}: ${p.v} of 10 · ${esc(p.src)}${p.text?" · "+esc(p.text):""}</title></g>`).join("")}
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(m.label)}: ${pts.map(p=>`${fmt(p.date)} ${p.v} (${ZONE_WORD[zoneOf(m,p.v)]})`).join(", ")}">
+      ${bands.map(([k,a,b])=>`<rect x="${L}" width="${iw}" y="${y(b).toFixed(1)}" height="${(y(a)-y(b)).toFixed(1)}" class="zb-${k}"/><text x="${W-R+6}" y="${((y(a)+y(b))/2+3).toFixed(1)}" class="zl-t">${k==="good"?"good":k==="mid"?"middle":"low"}</text>`).join("")}
+      ${[1,5,10].map(v=>`<text x="${L-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}</text>`).join("")}
+      ${pts.length>1?`<path d="${line}" class="ln2"/>`:""}
+      ${pts.map((p,i)=>`<g class="pt"><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="12" class="hit"/><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="6.5" class="dz dz-${zoneOf(m,p.v)}"/><title>${esc(fmt(p.date))}: ${p.v} of 10 (${ZONE_WORD[zoneOf(m,p.v)]}) · ${esc(p.src)}${p.text?" · "+esc(p.text):""}</title></g>`).join("")}
       <text x="${L}" y="${H-6}" class="ax">${esc(fmt(first.date))}</text>${pts.length>1?`<text x="${W-R}" y="${H-6}" text-anchor="end" class="ax">${esc(fmt(last.date))}</text>`:""}
     </svg></figure>`;
 }
+const zoneKey = `<div class="zone-key"><span><i style="background:var(--zg)"></i>Good zone</span><span><i style="background:var(--zm)"></i>Middle</span><span><i style="background:var(--zl)"></i>Low</span><span>For stress and concerns, lower is better, so the good zone is at the bottom.</span></div>`;
 function progCharts(entries, keys){
   return PROG_MEASURES.filter(m=>!keys||keys.includes(m.k)).map(m=>{ const pts=entries.filter(e=>e.vals&&e.vals[m.k]!=null).map(e=>({date:e.date, v:e.vals[m.k], src:e.src, text:(e.texts||{})[m.k]||""}));
     return pts.length ? progChart(m, pts) : ""; }).join("");
@@ -1559,7 +1576,7 @@ function progressPane(id){
       <label class="check"><input type="checkbox" id="pg-share" ${p.shared?"checked":""}><span>Show this note and rating to ${esc(clientFirst(id)||"the client")} in their portal</span></label>
       <div class="row"><button type="button" class="primary" data-act="progsave">Save note</button><button type="button" data-act="progcancel">Cancel</button><span class="grow"></span>
         ${ed.isNew?"":S.progDel?`<button type="button" class="danger small" data-act="progdel">Yes, delete</button>`:`<button type="button" class="ghost small" data-act="progaskdel">Delete note</button>`}</div></div>`:""}
-    ${charts?`<div class="prog-grid">${charts}</div>`:`<div class="empty small">No ratings yet. They appear once ${esc(clientFirst(id)||"this client")} sends a form with ratings, or when you add a note with a rating.</div>`}
+    ${charts?`${zoneKey}<div class="prog-grid">${charts}</div>`:`<div class="empty small">No ratings yet. They appear once ${esc(clientFirst(id)||"this client")} sends a form with ratings, or when you add a note with a rating.</div>`}
     ${entries.length?`<div class="formsec stack" style="gap:0"><h3>Timeline</h3>${progTimeline(entries,false)}</div>`:""}
   </div>`;
 }
@@ -1583,21 +1600,25 @@ function progSpark(m, pts){
   const y=v=> H-P-(v-1)/9*(H-2*P);
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${pts.length>1?`<path d="${pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join("")}" class="ln"/>`:""}${pts.map((p,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4.5" class="dot"/>`).join("")}</svg>`;
 }
+function progTiles(e, max){
+  return PROG_MEASURES.map(m=>{ const pts=e.filter(x=>x.vals&&x.vals[m.k]!=null).map(x=>({date:x.date, v:x.vals[m.k]})); if(!pts.length) return "";
+    const f=pts[0], l=pts[pts.length-1], d=l.v-f.v, better=pts.length>1&&d!==0?(m.low?d<0:d>0):null, z=zoneOf(m,l.v);
+    const ch = pts.length<2 ? "first rating" : d===0 ? "same as at first" : `${d>0?"▲ up":"▼ down"} from ${f.v}${better?" · better":" · harder"}`;
+    return `<div class="prog-tile pt-${z}" title="${esc(m.label)}: ${l.v} of 10, ${ZONE_WORD[z]}"><span class="t">${esc(m.k==="dawn"?"Dawn's rating":m.k==="stress"?"Stress (lower is better)":m.label)}</span><span class="v">${l.v}</span><span class="c">${ch}</span></div>`; }).filter(Boolean).slice(0, max||99);
+}
 function clientProgressCard(){
   const e=progressEntries(S.myRec, S.myQhist, S.myProg, true);
-  const rows=PROG_MEASURES.map(m=>{ const pts=e.filter(x=>x.vals&&x.vals[m.k]!=null).map(x=>({date:x.date, v:x.vals[m.k]})); if(!pts.length) return "";
-    const f=pts[0], l=pts[pts.length-1], d=l.v-f.v, better=pts.length>1&&d!==0?(m.low?d<0:d>0):null;
-    return `<div class="dash-row prog-row"><span><b>${esc(m.k==="dawn"?"Dawn's rating":m.label)}</b></span>${progSpark(m,pts)}<span class="small" style="min-width:86px;text-align:right"><b>${l.v}</b>/10${better===null?"":` <span class="${better?"prog-up":"prog-down"}">${better?"▲":"▼"}</span>`}</span></div>`; }).filter(Boolean);
-  if(!rows.length) return "";
+  const tiles=progTiles(e, 6);
+  if(!tiles.length) return "";
   return `<section class="dash-card prog-card"><div class="head"><h2>My progress</h2><button type="button" class="ghost" data-cv2="progress">See charts</button></div>
-    <div>${rows.slice(0,5).join("")}</div><p class="small muted">▲ means better since your first rating.</p></section>`;
+    <div class="prog-tiles">${tiles.join("")}</div><p class="small muted">Latest ratings, out of 10. Green is the good zone, amber the middle, soft red low.</p></section>`;
 }
 function clientProgressView(){
   const e=progressEntries(S.myRec, S.myQhist, S.myProg, true);
   const charts=progCharts(e);
   return `<div class="sheet stack"><h2>My progress</h2>
-    <p class="small muted">Each time you fill in a pre-scan or follow-up form, your ratings are added here so you and Dawn can see how things are changing.</p>
-    ${charts?`<div class="prog-grid">${charts}</div>`:`<div class="empty small">Nothing yet. Your ratings appear after your next form.</div>`}
+    <p class="small muted">Each time you fill in a Qest4 Scan Intake, a check-in or a follow-up, your ratings are added here so you and Dawn can see how things are changing.</p>
+    ${charts?`${zoneKey}<div class="prog-grid">${charts}</div>`:`<div class="empty small">Nothing yet. Your ratings appear after your next form.</div>`}
     ${e.length?`<div class="stack" style="gap:0"><h3>Timeline</h3>${progTimeline(e,true)}</div>`:""}</div>`;
 }
 
