@@ -4101,6 +4101,12 @@ function renderSettings(){
     <p class="small muted" style="margin-top:-6px">Where “Analyze with QCIS” opens. Leave blank for a new Claude chat, or paste the link of the Claude project you use for scan analysis.</p>
     <div class="row"><button type="button" class="primary" data-act="savesettings">Save</button></div>
     ${templatesSection()}
+    ${(()=>{ const k=S.settings?.calKey||"", url=k?`webcal://tvdnxiztylhobfbhywxk.supabase.co/functions/v1/calendar-feed?key=${k}`:"";
+      return `<div class="formsec stack" id="cal-set"><h3>Your calendar (iCal)</h3>
+      <p class="small muted">Shows your portal appointments in Apple Calendar on your Mac, iPhone and iPad (or Google Calendar). Zoom consults include the Join link, and clients who need a scan date appear as an all-day “Schedule scan” reminder. It updates on its own. Keep this link private: anyone with it can see your appointments.</p>
+      ${k?`<div class="row" style="gap:8px;flex-wrap:wrap"><a class="btn primary" href="${esc(url)}">Add to Apple Calendar</a><button type="button" id="cal-copy" data-url="${esc(url)}">Copy link</button><button type="button" class="ghost small" id="cal-new">Make a new link</button></div>
+        <p class="small muted" style="margin:0">On your iPhone: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, and paste the link. Or subscribe on your Mac and it syncs to your iPhone through iCloud (choose “iCloud” as the location).</p>`
+      :`<div><button type="button" class="primary" id="cal-new">Create my calendar link</button></div>`}</div>`; })()}
     <div class="formsec stack" id="zoom-set"><h3>Zoom</h3>
       <p class="small muted">Your usual Zoom meeting link. It's added to Zoom appointments (including Square bookings), so you and the client get a “Join Zoom” button. You can change it on any single appointment.</p>
       <div class="row" style="gap:8px;align-items:end"><label class="field grow"><span>Zoom meeting link</span><input id="zs-url" type="url" placeholder="https://us02web.zoom.us/j/…" value="${esc(S.settings?.zoomUrl||"")}"></label><button type="button" class="primary" id="zs-save">Save</button></div></div>
@@ -4137,6 +4143,10 @@ function renderSettings(){
       Object.assign(R,{rep:null, repLoading:null, norm:null, lower:null, chapters:[], pathIndex:null, aliasMap:null, idx:null, gMeta:null, gmm:null, gmmLoading:null, bk:{}, remSrc:{}, books:null, booksLoading:null}); }
     catch(err){ console.warn(err); st.textContent="That didn't load: "+(err.message||"unknown error"); } };
   bindBillingSettings();
+  const cn=$("#cal-new"); if(cn) cn.onclick=async()=>{ if(S.settings?.calKey && !confirm("Make a new link? The old link will stop working, so you'd subscribe again with the new one.")) return;
+    const b=new Uint8Array(24); crypto.getRandomValues(b); const k=[...b].map(x=>x.toString(16).padStart(2,"0")).join("");
+    try{ await S.db.doc("settings/practice").update({calKey:k}); S.settings={...S.settings, calKey:k}; toast("Calendar link ready"); renderSettings(); }catch(e1){ toast("That didn't save. Please try again."); } };
+  const cc=$("#cal-copy"); if(cc) cc.onclick=async()=>{ try{ await navigator.clipboard.writeText(cc.dataset.url); toast("Link copied"); }catch(e1){ prompt("Copy this link:", cc.dataset.url); } };
   const zs=$("#zs-save"); if(zs) zs.onclick=async()=>{ const v=($("#zs-url").value||"").trim(); if(v && !/^https:\/\/\S+$/.test(v)){ toast("That link should start with https://"); return; }
     try{ await S.db.doc("settings/practice").update({zoomUrl:v}); S.settings={...S.settings, zoomUrl:v}; toast(v?"Zoom link saved":"Zoom link cleared"); }catch(e1){ toast("That didn't save. Please try again."); } };
   const as=$("#auto-set"); if(as) as.onchange=async e=>{ const cb=e.target.closest("[data-automail]"); if(!cb) return; const autoMail={...(S.settings.autoMail||{}), [cb.dataset.automail]:cb.checked};
