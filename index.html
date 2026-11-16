@@ -648,26 +648,34 @@ function notifyMail(id, kind){
 }
 /* ---------- scan reminders (Dawn sends with one click from her Mail app) ---------- */
 const dayDiff = (a, b) => Math.round((new Date(a+"T12:00:00") - new Date(b+"T12:00:00")) / 864e5);
-function scanFormIn(c){ const nv=c.nextVisit; if(!nv || !c.qestSubmittedAt) return false; const cut=new Date(nv+"T12:00:00"); cut.setDate(cut.getDate()-14); return c.qestSubmittedAt >= cut.toISOString(); }
-function reminderDue(id){
-  const c=S.clients[id]||{}, nv=c.nextVisit; if(!/^\d{4}-\d{2}-\d{2}$/.test(nv||"")) return null;
+/* A client can have more than one bottle, each finishing on its own date. nextVisit is the main one; c.bottles holds the others. */
+const isDay = x => /^\d{4}-\d{2}-\d{2}$/.test(x||"");
+function dueDates(c){ c=c||{}; const m=new Map();
+  const add=(date,name)=>{ if(!isDay(date)) return; const o=m.get(date); if(!o) m.set(date,{date,name:name||""}); else if(name && !o.name.split(" and ").includes(name)) o.name=o.name?`${o.name} and ${name}`:name; };
+  add(c.nextVisit, (c.bottles||[]).some(b=>isDay(b.end)) ? (c.mainBottle||"") : "");
+  (c.bottles||[]).forEach(b=>add(b.end, b.name||"other"));
+  return [...m.values()].sort((a,b)=>a.date.localeCompare(b.date)); }
+const bottleAt = (c, nv) => (dueDates(c).find(d=>d.date===nv)||{}).name||"";
+function scanFormIn(c, nv0){ const nv=nv0||c.nextVisit; if(!nv || !c.qestSubmittedAt) return false; const cut=new Date(nv+"T12:00:00"); cut.setDate(cut.getDate()-14); return c.qestSubmittedAt >= cut.toISOString(); }
+function reminderDue(id, nv0){
+  const c=S.clients[id]||{}, nv=nv0||c.nextVisit; if(!/^\d{4}-\d{2}-\d{2}$/.test(nv||"")) return null;
   const d=dayDiff(nv, today()), sent=(c.reminders||{})[nv]||{};
   if(d<=0 && d>=-14 && !sent.day) return "day";
   if(d>=1 && d<=7 && !sent.week) return "week";
   return null;
 }
-function remindersDue(){ return Object.keys(S.clients).map(id=>({id, kind:reminderDue(id)})).filter(x=>x.kind).sort((a,b)=>(S.clients[a.id].nextVisit||"").localeCompare(S.clients[b.id].nextVisit||"")); }
+function remindersDue(){ return Object.keys(S.clients).flatMap(id=>dueDates(S.clients[id]).map(d=>({id, nv:d.date, bottle:d.name, kind:reminderDue(id, d.date)}))).filter(x=>x.kind).sort((a,b)=>a.nv.localeCompare(b.nv)); }
 function remindersPanel(){
   const due=remindersDue(); if(!due.length) return "";
   return `<details class="hist" ${autoOn("reminders")?"":"open"}><summary>${autoOn("reminders")?`Scan reminders due (${due.length}) · go out automatically tomorrow morning`:`Scan reminders to send (${due.length})`}</summary><div class="stack" style="gap:8px;margin-top:8px">
-    ${due.map(({id,kind})=>{ const c=S.clients[id]; return `<div class="row" style="gap:6px;align-items:center">
-      <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(c.nextVisit))}${scanFormIn(c)?' · <span class="chip ok">Form in</span>':""}</div></div>
-      <button type="button" class="small" data-remind="${esc(id)}" data-kind="${kind}" title="Opens the email in your Mail app">Send</button>
-      <button type="button" class="ghost small" data-remskip="${esc(id)}" data-kind="${kind}">Skip</button></div>`; }).join("")}
+    ${due.map(({id,kind,nv,bottle})=>{ const c=S.clients[id]; return `<div class="row" style="gap:6px;align-items:center">
+      <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${kind==="week"?"Week before":"Drops finished"}${bottle?` · ${esc(bottle)}`:""} · ${esc(fmtDate(nv))}${scanFormIn(c, nv)?' · <span class="chip ok">Form in</span>':""}</div></div>
+      <button type="button" class="small" data-remind="${esc(id)}" data-kind="${kind}" data-date="${esc(nv)}" title="Opens the email in your Mail app">Send</button>
+      <button type="button" class="ghost small" data-remskip="${esc(id)}" data-kind="${kind}" data-date="${esc(nv)}">Skip</button></div>`; }).join("")}
   </div></details>`;
 }
-async function markReminder(id, kind){
-  const c=S.clients[id]||{}, nv=c.nextVisit; if(!nv) return;
+async function markReminder(id, kind, nv0){
+  const c=S.clients[id]||{}, nv=nv0||c.nextVisit; if(!nv) return;
   const all={...(c.reminders||{})}; all[nv]={...(all[nv]||{}), [kind]:new Date().toISOString()};
   Object.keys(all).sort().slice(0,-6).forEach(k=>delete all[k]);
   await S.db.doc("clients/"+id).update({reminders:all});
@@ -684,13 +692,14 @@ function famRole(id){
   return {fam:true, holder:h===id, holderFirst:h?clientFirst(h):""};
 }
 function reminderZoom(o, nm, hi){
+  const dr = o.bottle ? `${o.bottle} drops` : "drops";
   const subject = o.kind==="week" ? (o.named?`${nm}'s next scan and consult are coming up`:"Your next scan and consult are coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next scan and consult`:"Checking in: time for your next scan and consult");
   const open = o.kind==="week"
-    ? (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and the Qest4 scan.`
-               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and your Qest4 scan.`)
-    : (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how things have been, and talking through what's needed next.`
-               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
+    ? (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and the Qest4 scan.`
+               : `I hope things have been going well for you! Your ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and your Qest4 scan.`)
+    : (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up about now, which makes this a lovely time for a new Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how things have been, and talking through what's needed next.`
+               : `I hope you've been feeling well! Your ${dr} should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
   const sched = o.booked
     ? `I'm looking forward to our Zoom call on ${o.booked}.`
     : `This time, you're welcome to choose what feels right for you: a scan with our Zoom consult, or just the scan on its own.\n\nFor the scan and consult, just reply with a few days and times that work, or if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works for you, just reply or text me at ${o.phone} and we'll find one together.\n\nFor just the scan, simply fill out ${o.named?"the":"your"} pre-scan form and choose “Not this time, just the scan.” I'll take it from there.`;
@@ -701,15 +710,16 @@ function reminderZoom(o, nm, hi){
   return { subject, text:`${hi}\n\n${open}\n\n${sched}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
 function reminderText(o){ // o: {kind, first, named, to, whenLong, formIn, link, phone, sign}
+  const dr = o.bottle ? `${o.bottle} drops` : "drops";
   const nm=o.first||"", hi=o.named?`Hi ${o.greet||"there"},`:`Hi ${nm||"there"},`;
   if(o.zoom) return reminderZoom(o, nm, hi);
   const subject = o.kind==="week" ? (o.named?`${nm}'s next Qest4 scan is coming up`:"Your next Qest4 scan is coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next Qest4 scan`:"Checking in: time for your next Qest4 scan");
   const open = o.kind==="week"
-    ? (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for a new Qest4 scan, to see how things have shifted and what's needed next.`
-               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for your next Qest4 scan, to see how things have shifted and what your body needs next.`)
-    : (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
-               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
+    ? (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for a new Qest4 scan, to see how things have shifted and what's needed next.`
+               : `I hope things have been going well for you! Your ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for your next Qest4 scan, to see how things have shifted and what your body needs next.`)
+    : (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
+               : `I hope you've been feeling well! Your ${dr} should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
   const form = o.formIn
     ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
     : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
@@ -717,13 +727,14 @@ function reminderText(o){ // o: {kind, first, named, to, whenLong, formIn, link,
   return { subject, text:`${hi}\n\n${open}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
 function reminderGroup(o){ // o: {kind, people:[{first, holder, formIn, zoom}], greet, to, whenLong, link, phone, sign, bookUrl}
+  const dr = o.bottle ? `${o.bottle} drops` : "drops";
   const nm=p=>p.holder?"you":p.first, list=a=>a.length<3?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1];
   const ppl=o.people.slice().sort((a,b)=>(b.holder?1:0)-(a.holder?1:0)), hasHolder=ppl.some(p=>p.holder);
   const who=list(ppl.map(nm)), hi=`Hi ${o.greet||"there"},`;
   const subject = o.kind==="week" ? "Your family's next Qest4 scans are coming up" : "Checking in: time for your family's next Qest4 scans";
   const open = o.kind==="week"
-    ? `I hope you're all doing well! The drops for ${who} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for new Qest4 scans, to see how things have shifted and what's needed next.`
-    : `I hope you're all doing well! The drops for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
+    ? `I hope you're all doing well! The ${dr} for ${who} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for new Qest4 scans, to see how things have shifted and what's needed next.`
+    : `I hope you're all doing well! The ${dr} for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
   const zoom = ppl.some(p=>p.zoom) ? `This time, you're welcome to choose what feels right: scans with our Zoom consult, or just the scans on their own. For a Zoom consult, just reply with a few days and times that work, or book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works, just reply or text me and we'll find one together.\nFor just the scans, choose “Not this time, just the scan” on the pre-scan form.\n\n` : "";
   const done=ppl.filter(p=>p.formIn), need=ppl.filter(p=>!p.formIn);
   const form = !need.length ? `Thank you for already sending the pre-scan forms. I have everything I need, and I'll be in touch soon with the scan dates.`
@@ -731,22 +742,22 @@ function reminderGroup(o){ // o: {kind, people:[{first, holder, formIn, zoom}], 
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${zoom}${form}\n\n${close}\n\n${o.sign}` };
 }
-function scanMail(id, kind){
+function scanMail(id, kind, nv0){
   const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return false; }
-  const c=S.clients[id]||{}, first=clientFirst(id);
+  const c=S.clients[id]||{}, first=clientFirst(id), nv=nv0||c.nextVisit, bottle=bottleAt(c, nv);
   const fr=famRole(id); const named = fr.fam && !fr.holder && first && first!=="Unnamed";
   const sign=emailSign();
   // family members on the same sign-in with the same drops date: one email for all of them
-  if(fr.fam && c.nextVisit){ const base=id.split("~")[0];
-    const sibs=Object.keys(S.clients).filter(x=>x!==id && !isFamilyShell(x) && (x===base||x.startsWith(base+"~")||(clientEmail(x)||"").trim().toLowerCase()===to.trim().toLowerCase()) && S.clients[x].nextVisit===c.nextVisit && !((S.clients[x].reminders||{})[c.nextVisit]||{})[kind]);
+  if(fr.fam && nv){ const base=id.split("~")[0];
+    const sibs=Object.keys(S.clients).filter(x=>x!==id && !isFamilyShell(x) && (x===base||x.startsWith(base+"~")||(clientEmail(x)||"").trim().toLowerCase()===to.trim().toLowerCase()) && dueDates(S.clients[x]).some(d=>d.date===nv && d.name===bottle) && !((S.clients[x].reminders||{})[nv]||{})[kind]);
     if(sibs.length){ const grp=[id,...sibs], hold=grp.find(x=>famRole(x).holder);
-      const whenL=new Date(c.nextVisit+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
-      const { subject, text } = reminderGroup({kind, people:grp.map(x=>({first:clientFirst(x), holder:famRole(x).holder, formIn:scanFormIn(S.clients[x]), zoom:!!S.clients[x].zoomClient})), greet:fr.holderFirst||"", to, whenLong:whenL, link:"https://portal.dawnspain.com/#nextscan", phone:PRACTICE.phone, sign, bookUrl:"https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO"});
+      const whenL=new Date(nv+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+      const { subject, text } = reminderGroup({kind, people:grp.map(x=>({first:clientFirst(x), holder:famRole(x).holder, formIn:scanFormIn(S.clients[x], nv), zoom:!!S.clients[x].zoomClient})), greet:fr.holderFirst||"", to, whenLong:whenL, bottle, link:"https://portal.dawnspain.com/#nextscan", phone:PRACTICE.phone, sign, bookUrl:"https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO"});
       location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
-      grp.forEach(x=>logEmail(x, subject, kind)); sibs.forEach(x=>markReminder(x, kind)); return true; } }
-  const whenLong = c.nextVisit ? new Date(c.nextVisit+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}) : "";
+      grp.forEach(x=>logEmail(x, subject, kind)); sibs.forEach(x=>markReminder(x, kind, nv)); return true; } }
+  const whenLong = nv ? new Date(nv+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}) : "";
   const bk=upcomingAppts(c).find(a=>a.type==="consult"||a.type==="qfu");
-  const { subject, text: body } = reminderText({kind, first:named?first:(first&&first!=="Unnamed"?first:""), named, to, whenLong, formIn:scanFormIn(c), link:"https://portal.dawnspain.com/#nextscan", phone:PRACTICE.phone, sign,
+  const { subject, text: body } = reminderText({kind, first:named?first:(first&&first!=="Unnamed"?first:""), named, to, whenLong, bottle, formIn:scanFormIn(c, nv), link:"https://portal.dawnspain.com/#nextscan", phone:PRACTICE.phone, sign,
     zoom:!!c.zoomClient, greet:fr.holderFirst||"", pick:fr.fam, booked: bk ? apptWhen(bk, true) : "", bookUrl:"https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO"});
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   logEmail(id, subject, kind);
@@ -959,13 +970,13 @@ function renderSchedule(){
       <div class="row" style="gap:12px;flex-wrap:nowrap">${tile(a.date)}
       <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${esc(apptLabel(a))}${a.time?` · ${esc(fmtTime12(a.time))}`:""}${a.how?` · ${esc(a.how)}`:""}</div></div>
       ${apptDelivery(a)==="ship"?(a.shippedAt?'<span class="chip ok">Shipped</span>':'<span class="chip acc">To ship</span>'):""}${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></button>`).join("")}</div>`).join("");
-  const dues=Object.keys(S.clients).map(id=>({id, nv:S.clients[id].nextVisit})).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.nv||"")).sort((a,b)=>a.nv.localeCompare(b.nv));
+  const dues=Object.keys(S.clients).flatMap(id=>dueDates(S.clients[id]).map(d=>({id, nv:d.date, bottle:d.name}))).sort((a,b)=>a.nv.localeCompare(b.nv));
   const dg=grp(dues, r=>r.nv, "Past due");
   const drops = !dues.length?`<div class="empty small">No next-scan-due dates set. Add one on a client's Details or Appointments tab.</div>`:
-    ["Past due","Today","Next 7 days","Later"].filter(g=>dg[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${dg[g].map(({id,nv})=>{ const c=S.clients[id], dd=dayDiff(nv,t), bk=upcomingAppts(c).find(a=>a.type==="scan");
+    ["Past due","Today","Next 7 days","Later"].filter(g=>dg[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${dg[g].map(({id,nv,bottle})=>{ const c=S.clients[id], dd=dayDiff(nv,t), bk=upcomingAppts(c).find(a=>a.type==="scan");
       return `<button type="button" class="item" data-sched="${esc(id)}"><div class="row" style="gap:12px;flex-wrap:nowrap">${tile(nv)}
-        <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">Drops finish${dd<0?`ed ${-dd} day${dd===-1?"":"s"} ago`:dd===0?" today":` in ${dd} day${dd===1?"":"s"}`}</div></div>
-        ${bk?`<span class="chip ok">Scan ${esc(fmtDate(bk.date))}</span>`:c.scanToSchedule?'<span class="chip acc">Needs a scan date</span>':scanFormIn(c)?'<span class="chip acc">Form in</span>':dd<0?'<span class="chip warn">Past due</span>':""}</div></button>`; }).join("")}</div>`).join("");
+        <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${bottle?`${esc(bottle)} · `:""}Drops finish${dd<0?`ed ${-dd} day${dd===-1?"":"s"} ago`:dd===0?" today":` in ${dd} day${dd===1?"":"s"}`}</div></div>
+        ${bk?`<span class="chip ok">Scan ${esc(fmtDate(bk.date))}</span>`:c.scanToSchedule?'<span class="chip acc">Needs a scan date</span>':scanFormIn(c, nv)?'<span class="chip acc">Form in</span>':dd<0?'<span class="chip warn">Past due</span>':""}</div></button>`; }).join("")}</div>`).join("");
   $("#app").innerHTML=`<div class="stack" style="max-width:1180px;margin:0 auto">
     <div class="row"><h1 class="grow">Schedule</h1></div>
     ${asks.length?`<div class="notice stack" style="gap:6px"><b>Date change requests</b>${asks.map(id=>`<button type="button" class="ghost" style="justify-content:flex-start;padding:2px 0" data-sched="${esc(id)}">${esc(clientName(id))} · asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</button>`).join("")}</div>`:""}
@@ -1592,7 +1603,7 @@ function renderHome(){
   const open=invs.filter(invOpen), owed=r2(open.reduce((s,v)=>s+invMath(v).bal,0)), overdue=open.filter(v=>invStatus(v)[0]==="Overdue");
   // date-change requests, scan reminders
   const asks=ids.filter(id=>S.clients[id].reschedReq), rem=autoOn("reminders")?[]:remindersDue();
-  const dueSoon=ids.map(id=>({id, nv:S.clients[id].nextVisit})).filter(({id,nv})=>/^\d{4}-\d{2}-\d{2}$/.test(nv||"") && nv<=wkS && !S.clients[id].scanToSchedule && !upcomingAppts(S.clients[id]).some(a=>a.type==="scan") && !apptsOf(S.clients[id]).some(a=>a.type==="scan" && a.date>=nv)).sort((a,b)=>a.nv.localeCompare(b.nv));
+  const dueSoon=ids.flatMap(id=>dueDates(S.clients[id]).map(d=>({id, nv:d.date, bottle:d.name}))).filter(({id,nv})=>nv<=wkS && !S.clients[id].scanToSchedule && !upcomingAppts(S.clients[id]).some(a=>a.type==="scan") && !apptsOf(S.clients[id]).some(a=>a.type==="scan" && a.date>=nv)).sort((a,b)=>a.nv.localeCompare(b.nv));
   const need=ids.filter(id=>S.clients[id].scanToSchedule).sort((a,b)=>(S.clients[a].scanToSchedule.by||"").localeCompare(S.clients[b].scanToSchedule.by||""));
   const card=(title, count, body, foot)=>`<section class="dash-card"><div class="head"><h2>${title}</h2>${count?`<span class="count">${count}</span>`:""}</div>${body}${foot||""}</section>`;
   const empty=s=>`<p class="small muted">${s}</p>`;
@@ -1605,10 +1616,10 @@ function renderHome(){
     card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
-  if(dueSoon.length) cards.splice(1,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id])?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
+  if(dueSoon.length) cards.splice(1,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv,bottle})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${bottle?`${esc(bottle)} · `:""}Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id], nv)?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
   if(need.length) cards.splice(1,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">${n.source==="form"?"Form sent":"Ordered"} ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span>${n.zoom==="yes"?'<span class="chip ok">with Zoom</span>':n.zoom==="no"?'<span class="chip">scan only</span>':""}<span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
   if(asks.length) cards.splice(1,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
-  if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(S.clients[id].nextVisit))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
+  if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind,nv,bottle})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"}${bottle?` · ${esc(bottle)}`:""} · ${esc(fmtDate(nv))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
   const hr=new Date().getHours(), hi=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
   $("#app").innerHTML=`<div class="stack" style="gap:20px;max-width:1180px;margin:0 auto">
     <div class="dash-hello"><h1>${hi}, Dawn</h1><p class="muted">${esc(new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}))}</p></div>
@@ -1831,12 +1842,42 @@ function dueBox(id){
       <span class="grow small">${nv?(d<0?`<span class="chip warn">${-d} day${d===-1?"":"s"} past due</span>`:d===0?`<span class="chip acc">Due today</span>`:`<span class="chip">In ${d} day${d===1?"":"s"}</span>`):""} ${booked?`<span class="chip ok">Scan booked ${esc(fmtDate(booked.date))}</span>`:c.scanToSchedule?`<span class="chip acc">Needs a scan date</span>`:""}</span></div>
     <p class="small muted" style="margin:0">This isn't an appointment. ${autoOn("reminders")?"A reminder email goes out a week before and again on this date, asking them to fill in their pre-scan form.":"Reminders for this date appear on your Home page."} When their form comes in, they show up under “Needs a scan date” on your Home page.</p>
     ${nv?`<div class="row small muted" style="gap:6px">Reminders: week before ${st("week")} · drops finished ${st("day")}
-      <button type="button" class="ghost small" data-remind="${esc(id)}" data-kind="${d>0?"week":"day"}">Email a reminder now</button></div>`:""}
+      <button type="button" class="ghost small" data-remind="${esc(id)}" data-kind="${d>0?"week":"day"}" data-date="${esc(nv)}">Email a reminder now</button></div>`:""}
+    ${bottlesBox(id)}
   </div>`;
 }
+/* other bottles that finish on a different date (each gets its own reminders) */
+function bottlesBox(id){
+  const c=S.clients[id]||{}, list=c.bottles||[];
+  const rowH=b=>{ const ok=isDay(b.end), d=ok?dayDiff(b.end,today()):null, sent=ok?((c.reminders||{})[b.end]||{}):{}, st=k=>sent[k]?`sent ${esc(fmtDate(sent[k]))}`:"not sent yet";
+    return `<div class="stack" style="gap:4px;padding:8px 0;border-top:1px solid var(--line,#eee)" data-bottle="${esc(b.id)}">
+      <div class="row" style="gap:8px;align-items:end;flex-wrap:wrap">
+        <label class="field" style="flex:1 1 180px"><span>Bottle name</span><input data-bname value="${esc(b.name||"")}" placeholder="Liver support"></label>
+        <label class="field" style="flex:0 1 180px"><span>Finishes</span><input type="date" data-bend value="${esc(b.end||"")}"></label>
+        ${ok?(d<0?`<span class="chip warn">${-d} day${d===-1?"":"s"} past due</span>`:d===0?`<span class="chip acc">Due today</span>`:`<span class="chip">In ${d} day${d===1?"":"s"}</span>`):""}
+        <button type="button" class="ghost small" data-act="bottledel" data-id="${esc(b.id)}">Remove</button></div>
+      ${ok?`<div class="row small muted" style="gap:6px">Reminders: week before ${st("week")} · drops finished ${st("day")}
+        <button type="button" class="ghost small" data-remind="${esc(id)}" data-kind="${d>0?"week":"day"}" data-date="${esc(b.end)}">Email a reminder now</button></div>`:""}</div>`; };
+  return `<details class="hist" ${list.length?"open":""}><summary>${list.length?`Other bottles (${list.length})`:"Another bottle finishing on a different date?"}</summary>
+    <div class="stack" style="gap:6px;margin-top:6px">
+      ${list.length?`<label class="field" style="max-width:320px"><span>Name for the main bottle above <span class="muted">(optional, used in its reminder)</span></span><input id="b-main" value="${esc(c.mainBottle||"")}" placeholder="Constitutional remedy"></label>`:""}
+      ${list.map(rowH).join("")}
+      <div class="row" style="gap:8px"><button type="button" class="small" data-act="bottleadd">Add a bottle</button>${list.length?`<button type="button" class="primary small" data-act="bottlesave">Save bottles</button>`:""}</div>
+      <p class="small muted" style="margin:0">Each bottle gets its own reminder emails, a week before and on the day it finishes, naming the bottle (for example “your Liver support drops should be finishing up…”).</p>
+    </div></details>`;
+}
+function readBottles(){ return [...document.querySelectorAll("[data-bottle]")].map(el=>({id:el.dataset.bottle, name:el.querySelector("[data-bname]").value.trim().slice(0,60), end:el.querySelector("[data-bend]").value||""})); }
 async function dueClick(e){
-  const a=e.target.closest('[data-act="duesave"],[data-act="dueclear"],[data-dropsdue]'); if(!a) return false;
+  const a=e.target.closest('[data-act="duesave"],[data-act="dueclear"],[data-dropsdue],[data-act="bottleadd"],[data-act="bottlesave"],[data-act="bottledel"]'); if(!a) return false;
   const id=S.sel, c=S.clients[id]||{};
+  if(/^bottle/.test(a.dataset.act||"")){
+    let list=readBottles();
+    if(a.dataset.act==="bottleadd") list.push({id:Math.random().toString(36).slice(2,10), name:"", end:""});
+    if(a.dataset.act==="bottledel") list=list.filter(b=>b.id!==a.dataset.id);
+    if(a.dataset.act==="bottlesave" && list.some(b=>!isDay(b.end))){ toast("Choose a finish date for each bottle"); return true; }
+    const patch={bottles:list}; const bm=$("#b-main"); if(bm) patch.mainBottle=bm.value.trim().slice(0,60);
+    try{ await S.db.doc("clients/"+id).update(patch); toast(a.dataset.act==="bottleadd"?"Bottle added: give it a name and finish date, then Save":a.dataset.act==="bottledel"?"Bottle removed":"Bottles saved"); }catch(e1){ toast("That didn't save. Please try again."); }
+    return true; }
   if(a.dataset.dropsdue){ const list=apptsOf(c); const x=list.find(y=>y.id===a.dataset.dropsdue); if(!x) return true;
     await S.db.doc("clients/"+id).update({appointments:list.filter(y=>y.id!==x.id), nextVisit:x.date}); toast(`Saved ${fmtDate(x.date)} as the drops-finish date, not a booked scan`); return true; }
   const v=a.dataset.act==="dueclear" ? "" : ($("#due-date")?.value||"");
@@ -1911,7 +1952,7 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   const list = !S.clientsLoaded ? `<div class="empty">Loading clients…</div>`
     : !ids.length ? `<div class="empty"><p>No clients yet.</p><p class="small">Add one with “New client”, or share this portal with a client and their intake appears here when they save it.</p></div>`
     : shown.map(id => { const c=S.clients[id]; const st=intakeChip(c);
-        return `<button type="button" class="item" data-client="${esc(id)}" aria-current="${id===sel}"><b>${esc(clientName(id))}</b><span class="meta">${st}${id.includes("~")?'<span class="chip acc">Family account</span>':!id.startsWith("c-")?'<span class="chip acc">Portal account</span>':""}${c.nextVisit?`<span>Next scan due: ${esc(fmtDate(c.nextVisit))}</span>`:""}</span></button>`; }).join("") || `<div class="empty">No match.</div>`;
+        return `<button type="button" class="item" data-client="${esc(id)}" aria-current="${id===sel}"><b>${esc(clientName(id))}</b><span class="meta">${st}${id.includes("~")?'<span class="chip acc">Family account</span>':!id.startsWith("c-")?'<span class="chip acc">Portal account</span>':""}${c.nextVisit?`<span>Next scan due: ${esc(fmtDate(c.nextVisit))}${(c.bottles||[]).length?` (+${(c.bottles||[]).length} bottle${(c.bottles||[]).length>1?"s":""})`:""}</span>`:(c.bottles||[]).length?`<span>${(c.bottles||[]).length} bottle${(c.bottles||[]).length>1?"s":""} due</span>`:""}</span></button>`; }).join("") || `<div class="empty">No match.</div>`;
   $("#app").innerHTML = `
   <div class="panes ${sel?"has-sel":""}">
     <section class="list-pane" aria-label="Clients">
@@ -2291,8 +2332,8 @@ function bindClients(){
     { const ho=e.target.closest("[data-hcopen]"); if(ho){ const p=(S.hcList||[]).find(x=>x.id===ho.dataset.hcopen); if(p){ const {id:_i,...d}=p; openHConsult(S.sel, p.id, d); } return; }
       const hs=e.target.closest('[data-act="hcnew"],[data-hcstart]'); if(hs){ hs.disabled=true; await newHConsult(S.sel); return; } }
     const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
-    const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind)){ await markReminder(rm.dataset.remind, rm.dataset.kind); toast("Email opened in Mail. Marked as sent."); } return; }
-    const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind); toast("Reminder skipped"); return; }
+    const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind, rm.dataset.date)){ await markReminder(rm.dataset.remind, rm.dataset.kind, rm.dataset.date); toast("Email opened in Mail. Marked as sent."); } return; }
+    const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind, rs.dataset.date); toast("Reminder skipped"); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
     const fs = e.target.closest("[data-fshare]"); if(fs){ const f=S.files.find(x=>x.id===fs.dataset.fshare); if(f){ await S.db.doc(`clients/${S.sel}/files/${f.id}`).update({status:f.status==="shared"?"private":"shared"}); toast(f.status==="shared"?"Hidden from client":"Shared with client"); } return; }
     const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }

@@ -50,13 +50,14 @@ async function send(cid: string, rec: Rec, to: string, subject: string, text: st
 const signin = (to: string, named: boolean, first: string) => `Sign in with this email address (${to}).${named ? ` Then choose ${first} at the top.` : ""}`;
 
 function reminderZoom(o: Rec, nm: string, hi: string){
+  const dr = o.bottle ? `${o.bottle} drops` : "drops";
   const subject = o.kind==="week" ? (o.named?`${nm}'s next scan and consult are coming up`:"Your next scan and consult are coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next scan and consult`:"Checking in: time for your next scan and consult");
   const open = o.kind==="week"
-    ? (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and the Qest4 scan.`
-               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and your Qest4 scan.`)
-    : (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how things have been, and talking through what's needed next.`
-               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
+    ? (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and the Qest4 scan.`
+               : `I hope things have been going well for you! Your ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and your Qest4 scan.`)
+    : (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up about now, which makes this a lovely time for a new Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how things have been, and talking through what's needed next.`
+               : `I hope you've been feeling well! Your ${dr} should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
   const sched = o.booked
     ? `I'm looking forward to our Zoom call on ${o.booked}.`
     : `This time, you're welcome to choose what feels right for you: a scan with our Zoom consult, or just the scan on its own.\n\nFor the scan and consult, just reply with a few days and times that work, or if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works for you, just reply or text me at ${o.phone} and we'll find one together.\n\nFor just the scan, simply fill out ${o.named?"the":"your"} pre-scan form and choose “Not this time, just the scan.” I'll take it from there.`;
@@ -67,15 +68,16 @@ function reminderZoom(o: Rec, nm: string, hi: string){
   return { subject, text:`${hi}\n\n${open}\n\n${sched}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
 function reminderText(o: Rec){ // o: {kind, first, named, to, whenLong, formIn, link, phone, sign}
+  const dr = o.bottle ? `${o.bottle} drops` : "drops";
   const nm=o.first||"", hi=o.named?`Hi ${o.greet||"there"},`:`Hi ${nm||"there"},`;
   if(o.zoom) return reminderZoom(o, nm, hi);
   const subject = o.kind==="week" ? (o.named?`${nm}'s next Qest4 scan is coming up`:"Your next Qest4 scan is coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next Qest4 scan`:"Checking in: time for your next Qest4 scan");
   const open = o.kind==="week"
-    ? (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for a new Qest4 scan, to see how things have shifted and what's needed next.`
-               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for your next Qest4 scan, to see how things have shifted and what your body needs next.`)
-    : (o.named ? `I hope you're all doing well! ${nm}'s drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
-               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
+    ? (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for a new Qest4 scan, to see how things have shifted and what's needed next.`
+               : `I hope things have been going well for you! Your ${dr} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for your next Qest4 scan, to see how things have shifted and what your body needs next.`)
+    : (o.named ? `I hope you're all doing well! ${nm}'s ${dr} should be finishing up about now, which makes this a lovely time for a new Qest4 scan. A fresh scan shows how things have responded since last time, so I can adjust the support to where things are today.`
+               : `I hope you've been feeling well! Your ${dr} should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
   const form = o.formIn
     ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
     : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
@@ -84,13 +86,14 @@ function reminderText(o: Rec){ // o: {kind, first, named, to, whenLong, formIn, 
 }
 
 function reminderGroup(o: Rec){ // o: {kind, people:[{first, holder, formIn, zoom}], greet, to, whenLong, link, phone, sign, bookUrl}
+  const dr = o.bottle ? `${o.bottle} drops` : "drops";
   const nm=(p: Rec)=>p.holder?"you":p.first, list=(a: string[])=>a.length<3?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1];
   const ppl=o.people.slice().sort((a,b)=>(b.holder?1:0)-(a.holder?1:0)), hasHolder=ppl.some(p=>p.holder);
   const who=list(ppl.map(nm)), hi=`Hi ${o.greet||"there"},`;
   const subject = o.kind==="week" ? "Your family's next Qest4 scans are coming up" : "Checking in: time for your family's next Qest4 scans";
   const open = o.kind==="week"
-    ? `I hope you're all doing well! The drops for ${who} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for new Qest4 scans, to see how things have shifted and what's needed next.`
-    : `I hope you're all doing well! The drops for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
+    ? `I hope you're all doing well! The ${dr} for ${who} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for new Qest4 scans, to see how things have shifted and what's needed next.`
+    : `I hope you're all doing well! The ${dr} for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
   const zoom = ppl.some(p=>p.zoom) ? `This time, you're welcome to choose what feels right: scans with our Zoom consult, or just the scans on their own. For a Zoom consult, just reply with a few days and times that work, or book it here:\n${o.bookUrl}\nMy online booking times are limited, so if you don't see a day that works, just reply or text me and we'll find one together.\nFor just the scans, choose “Not this time, just the scan” on the pre-scan form.\n\n` : "";
   const done=ppl.filter(p=>p.formIn), need=ppl.filter(p=>!p.formIn);
   const form = !need.length ? `Thank you for already sending the pre-scan forms. I have everything I need, and I'll be in touch soon with the scan dates.`
@@ -131,35 +134,39 @@ Deno.serve(async (req) => {
     const { data: rows } = await db.from("docs").select("id,data").eq("parent", "clients");
     // 1. who is due today
     const due: Rec[] = [];
-    for (const r of rows || []) {
-      const c: Rec = r.data || {}, nv = c.nextVisit;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(nv || "")) continue;
+    // each bottle (nextVisit plus any in c.bottles) has its own finish date and reminders
+    const isDay = (x: any) => /^\d{4}-\d{2}-\d{2}$/.test(x || "");
+    const dueDates = (c: Rec) => { const m = new Map<string, Rec>(); const extra = (c.bottles || []).some((b: Rec) => isDay(b.end));
+      const add = (date: string, name: string) => { if (!isDay(date)) return; const o = m.get(date); if (!o) m.set(date, { date, name: name || "" }); else if (name && !String(o.name).split(" and ").includes(name)) o.name = o.name ? `${o.name} and ${name}` : name; };
+      add(c.nextVisit, extra ? (c.mainBottle || "") : ""); (c.bottles || []).forEach((b: Rec) => add(b.end, b.name || "other")); return [...m.values()]; };
+    for (const r of rows || []) for (const dd of dueDates(r.data || {})) {
+      const c: Rec = r.data || {}, nv = dd.date, bottle = dd.name;
       const d = dayDiff(nv, t), done = (c.reminders || {})[nv] || {};
       const kind = d <= 0 && d >= -2 && !done.day ? "day" : d >= 1 && d <= 7 && !done.week && !done.day ? "week" : "";
       if (!kind) continue;
       const w = await who(r.id); if (!w.to) continue;
       const formIn = (() => { if (!c.qestSubmittedAt) return false; const cut = new Date(nv + "T12:00:00Z"); cut.setUTCDate(cut.getUTCDate() - 14); return c.qestSubmittedAt >= cut.toISOString(); })();
-      due.push({ id: r.id, c, nv, kind, formIn, ...w });
+      due.push({ id: r.id, c, nv, bottle, kind, formIn, ...w });
     }
     // 2. family members on one sign-in with the same date get one email together
     const groups = new Map<string, Rec[]>();
-    for (const x of due) { const k = `${String(x.to).toLowerCase()}|${x.kind}|${x.nv}`; groups.set(k, [...(groups.get(k) || []), x]); }
+    for (const x of due) { const k = `${String(x.to).toLowerCase()}|${x.kind}|${x.nv}|${x.bottle}`; groups.set(k, [...(groups.get(k) || []), x]); }
     for (const g of groups.values()) {
       const x = g[0];
       let subject: string, text: string;
       if (g.length > 1) {
-        ({ subject, text } = reminderGroup({ kind: x.kind, people: g.map((y) => ({ first: y.first, holder: y.pick && !y.named, formIn: y.formIn, zoom: !!y.c.zoomClient })), greet: g.find((y) => y.pick && !y.named)?.first || x.greet, to: x.to, whenLong: fmtDate(x.nv), link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" }));
+        ({ subject, text } = reminderGroup({ kind: x.kind, people: g.map((y) => ({ first: y.first, holder: y.pick && !y.named, formIn: y.formIn, zoom: !!y.c.zoomClient })), greet: g.find((y) => y.pick && !y.named)?.first || x.greet, to: x.to, whenLong: fmtDate(x.nv), bottle: x.bottle, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" }));
       } else {
         const c = x.c;
         const bk = (Array.isArray(c.appointments) ? c.appointments : []).filter((a: Rec) => (a.type === "consult" || a.type === "qfu") && a.date >= t).sort((a: Rec, b: Rec) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))[0];
         const bookedTxt = bk ? `${fmtDate(bk.date)}${bk.time ? " at " + (() => { const [h, m] = String(bk.time).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"} Eastern`; })() : ""}` : "";
-        ({ subject, text } = reminderText({ kind: x.kind, first: x.first, named: x.named, to: x.to, whenLong: fmtDate(x.nv), formIn: x.formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN,
+        ({ subject, text } = reminderText({ kind: x.kind, first: x.first, named: x.named, to: x.to, whenLong: fmtDate(x.nv), bottle: x.bottle, formIn: x.formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN,
           zoom: !!c.zoomClient, greet: x.greet, pick: x.pick, booked: bookedTxt, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" }));
       }
       try {
         const at = await send(x.id, x.c, x.to, subject, text, x.kind);
         for (const y of g) {
-          const rec = y.id === x.id ? ((await get("clients/" + y.id)) || y.c) : y.c;
+          const rec = (await get("clients/" + y.id)) || y.c;
           const all = { ...(rec.reminders || {}) }; all[y.nv] = { ...(all[y.nv] || {}), [y.kind]: at };
           const patch: Rec = { reminders: all };
           if (y.id !== x.id) patch.emailLog = [{ at, subject, kind: y.kind }, ...(rec.emailLog || [])].slice(0, 50);
