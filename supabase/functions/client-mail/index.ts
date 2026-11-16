@@ -41,8 +41,26 @@ async function send(cid: string, rec: Rec, to: string, subject: string, text: st
 }
 const signin = (to: string, named: boolean, first: string) => `Sign in with this email address (${to}).${named ? ` Then choose ${first} at the top.` : ""}`;
 
+function reminderZoom(o: Rec, nm: string, hi: string){
+  const subject = o.kind==="week" ? (o.named?`${nm}'s next scan and consult are coming up`:"Your next scan and consult are coming up")
+                                  : (o.named?`Checking in: time for ${nm}'s next scan and consult`:"Checking in: time for your next scan and consult");
+  const open = o.kind==="week"
+    ? (o.named ? `I hope you and ${nm} are doing well! The drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and the Qest4 scan.`
+               : `I hope things have been going well for you! Your drops should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time ${o.booked?"before":"to find a good time for"} our next Zoom consult and your Qest4 scan.`)
+    : (o.named ? `I hope you and ${nm} are doing well! The drops should be finishing up about now, which makes this a lovely time for a new Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how things have been, and talking through what's needed next.`
+               : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
+  const sched = o.booked
+    ? `I'm looking forward to our Zoom call on ${o.booked}.`
+    : `Just reply with a few days and times that work for you, and I'll set up our Zoom call and send you the details. Or, if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}`;
+  const form = o.formIn
+    ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need.`
+    : `Before we meet, please fill out ${o.named?"the":"your"} pre-scan form in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${o.named?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+  const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
+  return { subject, text:`${hi}\n\n${open}\n\n${sched}\n\n${form}\n\n${close}\n\n${o.sign}` };
+}
 function reminderText(o: Rec){ // o: {kind, first, named, to, whenLong, formIn, link, phone, sign}
   const nm=o.first||"", hi=o.named?"Hi there,":`Hi ${nm||"there"},`;
+  if(o.zoom) return reminderZoom(o, nm, hi);
   const subject = o.kind==="week" ? (o.named?`${nm}'s next Qest4 scan is coming up`:"Your next Qest4 scan is coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next Qest4 scan`:"Checking in: time for your next Qest4 scan");
   const open = o.kind==="week"
@@ -95,7 +113,10 @@ Deno.serve(async (req) => {
       if (!kind) continue;
       const { to, first, named } = await who(r.id); if (!to) continue;
       const formIn = (() => { if (!c.qestSubmittedAt) return false; const cut = new Date(nv + "T12:00:00Z"); cut.setUTCDate(cut.getUTCDate() - 14); return c.qestSubmittedAt >= cut.toISOString(); })();
-      const { subject, text } = reminderText({ kind, first, named, to, whenLong: fmtDate(nv), formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN });
+      const bk = (Array.isArray(c.appointments) ? c.appointments : []).filter((a: Rec) => (a.type === "consult" || a.type === "qfu") && a.date >= t).sort((a: Rec, b: Rec) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))[0];
+      const bookedTxt = bk ? `${fmtDate(bk.date)}${bk.time ? " at " + (() => { const [h, m] = String(bk.time).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"} Eastern`; })() : ""}` : "";
+      const { subject, text } = reminderText({ kind, first, named, to, whenLong: fmtDate(nv), formIn, link: "https://portal.dawnspain.com/#nextscan", phone: PHONE, sign: SIGN,
+        zoom: !!c.zoomClient, booked: bookedTxt, bookUrl: "https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO" });
       try { const at = await send(r.id, c, to, subject, text, kind);
         const all = { ...(c.reminders || {}) }; all[nv] = { ...(all[nv] || {}), [kind]: at };
         await merge("clients/" + r.id, { reminders: all }); sent++;
