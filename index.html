@@ -393,6 +393,7 @@ const QEST = [
     {id:"anythingElse",label:"Anything else you would like to share?",type:"textarea"},
     {id:"sinceLast",label:"Returning clients: anything new since your last scan?",type:"textarea"}]},
   {sec:"Your bioenergetic treatment", note:"How you'd like to receive the treatment from this scan.", fields:[
+    {id:"zoomThis",label:"Would you like a Zoom consult with this scan?",type:"choice",options:["Yes, please","Not this time, just the scan"]},
     {id:"delivery",jot:"How would you like to receive your treatment",label:"Remote imprint or shipped?",type:"choice",req:true,options:[IMPRINT_REMOTE,"Shipped to me"]},
     {id:"rxForm",jot:"Pellets or liquid",label:"Pellets or liquid?",type:"choice",req:true,options:["Pellets","Liquid"]},
     {id:"imprintPic",label:"Picture of your prepared remote imprint medium",type:"imprint",wide:true,showIf:["delivery",IMPRINT_REMOTE]}]},
@@ -1094,7 +1095,9 @@ function blankInvoice(cid, appt){
     const kinds=[appt.type]; if(appt.type==="scan" && apptDelivery(appt)==="ship") kinds.push("shipping");
     const dl=apptDelivery(appt);
     const scanPick = () => { const sc=price.filter(x=>x.kind==="scan"); return dl==="ship" ? sc.find(x=>/mail|ship/i.test(x.name)) : dl==="none" ? sc.find(x=>/only/i.test(x.name)) : sc.find(x=>!/mail|ship|only/i.test(x.name)) || sc[0]; };
-    if(appt.type==="scan"){ const sp=scanPick(); if(sp && /mail|ship/i.test(sp.name)) kinds.pop(); }
+    const wantsZoom = appt.type==="scan" && /^yes/i.test((S.clients[cid]?.qest||{}).zoomThis||"") && price.some(x=>x.kind==="consult");
+    if(wantsZoom){ kinds.length=0; kinds.push("consult"); }
+    if(appt.type==="scan" && !wantsZoom){ const sp=scanPick(); if(sp && /mail|ship/i.test(sp.name)) kinds.pop(); }
     kinds.forEach(k=>{ const p=k==="scan"?scanPick():price.find(x=>x.kind===k); v.items.push(p?{kind:k, desc:p.name, qty:1, price:+p.price||0}:{kind:k, desc:(APPT_TYPES[k]||BILL_KINDS[k])+(k===appt.type?` · ${fmtDate(appt.date)}`:""), qty:1, price:0}); });
   }
   if(!v.items.length) v.items.push({kind:"other", desc:"", qty:1, price:0});
@@ -1503,7 +1506,7 @@ function renderHome(){
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
   if(dueSoon.length) cards.splice(1,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id])?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
-  if(need.length) cards.splice(1,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">Ordered ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span><span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
+  if(need.length) cards.splice(1,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">${n.source==="form"?"Form sent":"Ordered"} ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span>${n.zoom==="yes"?'<span class="chip ok">with Zoom</span>':n.zoom==="no"?'<span class="chip">scan only</span>':""}<span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
   if(asks.length) cards.splice(1,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
   if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"} · scan ${esc(fmtDate(S.clients[id].nextVisit))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
   const hr=new Date().getHours(), hi=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
@@ -4216,7 +4219,7 @@ function renderClient(){
     if(isF && submit) patch.followup = {fullName: vals.fullName||""};
     if(submit) patch[key+"SubmittedAt"] = now;
     if(isQ && submit && !editing && !(S.myRec?.appointments||[]).some(a=>a.type==="scan" && a.date>=today()) && !S.myRec?.scanToSchedule){
-      const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":""}; }
+      const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":"", zoom: /^yes/i.test(vals.zoomThis||"") ? "yes" : vals.zoomThis ? "no" : ""}; }
     if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now}].slice(-60);
     try{
       const who=S.who||S.me;
