@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   if (!v || v.status !== "sent") return out({ error: "not found" }, 404);
   const bal = balance(v);
   if (!(bal > 0)) return out({ paid: true });
-  const sig = JSON.stringify([v.items || [], v.discount || {}, bal]);
+  const sig = JSON.stringify(["v3", v.items || [], v.discount || {}, bal]);
   if (v.sqLink?.url && Math.abs((+v.sqLink.amount || 0) - bal) < 0.005 && v.sqLink.sig === sig) return out({ url: v.sqLink.url, amount: bal });
 
   const locs = await sq("locations");
@@ -52,11 +52,11 @@ Deno.serve(async (req) => {
   let order: Rec | null = null;
   if (!(v.payments || []).length) {
     const items = (v.items || []).filter((i: Rec) => !i.credit && i.kind !== "discount" && cents(i.price) > 0 && (+i.qty || 0) > 0);
-    const line_items = items.map((i: Rec) => ({
-      name: (`${i.desc || "Item"}${i.for ? " – for " + i.for : ""}`).slice(0, 500),
-      quantity: String(+i.qty || 1),
-      base_price_money: { amount: cents(i.price), currency: "USD" },
-    }));
+    // One line headed "Wellness From Within – Invoice #…" (Square shows it as the page title);
+    // the services and who they're for are listed underneath it in the order summary.
+    const what = items.map((i: Rec) => `${(+i.qty || 1) > 1 ? (+i.qty) + " × " : ""}${i.desc || "Item"}${i.for ? " – for " + i.for : ""}`).join(" · ");
+    const subC = items.reduce((t: number, i: Rec) => t + Math.round((+i.qty || 1) * cents(i.price)), 0);
+    const line_items = subC > 0 ? [{ name: name.slice(0, 500), variation_name: what.slice(0, 400), quantity: "1", base_price_money: { amount: subC, currency: "USD" } }] : [];
     const discounts: Rec[] = [];
     (v.items || []).filter((i: Rec) => !i.credit && i.kind === "discount").forEach((i: Rec) => {
       const a = Math.round(Math.abs((+i.qty || 1) * (+i.price || 0)) * 100);
