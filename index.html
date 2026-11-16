@@ -1073,22 +1073,107 @@ function invPrint(v, name){
     <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
   w.document.close();
 }
+/* formatted invoice / receipt emails, sent by the portal (message-email function) */
+function mailShell(inner){
+  const A="#087C9C";
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#f4f2ee"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f2ee"><tr><td align="center" style="padding:24px 12px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #e3dfd8;border-radius:10px;font-family:Helvetica,Arial,sans-serif;color:#2b2b2b">
+  <tr><td style="padding:22px 28px;border-bottom:3px solid ${A}"><div style="font-family:Georgia,serif;font-size:22px;color:${A}">Wellness From Within</div><div style="font-size:12px;color:#777;margin-top:2px">${esc(PRACTICE.name)} · A Roaring Fork Homeopathy Associate</div></td></tr>
+  ${inner}
+  <tr><td style="padding:16px 28px;border-top:1px solid #eee;font-size:12px;color:#777;line-height:1.6">With warmth,<br><b style="color:#2b2b2b">${esc(PRACTICE.name)}</b><br>Wellness From Within<br>${esc(PRACTICE.phone)} · <a href="https://${esc(PRACTICE.site)}" style="color:${A}">${esc(PRACTICE.site)}</a></td></tr>
+  </table></td></tr></table></body></html>`;
+}
+function mailItems(v){
+  const m=invMath(v), td="padding:9px 6px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top", r=";text-align:right;white-space:nowrap";
+  const rows=(v.items||[]).map(i=>{ const disc=i.kind==="discount";
+    return `<tr><td style="${td}">${esc(i.desc||BILL_KINDS[i.kind]||"Item")}${i.kind==="package"&&i.sessions?` <span style="color:#777">(${esc(i.sessions)} sessions)</span>`:""}${i.credit?` <span style="color:#777">(prepaid session)</span>`:""}${(+i.qty||1)>1&&!disc?`<div style="font-size:12px;color:#777">${esc(i.qty)} × ${esc(money(i.price))}</div>`:""}</td><td style="${td};color:#555">${esc(i.for||"")}</td><td style="${td}${r}${disc?";color:#2e7d4f":""}">${i.credit?"Prepaid":esc(money(lineAmt(i)))}</td></tr>`; }).join("");
+  const tot=(l,a,st="")=>`<tr><td colspan="2" style="padding:6px;text-align:right;font-size:14px;${st}">${l}</td><td style="padding:6px;text-align:right;white-space:nowrap;font-size:14px;${st}">${a}</td></tr>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:6px 0 4px">
+    <tr><td style="padding:6px;border-bottom:2px solid #ddd;font-size:12px;color:#777">Item</td><td style="padding:6px;border-bottom:2px solid #ddd;font-size:12px;color:#777">For</td><td style="padding:6px;border-bottom:2px solid #ddd;font-size:12px;color:#777;text-align:right">Amount</td></tr>
+    ${rows}
+    ${m.disc?tot("Subtotal",money(m.sub),"color:#555")+tot(`${esc(v.discount?.label||"Discount")}${v.discount?.type==="pct"?` (${esc(v.discount.value)}%)`:""}`,"-"+money(m.disc),"color:#2e7d4f"):""}
+    ${tot("Total",money(m.total),"font-weight:bold")}
+    ${(v.payments||[]).map(p=>tot(`Paid ${esc(fmtDate(p.date))}${p.method?` · ${esc(p.method)}`:""}`,"-"+money(p.amount),"color:#555")).join("")}
+    ${tot("Balance due",money(m.bal),"font-weight:bold;font-size:16px;border-top:2px solid #ddd")}
+  </table>`;
+}
+function mailPay(pay, no, bal){
+  const A="#087C9C", o=[];
+  if(pay.payLink) o.push(`<div style="text-align:center;margin:18px 0 10px"><a href="${esc(pay.payLink)}" style="display:inline-block;background:${A};color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 26px;border-radius:6px">Pay ${esc(money(bal))} online</a></div>`);
+  const alt=[]; if(pay.venmo) alt.push(`Venmo <a href="${esc(venmoUrl(pay.venmo))}" style="color:${A}">@${esc(pay.venmo.replace(/^@/,""))}</a>`);
+  if(pay.zelle) alt.push(`Zelle ${esc(pay.zelle)}`); if(pay.cashapp) alt.push(`Cash App <a href="${esc(cashUrl(pay.cashapp))}" style="color:${A}">$${esc(pay.cashapp.replace(/^\$/,""))}</a>`);
+  if(alt.length) o.push(`<div style="text-align:center;font-size:13px;color:#555">${pay.payLink?"or ":""}${alt.join(" · ")}${no?`<br>Please include invoice #${esc(no)} in the payment note.`:""}</div>`);
+  if(pay.payNote) o.push(`<div style="text-align:center;font-size:13px;color:#555;margin-top:6px">${esc(pay.payNote)}</div>`);
+  return o.join("");
+}
+function invMailParts(cid, v, pay){
+  const first=clientFirst(cid), m=invMath(v), A="#087C9C";
+  const meta=(l,x)=>x?`<td style="padding:0 18px 0 0;font-size:12px;color:#777">${l}<div style="font-size:14px;color:#2b2b2b">${esc(fmtDate(x))}</div></td>`:"";
+  const html=mailShell(`<tr><td style="padding:22px 28px 6px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:15px">Hi ${esc(first&&first!=="Unnamed"?first:"there")},</td><td style="text-align:right;font-size:12px;color:#777">Invoice<div style="font-size:20px;color:${A};font-weight:bold">#${esc(v.number||"")}</div></td></tr></table>
+    <p style="font-size:14px;line-height:1.6;margin:10px 0 16px">Here is your invoice${v.serviceDate?` for your session on ${esc(fmtDate(v.serviceDate))}`:""}. Thank you for letting me be part of your wellness journey.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:10px"><tr>${meta("Invoice date",v.date)}${meta("Service date",v.serviceDate)}${m.bal>0?meta("Due",v.due):""}</tr></table>
+    ${mailItems(v)}
+    ${v.note?`<p style="font-size:14px;line-height:1.6;margin:14px 0 0">${esc(v.note).replace(/\n/g,"<br>")}</p>`:""}
+    ${m.bal>0?mailPay(pay, v.number, m.bal):`<p style="text-align:center;font-weight:bold;color:#2e7d4f">Paid in full. Thank you!</p>`}
+    <p style="font-size:13px;color:#555;margin:20px 0 6px">You can also see this invoice any time in your <a href="https://portal.dawnspain.com/#billing" style="color:${A}">client portal</a> under Billing.</p>
+  </td></tr>`);
+  return { subject:`Invoice #${v.number} from Wellness From Within`, html };
+}
+function invMailText(cid, v, pay){
+  const first=clientFirst(cid), m=invMath(v);
+  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${i.for?` (for ${i.for})`:""}${(+i.qty||1)>1&&i.kind!=="discount"?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money(lineAmt(i))}`).join("\n");
+  return `Hi ${first&&first!=="Unnamed"?first:"there"},\n\nHere is your invoice #${v.number}, dated ${fmtDate(v.date)}${v.serviceDate?`, for services on ${fmtDate(v.serviceDate)}`:""}.\n\n${lines}\n${m.disc?`${v.discount?.label||"Discount"}: -${money(m.disc)}\n`:""}Total: ${money(m.total)}\n${m.paid?`Paid so far: ${money(m.paid)}\n`:""}Balance due: ${money(m.bal)}${v.due?` by ${fmtDate(v.due)}`:""}\n\n${v.note?v.note+"\n\n":""}${payLines(pay, v.number)}\n\nYou can also see this invoice in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\nThank you!\n\n${emailSign()}`;
+}
+function rcptMailParts(cid, v, p){
+  const first=clientFirst(cid), m=invMath(v), A="#087C9C";
+  const html=mailShell(`<tr><td style="padding:22px 28px 6px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:15px">Hi ${esc(first&&first!=="Unnamed"?first:"there")},</td><td style="text-align:right;font-size:12px;color:#777">Receipt<div style="font-size:20px;color:${A};font-weight:bold">#${esc(v.number||"")}</div></td></tr></table>
+    <p style="font-size:14px;line-height:1.6;margin:10px 0 16px">Thank you! I received your payment of <b>${esc(money(p.amount))}</b> on ${esc(fmtDate(p.date))}${p.method?` by ${esc(p.method)}`:""}.</p>
+    ${mailItems(v)}
+    ${m.bal<=0?`<p style="text-align:center;font-weight:bold;color:#2e7d4f;margin:16px 0">Paid in full. Thank you!</p>`:`<p style="text-align:center;font-size:14px;margin:16px 0">Remaining balance: <b>${esc(money(m.bal))}</b></p>`}
+    <p style="font-size:13px;color:#555;margin:20px 0 6px">You can see your invoices any time in your <a href="https://portal.dawnspain.com/#billing" style="color:${A}">client portal</a> under Billing.</p>
+  </td></tr>`);
+  const text=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nThank you! I received your payment of ${money(p.amount)} on ${fmtDate(p.date)}${p.method?` by ${p.method}`:""} for invoice #${v.number}.\n\n${m.bal<=0?"This invoice is now paid in full.":`Remaining balance: ${money(m.bal)}.`}\n\nYou can see your invoices any time in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\n${emailSign()}`;
+  return { subject:`Receipt for invoice #${v.number}`, html, text };
+}
+/* preview, then send through the portal (or fall back to the mail app) */
+function mailPreview(to, subject, html, text){
+  return new Promise(res=>{
+    const ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.innerHTML=`<div style="background:var(--card,#fff);color:inherit;border-radius:12px;max-width:680px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.1)"><b>Preview</b><div class="small muted">To ${esc(to)} · ${esc(subject)}</div></div>
+      <iframe style="border:0;width:100%;flex:1;min-height:420px;background:#f4f2ee"></iframe>
+      <div class="row" style="gap:8px;padding:12px 16px;border-top:1px solid rgba(0,0,0,.1);justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" data-x="mail">Open in my mail app instead</button><button type="button" data-x="cancel">Cancel</button><button type="button" class="primary" data-x="send">Send email</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector("iframe").srcdoc=html;
+    ov.addEventListener("click", async e=>{ const x=e.target.closest("[data-x]")?.dataset.x; if(!x && e.target!==ov) return;
+      if(!x || x==="cancel"){ ov.remove(); res(false); return; }
+      if(x==="mail"){ ov.remove(); openMail(to, subject, text); res("mail"); return; }
+      const btn=e.target; btn.disabled=true; btn.textContent="Sending…";
+      try{ const { data, error } = await SB.functions.invoke("message-email", { body:{ send:{ to, subject, html, text } } });
+        if(error || !data?.sent) throw error||new Error(data?.why||"not sent");
+        ov.remove(); res("sent"); }
+      catch(err){ console.warn("send", err); btn.disabled=false; btn.textContent="Send email"; toast("Couldn't send it. Try again, or use “Open in my mail app instead”."); }
+    });
+  });
+}
 async function invEmail(cid, v, invId){
   const to=clientEmail(cid); if(!to){ toast("This client has no email address on file"); return false; }
-  const first=clientFirst(cid), m=invMath(v);
+  const m=invMath(v);
   let pay={...(v.pay||payInfo())};
   if(pay.payLink && invId && m.bal>0){ const url=await squarePayLink(invId); if(url) pay={...pay, payLink:url}; }
-  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${i.for?` (for ${i.for})`:""}${(+i.qty||1)>1&&i.kind!=="discount"?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money(lineAmt(i))}`).join("\n");
-  const subject=`Invoice #${v.number} from Wellness From Within`;
-  const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nHere is your invoice #${v.number}, dated ${fmtDate(v.date)}${v.serviceDate?`, for services on ${fmtDate(v.serviceDate)}`:""}.\n\n${lines}\n${m.disc?`${v.discount?.label||"Discount"}: -${money(m.disc)}\n`:""}Total: ${money(m.total)}\n${m.paid?`Paid so far: ${money(m.paid)}\n`:""}Balance due: ${money(m.bal)}${v.due?` by ${fmtDate(v.due)}`:""}\n\n${v.note?v.note+"\n\n":""}${payLines(pay, v.number)}\n\nYou can also see this invoice in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\nThank you!\n\n${emailSign()}`;
-  openMail(to, subject, body); logEmail(cid, subject, "invoice"); return true;
+  const { subject, html } = invMailParts(cid, v, pay), text=invMailText(cid, v, pay);
+  const r=await mailPreview(to, subject, html, text); if(!r) return false;
+  logEmail(cid, subject, "invoice"); if(r==="sent") toast(`Invoice emailed to ${to}`); return r;
 }
-function receiptEmail(cid, v, p){
+async function receiptEmail(cid, v, p){
   const to=clientEmail(cid); if(!to){ toast("This client has no email address on file"); return false; }
-  const first=clientFirst(cid), m=invMath(v);
-  const subject=`Receipt for invoice #${v.number}`;
-  const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nThank you! I received your payment of ${money(p.amount)} on ${fmtDate(p.date)}${p.method?` by ${p.method}`:""} for invoice #${v.number}.\n\n${m.bal<=0?"This invoice is now paid in full.":`Remaining balance: ${money(m.bal)}.`}\n\nYou can see your invoices any time in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\n${emailSign()}`;
-  openMail(to, subject, body); logEmail(cid, subject, "receipt"); return true;
+  const { subject, html, text } = rcptMailParts(cid, v, p);
+  const r=await mailPreview(to, subject, html, text); if(!r) return false;
+  logEmail(cid, subject, "receipt"); if(r==="sent") toast(`Receipt emailed to ${to}`); return r;
 }
 /* practitioner: data */
 const invsOf = cid => Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filter(v=>v.clientId===cid).sort((a,b)=>(b.date||"").localeCompare(a.date||"") || (b.number||0)-(a.number||0));
@@ -1241,8 +1326,8 @@ async function billingClick(e){
   if((b=g("[data-invtoggle]"))){ S.invOpenId = S.invOpenId===b.dataset.invtoggle?null:b.dataset.invtoggle; renderClients(); return true; }
   if((b=g("[data-invedit]"))){ const v=S.inv[b.dataset.invedit]; if(v){ S.invEdit={cid:S.sel, id:b.dataset.invedit, isNew:false, v:JSON.parse(JSON.stringify(v))}; S.invConfirm=null; S.payFor=null; renderClients(); $("#inv-form")?.scrollIntoView({block:"start"}); } return true; }
   if((b=g("[data-invpay]"))){ S.payFor=b.dataset.invpay; renderClients(); $("#pf-amt")?.focus(); return true; }
-  if((b=g("[data-invmail]"))){ const v=S.inv[b.dataset.invmail]; if(v){ b.disabled=true; const ok=await invEmail(v.clientId, v, b.dataset.invmail); b.disabled=false; if(ok) toast("Opened in Mail. Noted in this client's email history."); } return true; }
-  if((b=g("[data-invrcpt]"))){ const v=S.inv[b.dataset.invrcpt]; const p=(v?.payments||[]).slice(-1)[0]; if(v&&p&&receiptEmail(v.clientId, v, p)) toast("Opened in Mail. Noted in this client's email history."); return true; }
+  if((b=g("[data-invmail]"))){ const v=S.inv[b.dataset.invmail]; if(v){ b.disabled=true; const ok=await invEmail(v.clientId, v, b.dataset.invmail); b.disabled=false; if(ok==="mail") toast("Opened in Mail. Noted in this client's email history."); } return true; }
+  if((b=g("[data-invrcpt]"))){ const v=S.inv[b.dataset.invrcpt]; const p=(v?.payments||[]).slice(-1)[0]; if(v&&p&&(await receiptEmail(v.clientId, v, p))==="mail") toast("Opened in Mail. Noted in this client's email history."); return true; }
   if((b=g("[data-invprint]"))){ const v=S.inv[b.dataset.invprint]; if(v) invPrint(v, clientName(v.clientId)); return true; }
   if((b=g("[data-paydel]"))){ const id=b.dataset.paydel, v=S.inv[id]; if(!v) return true; const data={...v, payments:(v.payments||[]).filter(p=>p.id!==b.dataset.pid)};
     try{ await S.db.doc("invoices/"+id).set(data); S.inv={...S.inv,[id]:data}; toast("Payment removed"); }catch(e1){ toast("That didn't save. Please try again."); } renderClients(); return true; }

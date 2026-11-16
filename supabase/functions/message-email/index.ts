@@ -24,10 +24,33 @@ type Rec = Record<string, any>;
 const emailOf = (d: Rec) => d?.email || d?.intake?.email || d?.qest?.email || d?.followup?.email || "";
 const nameOf = (d: Rec) => d?.intake?.nickname || d?.intake?.preferredName || d?.intake?.fullName || d?.qest?.fullName || d?.followup?.fullName || d?.name || "";
 
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+
+// Dawn sends a formatted email (invoice or receipt) from the portal. Only works for the practitioner's own signed-in session.
+async function sendFromPortal(req: Request, s: Rec) {
+  const out = (b: Rec, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  const auth = req.headers.get("Authorization") || "";
+  if (!auth.startsWith("Bearer ")) return out({ sent: false, why: "not signed in" }, 401);
+  const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
+  const { data: ok } = await asUser.rpc("is_admin");
+  if (ok !== true) return out({ sent: false, why: "not allowed" }, 403);
+  const to = String(s.to || "").trim(), subject = String(s.subject || "").slice(0, 200);
+  if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(to) || !subject) return out({ sent: false, why: "bad request" }, 400);
+  try {
+    await mail.sendMail({ from: `"Dawn Spain, Wellness From Within" <${Deno.env.get("SMTP_USER")}>`, replyTo: REPLY_TO, to, subject, text: String(s.text || ""), html: String(s.html || "").slice(0, 200_000) || undefined });
+  } catch (e) {
+    console.error("send failed", (e as Error)?.message || e);
+    return out({ sent: false, why: "send failed" }, 502);
+  }
+  return out({ sent: true });
+}
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
-  let path = "";
-  try { path = String((await req.json()).path || ""); } catch { /* fall through */ }
+  let path = "", body: Rec = {};
+  try { body = await req.json(); path = String(body.path || ""); } catch { /* fall through */ }
+  if (body.send) return sendFromPortal(req, body.send);
   const pm = /^clients\/([A-Za-z0-9~_-]{1,80})\/messages\/[A-Za-z0-9_-]{1,80}$/.exec(path);
   if (!pm) return new Response("bad request", { status: 400 });
   const cid = pm[1];
