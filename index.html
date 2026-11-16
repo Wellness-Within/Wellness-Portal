@@ -4201,6 +4201,14 @@ function clientHome(first){
       :`<p class="small muted">Questions between sessions? Send Dawn a message here.</p>`}
     <button type="button" data-cv2="messages">${msgUnreadClient(r)?"Read your new message":"Send Dawn a message"}</button></section>`);
   { const pc=clientProgressCard(); if(pc) cards.push(pc); }
+  // billing: open invoices go first, with a pay button for each
+  { const open=(S.myInv||[]).filter(invOpen).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    if(open.length){ const bal=r2(open.reduce((t,v)=>t+invMath(v).bal,0)), one=open.length===1?open[0]:null, od=open.some(v=>invStatus(v)[0]==="Overdue");
+      cards.unshift(`<section class="dash-card"><div class="head"><h2>Billing</h2><span class="chip ${od?"warn":"acc"}">${od?"Overdue":"Balance due"}</span></div>
+        <div><span class="small muted">Balance due</span><br><b style="font-size:24px">${money(bal)}</b></div>
+        <div>${open.map(v=>`<div class="row" style="gap:8px;justify-content:space-between;padding:4px 0"><span class="small">Invoice #${esc(v.number)}${v.serviceDate?` · ${esc(fmtDate(v.serviceDate))}`:""}${v.due?` <span class="muted">· due ${esc(fmtDate(v.due))}</span>`:""}</span><b class="small">${esc(money(invMath(v).bal))}</b></div>`).join("")}</div>
+        ${one?payBlock({...(one.pay||{}), invId:one.id}, one.number, invMath(one).bal):`<div class="stack" style="gap:6px">${open.filter(v=>(v.pay||{}).payLink).map(v=>`<button type="button" class="primary" data-cpay="${esc(v.id)}">Pay invoice #${esc(v.number)} · ${esc(money(invMath(v).bal))}</button>`).join("")}</div>`}
+        <button type="button" class="ghost" data-cv2="billing">View invoices</button></section>`); } }
   return `<div class="stack" style="gap:24px">
     ${bannerHtml}
     <div class="dash-grid">${cards.join("")}</div></div>`;
