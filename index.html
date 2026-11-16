@@ -91,7 +91,7 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .dash-link{width:100%;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 0;font:inherit;color:inherit;cursor:pointer;text-align:left}.dash-link:hover b{color:var(--accent)}.dash-link:last-child{border-bottom:0}
 .sched-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start}
 .inv-tab{width:100%;border-collapse:collapse;font-size:14px}.inv-tab th,.inv-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.inv-tab th{font-weight:600;color:var(--muted);font-size:12px}.inv-tab .num{text-align:right;white-space:nowrap}.inv-tab tfoot td{border:0;padding:3px 4px}
-.inv-line{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr) minmax(110px,1fr) 64px 92px auto auto;gap:6px;align-items:center}
+.inv-line{display:grid;grid-template-columns:minmax(100px,1fr) minmax(130px,2fr) minmax(100px,1.1fr) minmax(100px,1fr) 60px 88px auto auto;gap:6px;align-items:center}
 @media (max-width:760px){.inv-line{grid-template-columns:1fr 1fr}.inv-line .li-desc{grid-column:1/-1}}
 .dash-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.dash-row:last-child{border-bottom:0}
 .avatar{width:40px;height:40px;flex:none;border-radius:50%;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
@@ -1032,9 +1032,12 @@ function payLines(pay, no){
   if(pay.cashapp) L.push(`Cash App: $${pay.cashapp.replace(/^\$/,"")} (${cashUrl(pay.cashapp)})`);
   return L.length ? `How to pay:\n${L.join("\n")}${no?`\nPlease include invoice #${no} in the payment note.`:""}${pay.payNote?`\n${pay.payNote}`:""}` : "";
 }
+async function squarePayLink(invId){
+  try{ const { data, error } = await SB.functions.invoke("square-paylink", { body:{ invoice:invId } }); if(error) throw error; return data?.url || ""; }
+  catch(e){ console.warn("pay link", e); return ""; } }
 function payBlock(pay, no, bal){
   const b=[];
-  if(pay.payLink) b.push(`<a class="btn primary" href="${esc(pay.payLink)}" target="_blank" rel="noopener">Pay ${bal>0?esc(money(bal))+" ":""}online</a>`);
+  if(pay.payLink) b.push(pay.invId ? `<button type="button" class="primary" data-cpay="${esc(pay.invId)}">Pay ${bal>0?esc(money(bal))+" ":""}online</button>` : `<a class="btn primary" href="${esc(pay.payLink)}" target="_blank" rel="noopener">Pay ${bal>0?esc(money(bal))+" ":""}online</a>`);
   if(pay.venmo) b.push(`<a class="btn" href="${esc(venmoUrl(pay.venmo))}" target="_blank" rel="noopener">Venmo @${esc(pay.venmo.replace(/^@/,""))}</a>`);
   if(pay.cashapp) b.push(`<a class="btn" href="${esc(cashUrl(pay.cashapp))}" target="_blank" rel="noopener">Cash App $${esc(pay.cashapp.replace(/^\$/,""))}</a>`);
   const z = pay.zelle ? `<span class="small">Zelle: <b>${esc(pay.zelle)}</b></span>` : "";
@@ -1044,7 +1047,7 @@ function payBlock(pay, no, bal){
 function invLinesHtml(v){
   const m=invMath(v);
   return `<table class="inv-tab"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>
-    ${(v.items||[]).map(i=>`<tr><td>${esc(i.desc||BILL_KINDS[i.kind]||"Item")}${i.kind==="package"&&i.sessions?` <span class="muted">(${esc(i.sessions)} sessions)</span>`:""}${i.credit?` <span class="muted">(prepaid session)</span>`:""}</td><td class="num">${esc(i.qty||1)}</td><td class="num">${i.credit?"Prepaid":i.kind==="discount"?"":esc(money(i.price))}</td><td class="num">${esc(money(lineAmt(i)))}</td></tr>`).join("")}
+    ${(v.items||[]).map(i=>`<tr><td>${esc(i.desc||BILL_KINDS[i.kind]||"Item")}${i.for?` <span class="muted">· for ${esc(i.for)}</span>`:""}${i.kind==="package"&&i.sessions?` <span class="muted">(${esc(i.sessions)} sessions)</span>`:""}${i.credit?` <span class="muted">(prepaid session)</span>`:""}</td><td class="num">${esc(i.qty||1)}</td><td class="num">${i.credit?"Prepaid":i.kind==="discount"?"":esc(money(i.price))}</td><td class="num">${esc(money(lineAmt(i)))}</td></tr>`).join("")}
     </tbody><tfoot>
     ${m.disc?`<tr><td colspan="3">Subtotal</td><td class="num">${money(m.sub)}</td></tr><tr><td colspan="3">${esc(v.discount?.label||"Discount")}${v.discount?.type==="pct"?` (${esc(v.discount.value)}%)`:""}</td><td class="num">-${money(m.disc)}</td></tr>`:""}
     <tr><td colspan="3"><b>Total</b></td><td class="num"><b>${money(m.total)}</b></td></tr>
@@ -1060,7 +1063,7 @@ function invPrint(v, name){
     body{font:14px/1.5 Georgia,serif;color:#222;max-width:720px;margin:40px auto;padding:0 24px} h1{font-weight:normal;margin:0 0 4px} .muted{color:#777}
     table{width:100%;border-collapse:collapse;margin:24px 0} th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left} .num{text-align:right} tfoot td{border:0}
     .top{display:flex;justify-content:space-between;gap:24px} .acc{color:#087C9C}</style></head><body>
-    <div class="top"><div><h1 class="acc">Invoice</h1><div>#${esc(v.number||"")}</div><div class="muted">Date ${esc(fmtDate(v.date))}${v.due?` · Due ${esc(fmtDate(v.due))}`:""}</div></div>
+    <div class="top"><div><h1 class="acc">Invoice</h1><div>#${esc(v.number||"")}</div><div class="muted">Date ${esc(fmtDate(v.date))}${v.serviceDate?` · Service date ${esc(fmtDate(v.serviceDate))}`:""}${v.due?` · Due ${esc(fmtDate(v.due))}`:""}</div></div>
     <div style="text-align:right"><b>${esc(PRACTICE.name)}</b><br>Wellness From Within<br>${esc(PRACTICE.phone)}<br>${esc(PRACTICE.site)}</div></div>
     <p><b>Bill to:</b> ${esc(name||"")}</p>
     ${invLinesHtml(v)}
@@ -1070,12 +1073,14 @@ function invPrint(v, name){
     <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
   w.document.close();
 }
-function invEmail(cid, v){
+async function invEmail(cid, v, invId){
   const to=clientEmail(cid); if(!to){ toast("This client has no email address on file"); return false; }
-  const first=clientFirst(cid), m=invMath(v), pay=v.pay||payInfo();
-  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${(+i.qty||1)>1&&i.kind!=="discount"?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money(lineAmt(i))}`).join("\n");
+  const first=clientFirst(cid), m=invMath(v);
+  let pay={...(v.pay||payInfo())};
+  if(pay.payLink && invId && m.bal>0){ const url=await squarePayLink(invId); if(url) pay={...pay, payLink:url}; }
+  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${i.for?` (for ${i.for})`:""}${(+i.qty||1)>1&&i.kind!=="discount"?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money(lineAmt(i))}`).join("\n");
   const subject=`Invoice #${v.number} from Wellness From Within`;
-  const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nHere is your invoice #${v.number}, dated ${fmtDate(v.date)}.\n\n${lines}\n${m.disc?`${v.discount?.label||"Discount"}: -${money(m.disc)}\n`:""}Total: ${money(m.total)}\n${m.paid?`Paid so far: ${money(m.paid)}\n`:""}Balance due: ${money(m.bal)}${v.due?` by ${fmtDate(v.due)}`:""}\n\n${v.note?v.note+"\n\n":""}${payLines(pay, v.number)}\n\nYou can also see this invoice in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\nThank you!\n\n${emailSign()}`;
+  const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nHere is your invoice #${v.number}, dated ${fmtDate(v.date)}${v.serviceDate?`, for services on ${fmtDate(v.serviceDate)}`:""}.\n\n${lines}\n${m.disc?`${v.discount?.label||"Discount"}: -${money(m.disc)}\n`:""}Total: ${money(m.total)}\n${m.paid?`Paid so far: ${money(m.paid)}\n`:""}Balance due: ${money(m.bal)}${v.due?` by ${fmtDate(v.due)}`:""}\n\n${v.note?v.note+"\n\n":""}${payLines(pay, v.number)}\n\nYou can also see this invoice in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\nThank you!\n\n${emailSign()}`;
   openMail(to, subject, body); logEmail(cid, subject, "invoice"); return true;
 }
 function receiptEmail(cid, v, p){
@@ -1088,6 +1093,8 @@ function receiptEmail(cid, v, p){
 /* practitioner: data */
 const invsOf = cid => Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filter(v=>v.clientId===cid).sort((a,b)=>(b.date||"").localeCompare(a.date||"") || (b.number||0)-(a.number||0));
 function clientBalance(cid){ return r2(invsOf(cid).filter(invOpen).reduce((t,v)=>t+invMath(v).bal,0)); }
+function famPeople(cid){ const base=cid.split("~")[0], to=(clientEmail(cid)||"").trim().toLowerCase();
+  return [...new Set(Object.keys(S.clients).filter(x=>!isFamilyShell(x) && (x===base||x.startsWith(base+"~")||(to && (clientEmail(x)||"").trim().toLowerCase()===to))).map(x=>clientName(x)).filter(Boolean))]; }
 function blankInvoice(cid, appt){
   const d=today(), due=new Date(d+"T12:00:00"); due.setDate(due.getDate()+14);
   const cd=(billSet().clientDiscounts||{})[cid];
@@ -1102,6 +1109,8 @@ function blankInvoice(cid, appt){
     kinds.forEach(k=>{ const p=k==="scan"?scanPick():price.find(x=>x.kind===k); v.items.push(p?{kind:k, desc:p.name, qty:1, price:+p.price||0}:{kind:k, desc:(APPT_TYPES[k]||BILL_KINDS[k])+(k===appt.type?` · ${fmtDate(appt.date)}`:""), qty:1, price:0}); });
   }
   if(!v.items.length) v.items.push({kind:"other", desc:"", qty:1, price:0});
+  if(appt) v.serviceDate=appt.date;
+  if(famPeople(cid).length>1) v.items.forEach(i=>{ if(!i.for) i.for=clientName(cid); });
   return v;
 }
 /* practitioner: client's Billing subtab */
@@ -1152,6 +1161,7 @@ function invEditor(id, ed, pp){
   const line=(i,n)=>`<div class="inv-line" data-li="${n}">
       <select class="li-pick" aria-label="From price list"><option value="">${price.length?"Price list…":"No price list yet"}</option>${price.map((p,k)=>`<option value="${k}">${esc(p.name)} · ${esc(money(p.price))}</option>`).join("")}</select>
       <input class="li-desc" placeholder="Description" value="${esc(i.desc||"")}">
+      <input class="li-for" list="iv-people" placeholder="For (name)" aria-label="Who this is for" value="${esc(i.for||"")}">
       <select class="li-kind" aria-label="Type">${Object.entries(BILL_KINDS).map(([k,l])=>`<option value="${k}" ${i.kind===k?"selected":""}>${l}</option>`).join("")}</select>
       <input class="li-qty" type="number" min="1" step="1" aria-label="Quantity" value="${esc(i.qty||1)}">
       <input class="li-price" type="number" min="0" step="0.01" aria-label="${i.kind==="discount"?"Amount off":"Price"}" title="${i.kind==="discount"?"Amount off, e.g. 15 for $15 off":"Price"}" value="${esc(i.price??0)}" ${i.kind==="discount"?'style="color:var(--warn,#a8562a)"':""}>
@@ -1160,8 +1170,10 @@ function invEditor(id, ed, pp){
       <button type="button" class="ghost small" data-lidel="${n}" aria-label="Remove line">×</button></div>`;
   return `<div class="formsec stack" id="inv-form" style="gap:10px">
     <h3>${ed.isNew?"New invoice":`Invoice #${esc(v.number||"")}`}</h3>
-    <div class="grid2"><label class="field"><span>Date</span><input id="iv-date" type="date" value="${esc(v.date||today())}"></label>
+    <div class="scan-grid" style="--cols:3"><label class="field"><span>Invoice date</span><input id="iv-date" type="date" value="${esc(v.date||today())}"></label>
+      <label class="field"><span>Service date</span><input id="iv-svc" type="date" value="${esc(v.serviceDate||"")}"></label>
       <label class="field"><span>Due</span><input id="iv-due" type="date" value="${esc(v.due||"")}"></label></div>
+    <datalist id="iv-people">${famPeople(id).map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
     <div class="stack" style="gap:6px"><span class="small muted">Items${pp.left>0?` · ${pp.left} prepaid session${pp.left===1?"":"s"} left: tick Prepaid to use one`:""}</span>${v.items.map(line).join("")}
       <div class="row" style="gap:6px"><button type="button" class="small" data-act="liadd">Add line</button><button type="button" class="small" data-act="liadddisc">Add discount line</button></div></div>
     <div class="grid2"><label class="field"><span>Discount (optional)</span><input id="iv-dlabel" placeholder="e.g. Family discount" value="${esc(v.discount?.label||"")}"></label>
@@ -1181,9 +1193,9 @@ function invEditor(id, ed, pp){
 function readInvForm(){
   const ed=S.invEdit; if(!ed || !$("#inv-form")) return;
   const v=ed.v;
-  v.date=$("#iv-date").value||today(); v.due=$("#iv-due").value||"";
+  v.date=$("#iv-date").value||today(); v.due=$("#iv-due").value||""; v.serviceDate=$("#iv-svc")?.value||"";
   v.items=[...document.querySelectorAll("#inv-form [data-li]")].map(el=>{ const q=c=>el.querySelector(c);
-    const i={kind:q(".li-kind").value, desc:q(".li-desc").value.trim(), qty:Math.max(1, Math.round(+q(".li-qty").value||1)), price:r2(q(".li-price").value)};
+    const i={kind:q(".li-kind").value, desc:q(".li-desc").value.trim(), for:(q(".li-for")?.value||"").trim(), qty:Math.max(1, Math.round(+q(".li-qty").value||1)), price:r2(q(".li-price").value)};
     if(i.kind==="package") i.sessions=Math.max(0, Math.round(+(q(".li-sess")?.value||0)));
     if(q(".li-credit")?.checked && ["scan","consult","imprint"].includes(i.kind)) i.credit=true;
     return i; });
@@ -1220,7 +1232,7 @@ async function saveInvoice(mode){
   try{ await S.db.doc("invoices/"+ed.id).set(data); }catch(e){ console.warn(e); toast("That didn't save. Please try again."); return; }
   S.inv={...S.inv, [ed.id]:data}; S.invEdit=null; S.invConfirm=null; S.invOpenId=ed.id;
   toast(mode==="draft"?"Draft saved":ed.v.status==="sent"?"Invoice updated":"Invoice sent to their portal");
-  if(mode==="sendmail") invEmail(data.clientId, data);
+  if(mode==="sendmail") await invEmail(data.clientId, data, ed.id);
   renderClients();
 }
 async function billingClick(e){
@@ -1229,7 +1241,7 @@ async function billingClick(e){
   if((b=g("[data-invtoggle]"))){ S.invOpenId = S.invOpenId===b.dataset.invtoggle?null:b.dataset.invtoggle; renderClients(); return true; }
   if((b=g("[data-invedit]"))){ const v=S.inv[b.dataset.invedit]; if(v){ S.invEdit={cid:S.sel, id:b.dataset.invedit, isNew:false, v:JSON.parse(JSON.stringify(v))}; S.invConfirm=null; S.payFor=null; renderClients(); $("#inv-form")?.scrollIntoView({block:"start"}); } return true; }
   if((b=g("[data-invpay]"))){ S.payFor=b.dataset.invpay; renderClients(); $("#pf-amt")?.focus(); return true; }
-  if((b=g("[data-invmail]"))){ const v=S.inv[b.dataset.invmail]; if(v && invEmail(v.clientId, v)) toast("Opened in Mail. Noted in this client's email history."); return true; }
+  if((b=g("[data-invmail]"))){ const v=S.inv[b.dataset.invmail]; if(v){ b.disabled=true; const ok=await invEmail(v.clientId, v, b.dataset.invmail); b.disabled=false; if(ok) toast("Opened in Mail. Noted in this client's email history."); } return true; }
   if((b=g("[data-invrcpt]"))){ const v=S.inv[b.dataset.invrcpt]; const p=(v?.payments||[]).slice(-1)[0]; if(v&&p&&receiptEmail(v.clientId, v, p)) toast("Opened in Mail. Noted in this client's email history."); return true; }
   if((b=g("[data-invprint]"))){ const v=S.inv[b.dataset.invprint]; if(v) invPrint(v, clientName(v.clientId)); return true; }
   if((b=g("[data-paydel]"))){ const id=b.dataset.paydel, v=S.inv[id]; if(!v) return true; const data={...v, payments:(v.payments||[]).filter(p=>p.id!==b.dataset.pid)};
@@ -1333,9 +1345,10 @@ function clientBillingView(){
   return `<div class="sheet stack"><h2>Billing</h2>
     <div class="row" style="gap:24px"><span><span class="small muted">Balance due</span><br><b style="font-size:22px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:22px">${pp.left}</b></span>`:""}</div>
-    ${bal>0&&firstOpen?payBlock(firstOpen.pay||{}, list.filter(invOpen).length===1?firstOpen.number:"", bal):bal<=0&&list.length?`<p class="small">You're all paid up. Thank you!</p>`:""}
+    ${bal>0&&firstOpen?(list.filter(invOpen).length===1?payBlock({...(firstOpen.pay||{}), invId:firstOpen.id}, firstOpen.number, invMath(firstOpen).bal):`<p class="small">Pay each invoice below.</p>`):bal<=0&&list.length?`<p class="small">You're all paid up. Thank you!</p>`:""}
     ${list.length?list.map(v=>{ const [st,cls]=invStatus(v), m=invMath(v); return `<details class="formsec" ${invOpen(v)?"open":""}><summary style="cursor:pointer;list-style:none"><div class="row" style="gap:8px"><span class="grow"><b>Invoice #${esc(v.number)}</b> · ${esc(fmtDate(v.date))}<br><span class="small muted">${esc(money(m.total))}${v.due&&invOpen(v)?` · due ${esc(fmtDate(v.due))}`:""}</span></span><span class="chip ${cls}">${st}</span></div></summary>
       <div class="stack" style="gap:8px;margin-top:8px">${invLinesHtml(v)}${v.note?`<p class="small">${esc(v.note)}</p>`:""}
+        ${invOpen(v)&&list.filter(invOpen).length>1?payBlock({...(v.pay||{}), invId:v.id}, v.number, m.bal):""}
         <div class="row" style="gap:6px"><button type="button" class="ghost small" data-cinvprint="${esc(v.id)}">Print / save PDF</button></div></div></details>`; }).join("")
       :`<div class="empty small">No invoices yet.</div>`}
     <p class="small muted">Questions about a bill? Send Dawn a message or text ${esc(PRACTICE.phone)}.</p></div>`;
@@ -4168,6 +4181,8 @@ function renderClient(){
     const wb=e.target.closest("[data-who]"); if(wb){ if(wb.dataset.who!==S.who){ S.cviewAuto=true; S.cview="home"; S.form="qest"; watchPerson(wb.dataset.who); window.scrollTo(0,0); } return; }
     const c2=e.target.closest("[data-cv2]"); if(c2){ S.cview=c2.dataset.cv2; renderClient(); window.scrollTo(0,0); return; }
     const cc=e.target.closest("[data-ccal]"); if(cc){ const p=(S.myPlans||[]).find(x=>x.id===cc.dataset.ccal); if(p) doseCalendar(p, personName(S.who)||""); return; }
+    const cpy=e.target.closest("[data-cpay]"); if(cpy){ const lbl=cpy.textContent; cpy.disabled=true; cpy.textContent="Opening secure checkout…"; const url=await squarePayLink(cpy.dataset.cpay);
+      if(url){ location.href=url; return; } const v=(S.myInv||[]).find(x=>x.id===cpy.dataset.cpay); const fallback=(v?.pay||{}).payLink; cpy.disabled=false; cpy.textContent=lbl; if(fallback){ toast("Opening the payment page. Please enter the invoice amount."); window.open(fallback,"_blank"); } else toast("Online payment isn't available right now. Please text Dawn."); return; }
     const cpi=e.target.closest("[data-cinvprint]"); if(cpi){ const v=(S.myInv||[]).find(x=>x.id===cpi.dataset.cinvprint); if(v) invPrint(v, personName(S.who)||S.myRec?.name||""); return; }
     const ic=e.target.closest("[data-ics]"); if(ic){ const a=apptsOf(S.myRec).find(x=>x.id===ic.dataset.ics); if(a) apptIcs(a); return; }
     const rq=e.target.closest("[data-resched]"); if(rq){ S.reschedFor=rq.dataset.resched; renderClient(); $("#resched-note")?.focus(); return; }
