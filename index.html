@@ -379,10 +379,8 @@ const QEST = [
     {id:"shipCity",label:"Shipping city",type:"text",showIf:["shipDifferent",true]},{id:"shipState",label:"Shipping state",type:"text",showIf:["shipDifferent",true]},{id:"shipZip",label:"Shipping ZIP code",type:"text",showIf:["shipDifferent",true]}]},
   {sec:"What would you most like help with?", note:"Most important first.", fields:[
     {id:"help1",jot:"Most important thing you would like help with",label:"1.",type:"textarea",wide:true},{id:"help2",jot:"Second thing you would like help with",label:"2.",type:"textarea",wide:true},{id:"help3",jot:"Third thing you would like help with",label:"3.",type:"textarea",wide:true}]},
-  {sec:"How you're doing right now", note:"Rate each from 1 to 10. These are added to your progress chart so you and Dawn can see how things change from scan to scan. Skip any that don't apply.", fields:[
-    {id:"help1Rate",label:"How much your #1 concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
-    {id:"help2Rate",label:"How much your #2 concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
-    {id:"help3Rate",label:"How much your #3 concern affects you now (1 = a little, 10 = a lot)",type:"scale"},
+  {sec:"How you're doing right now", note:"Rate each from 1 to 10. These are added to your progress chart so you and Dawn can see how things change from scan to scan. Skip any you'd rather not answer.", fields:[
+    {id:"wellbeing",label:"Overall, how are you feeling? (1 = very poorly, 10 = great)",type:"scale"},
     {id:"energy",label:"Energy (1 = very low, 10 = great)",type:"scale"},
     {id:"sleep",label:"Sleep (1 = very poor, 10 = great)",type:"scale"},
     {id:"mood",label:"Mood (1 = very low, 10 = great)",type:"scale"},
@@ -1274,6 +1272,7 @@ function clientBillingView(){
 
 /* ---------- progress: ratings from forms (intake, Qest4 pre-scan, follow-ups) + Dawn's notes at clients/<id>/progress/<pid> ---------- */
 const PROG_MEASURES = [
+  {k:"well",   label:"Overall wellbeing", hint:"higher is better"},
   {k:"main",   label:"Main concern",   hint:"lower is better", low:true},
   {k:"c2",     label:"Second concern", hint:"lower is better", low:true},
   {k:"c3",     label:"Third concern",  hint:"lower is better", low:true},
@@ -1292,8 +1291,7 @@ function progressEntries(c, qhist, notes, forClient){
     out.push({date:c.intakeSubmittedAt, src:"Homeopathy intake", vals:v, texts:{main:f.concern1||f.mainConcern||""}}); }
   const qs=(qhist||[]).slice(); if(!qs.length && c.qestSubmittedAt && c.qest) qs.push({form:c.qest, submittedAt:c.qestSubmittedAt});
   qs.forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Qest4 pre-scan form",
-    vals:{main:n10(f.help1Rate), c2:n10(f.help2Rate), c3:n10(f.help3Rate), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)},
-    texts:{main:f.help1||"", c2:f.help2||"", c3:f.help3||""}, note:f.sinceLast||""}); });
+    vals:{well:n10(f.wellbeing), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, note:f.sinceLast||""}); });
   (c.followupHistory||[]).forEach(h=>{ const f=h.form||{}; out.push({date:h.submittedAt, src:"Follow-up",
     vals:{main:n10(f.mainNow), energy:n10(f.energy), sleep:n10(f.sleep), mood:n10(f.mood), stress:n10(f.stress)}, overall:f.overall||"", note:f.changes||""}); });
   (notes||[]).filter(p=>!forClient||p.shared).forEach(p=>out.push({date:p.date||p.at, src:"Dawn's note", vals:{dawn:n10(p.rating)}, note:p.note||"", id:p.id, shared:!!p.shared}));
@@ -1325,7 +1323,7 @@ function progCharts(entries, keys){
     return pts.length ? progChart(m, pts) : ""; }).join("");
 }
 function progTimeline(entries, forClient){
-  const lab={main:"Main concern",c2:"2nd concern",c3:"3rd concern",energy:"Energy",sleep:"Sleep",mood:"Mood",stress:"Stress",dawn:forClient?"Dawn's rating":"Your rating"};
+  const lab={well:"Overall",main:"Main concern",c2:"2nd concern",c3:"3rd concern",energy:"Energy",sleep:"Sleep",mood:"Mood",stress:"Stress",dawn:forClient?"Dawn's rating":"Your rating"};
   return entries.slice().reverse().map(e=>{ const chips=Object.entries(e.vals||{}).filter(([,v])=>v!=null).map(([k,v])=>`<span class="chip">${esc(lab[k]||k)} ${v}</span>`).join("");
     const concerns=["main","c2","c3"].map(k=>(e.texts||{})[k]).filter(Boolean);
     return `<div class="dash-row" style="align-items:flex-start"><div class="stack" style="gap:4px;min-width:0;flex:1">
