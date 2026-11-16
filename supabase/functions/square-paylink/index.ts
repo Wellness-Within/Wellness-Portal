@@ -38,21 +38,54 @@ Deno.serve(async (req) => {
   if (!v || v.status !== "sent") return out({ error: "not found" }, 404);
   const bal = balance(v);
   if (!(bal > 0)) return out({ paid: true });
-  if (v.sqLink?.url && Math.abs((+v.sqLink.amount || 0) - bal) < 0.005) return out({ url: v.sqLink.url, amount: bal });
+  const sig = JSON.stringify([v.items || [], v.discount || {}, bal]);
+  if (v.sqLink?.url && Math.abs((+v.sqLink.amount || 0) - bal) < 0.005 && v.sqLink.sig === sig) return out({ url: v.sqLink.url, amount: bal });
 
   const locs = await sq("locations");
   const loc = (locs?.locations || []).find((l: Rec) => l.status === "ACTIVE") || (locs?.locations || [])[0];
   if (!loc) return out({ error: "square unavailable" }, 502);
   const who = (v.items || []).map((i: Rec) => i.for).filter(Boolean);
   const name = `Wellness From Within – Invoice #${v.number}`.slice(0, 255);
+  // Itemized checkout (each invoice line + discounts) so the client sees the same breakdown as the invoice.
+  // Falls back to a single "Invoice #" line when something has already been paid or the totals don't match exactly.
+  const cents = (n: any) => Math.round(Math.abs(+n || 0) * 100);
+  let order: Rec | null = null;
+  if (!(v.payments || []).length) {
+    const items = (v.items || []).filter((i: Rec) => !i.credit && i.kind !== "discount" && cents(i.price) > 0 && (+i.qty || 0) > 0);
+    const line_items = items.map((i: Rec) => ({
+      name: (`${i.desc || "Item"}${i.for ? " – for " + i.for : ""}`).slice(0, 500),
+      quantity: String(+i.qty || 1),
+      base_price_money: { amount: cents(i.price), currency: "USD" },
+    }));
+    const discounts: Rec[] = [];
+    (v.items || []).filter((i: Rec) => !i.credit && i.kind === "discount").forEach((i: Rec) => {
+      const a = Math.round(Math.abs((+i.qty || 1) * (+i.price || 0)) * 100);
+      if (a > 0) discounts.push({ name: (i.desc || "Discount").slice(0, 255), type: "FIXED_AMOUNT", amount_money: { amount: a, currency: "USD" }, scope: "ORDER" });
+    });
+    const d = v.discount || {};
+    if (+d.value > 0) discounts.push(d.type === "pct"
+      ? { name: (d.label || "Discount").slice(0, 255), type: "FIXED_PERCENTAGE", percentage: String(+d.value), scope: "ORDER" }
+      : { name: (d.label || "Discount").slice(0, 255), type: "FIXED_AMOUNT", amount_money: { amount: cents(d.value), currency: "USD" }, scope: "ORDER" });
+    // only use it when it adds up to the invoice balance to the cent (percent discounts are checked the same way Square rounds)
+    let sub = items.reduce((t: number, i: Rec) => t + Math.round((+i.qty || 1) * cents(i.price)), 0);
+    discounts.filter(x => x.type === "FIXED_AMOUNT").forEach(x => sub -= x.amount_money.amount);
+    discounts.filter(x => x.type === "FIXED_PERCENTAGE").forEach(x => sub -= Math.round(sub * (+x.percentage) / 100));
+    if (line_items.length && sub === Math.round(bal * 100)) order = { location_id: loc.id, reference_id: `Invoice #${v.number}`.slice(0, 40), line_items, ...(discounts.length ? { discounts } : {}) };
+  }
   const res = await sq("online-checkout/payment-links", {
     idempotency_key: crypto.randomUUID(),
-    quick_pay: { name, price_money: { amount: Math.round(bal * 100), currency: "USD" }, location_id: loc.id },
+    ...(order ? { order } : { quick_pay: { name: (v.payments || []).length ? `${name} – remaining balance` : name, price_money: { amount: Math.round(bal * 100), currency: "USD" }, location_id: loc.id } }),
     payment_note: `Invoice #${v.number}${who.length ? " · " + [...new Set(who)].join(", ") : ""}`.slice(0, 500),
     checkout_options: { redirect_url: "https://portal.dawnspain.com/#billing", ask_for_shipping_address: false },
   });
-  const link = res?.payment_link;
+  let link = res?.payment_link;
+  const got = res?.related_resources?.orders?.[0]?.total_money?.amount;
+  if (order && link?.url && got != null && got !== Math.round(bal * 100)) {
+    // totals disagree: don't risk the wrong amount, use a plain one-line link instead
+    const res2 = await sq("online-checkout/payment-links", { idempotency_key: crypto.randomUUID(), quick_pay: { name, price_money: { amount: Math.round(bal * 100), currency: "USD" }, location_id: loc.id }, payment_note: `Invoice #${v.number}`, checkout_options: { redirect_url: "https://portal.dawnspain.com/#billing", ask_for_shipping_address: false } });
+    link = res2?.payment_link;
+  }
   if (!link?.url) return out({ error: "square unavailable" }, 502);
-  await admin.rpc("doc_merge", { p_path: "invoices/" + id, p_data: { sqLink: { url: link.url, amount: bal, orderId: link.order_id || "", id: link.id || "", at: new Date().toISOString() }, sqOrderIds: [...(v.sqOrderIds || []), link.order_id].filter(Boolean).slice(-10) } });
+  await admin.rpc("doc_merge", { p_path: "invoices/" + id, p_data: { sqLink: { url: link.url, amount: bal, sig, orderId: link.order_id || "", id: link.id || "", at: new Date().toISOString() }, sqOrderIds: [...(v.sqOrderIds || []), link.order_id].filter(Boolean).slice(-10) } });
   return out({ url: link.url, amount: bal });
 });
