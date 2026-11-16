@@ -633,9 +633,9 @@ function clientFirst(id){ const c=S.clients[id]||{}; return (c.intake?.nickname 
 function notifyMail(id, kind){
   const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return; }
   const first=clientFirst(id);
-  const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
-  const hi = fam ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
-  const whose = fam && first ? `${first}'s` : "Your";
+  const fr=famRole(id), dep=fr.fam && !fr.holder && first && first!=="Unnamed", fam=fr.fam;
+  const hi = dep ? `Hi ${fr.holderFirst||"there"},` : `Hi ${first && first!=="Unnamed"?first:"there"},`;
+  const whose = dep ? `${first}'s` : "Your";
   const sign=`With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`;
   const signin=`Just go to https://portal.dawnspain.com and sign in with this email address (${to}).${fam&&first?` Then choose ${first} at the top.`:""}`;
   const subject = `${whose} ${kind==="files" ? "Qest4 scan reports are" : "treatment plan is"} ready`;
@@ -671,6 +671,17 @@ async function markReminder(id, kind){
   Object.keys(all).sort().slice(0,-6).forEach(k=>delete all[k]);
   await S.db.doc("clients/"+id).update({reminders:all});
 }
+/* Family accounts: who is the person behind the sign-in (the account holder) and who is a family member under them */
+function famRole(id){
+  const base=id.split("~")[0], group=Object.keys(S.clients).filter(x=>x===base||x.startsWith(base+"~"));
+  const to=(clientEmail(id)||"").trim().toLowerCase();
+  const sameEmail=to?Object.keys(S.clients).filter(x=>(clientEmail(x)||"").trim().toLowerCase()===to):[id];
+  const people=[...new Set([...group, ...sameEmail])].filter(x=>!isFamilyShell(x));
+  if(people.length<2) return {fam:false, holder:true, holderFirst:clientFirst(id)};
+  let h=people.find(x=>S.clients[x]?.accountHolder) || (people.includes(base)&&!base.startsWith("c-")?base:null);
+  if(!h){ const local=to.split("@")[0].replace(/[^a-z]/g,""); const m=people.map(x=>({x, f:String(clientFirst(x)||"").toLowerCase().replace(/[^a-z]/g,"")})).filter(o=>o.f.length>=3 && local.includes(o.f)).sort((a,b)=>b.f.length-a.f.length)[0]; h=m?m.x:null; }
+  return {fam:true, holder:h===id, holderFirst:h?clientFirst(h):""};
+}
 function reminderZoom(o, nm, hi){
   const subject = o.kind==="week" ? (o.named?`${nm}'s next scan and consult are coming up`:"Your next scan and consult are coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next scan and consult`:"Checking in: time for your next scan and consult");
@@ -684,12 +695,12 @@ function reminderZoom(o, nm, hi){
     : `Just reply with a few days and times that work for you, and I'll set up our Zoom call and send you the details. Or, if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}`;
   const form = o.formIn
     ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need.`
-    : `Before we meet, please fill out ${o.named?"the":"your"} pre-scan form in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${o.named?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+    : `Before we meet, please fill out ${o.named?"the":"your"} pre-scan form in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${sched}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
 function reminderText(o){ // o: {kind, first, named, to, whenLong, formIn, link, phone, sign}
-  const nm=o.first||"", hi=o.named?"Hi there,":`Hi ${nm||"there"},`;
+  const nm=o.first||"", hi=o.named?`Hi ${o.greet||"there"},`:`Hi ${nm||"there"},`;
   if(o.zoom) return reminderZoom(o, nm, hi);
   const subject = o.kind==="week" ? (o.named?`${nm}'s next Qest4 scan is coming up`:"Your next Qest4 scan is coming up")
                                   : (o.named?`Checking in: time for ${nm}'s next Qest4 scan`:"Checking in: time for your next Qest4 scan");
@@ -700,22 +711,19 @@ function reminderText(o){ // o: {kind, first, named, to, whenLong, formIn, link,
                : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan. A fresh scan shows how your body has responded since last time, so I can adjust your support to where you are today.`);
   const form = o.formIn
     ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need, and I'll be in touch soon with ${o.named?"the":"your"} scan date.`
-    : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${o.named?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+    : `When you're ready, just fill out ${o.named?"the":"your"} pre-scan form in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
 function scanMail(id, kind){
   const to=clientEmail(id); if(!to){ toast("This client has no email address on file"); return false; }
   const c=S.clients[id]||{}, first=clientFirst(id);
-  const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
-  const named = fam && first && first!=="Unnamed";
-  const hi = named ? "Hi there," : `Hi ${first && first!=="Unnamed"?first:"there"},`;
-  const your = named ? `${first}'s` : "your", Your = named ? `${first}'s` : "Your";
+  const fr=famRole(id); const named = fr.fam && !fr.holder && first && first!=="Unnamed";
   const sign=emailSign();
   const whenLong = c.nextVisit ? new Date(c.nextVisit+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}) : "";
   const bk=upcomingAppts(c).find(a=>a.type==="consult"||a.type==="qfu");
   const { subject, text: body } = reminderText({kind, first:named?first:(first&&first!=="Unnamed"?first:""), named, to, whenLong, formIn:scanFormIn(c), link:"https://portal.dawnspain.com/#nextscan", phone:PRACTICE.phone, sign,
-    zoom:!!c.zoomClient, booked: bk ? apptWhen(bk, true) : "", bookUrl:"https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO"});
+    zoom:!!c.zoomClient, greet:fr.holderFirst||"", pick:fr.fam, booked: bk ? apptWhen(bk, true) : "", bookUrl:"https://book.squareup.com/appointments/288jsx6xinmood/location/LX8779MFYATPH/services/D4EUQUWUAHGGDLNDBUHSQOWO"});
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   logEmail(id, subject, kind);
   return true;
@@ -823,14 +831,13 @@ function fillTemplate(t, id){
 function nextFollowAppt(c){ const ups=upcomingAppts(c); return ups.find(a=>a.type==="consult") || ups[0] || null; }
 function followupMail(id){
   const to=clientEmail(id), c=S.clients[id]||{}, first=clientFirst(id);
-  const fam = Object.keys(S.clients).filter(x => clientEmail(x).trim().toLowerCase()===to.trim().toLowerCase()).length > 1 || id.includes("~");
-  const named = fam && first && first!=="Unnamed";
+  const fr=famRole(id), named = fr.fam && !fr.holder && first && first!=="Unnamed", fam=fr.fam;
   const next = nextFollowAppt(c);
   const kindW = next && next.type!=="consult" ? "appointment" : "follow-up";
   const when = next ? apptWhen(next) : "[date and time]";
-  const hi = `Hi ${named ? "there" : (first && first!=="Unnamed" ? first : "there")},`;
+  const hi = `Hi ${named ? (fr.holderFirst||"there") : (first && first!=="Unnamed" ? first : "there")},`;
   const subject = `${named?`${first}'s`:"Your"} follow-up form before our ${kindW}`;
-  const body = `${hi}\n\nI'm looking forward to our ${kindW} on ${when}. Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked.\n\nGo straight to the form here:\nhttps://portal.dawnspain.com/#followup\n\nOr sign in at portal.dawnspain.com and choose Forms. Sign in with this email address (${to})${named?`, then choose ${first} at the top`:""}, and your answers will come straight to me.\n\nIf you have any questions, just reply to this email or text me at ${PRACTICE.phone}.\n\n${emailSign()}`;
+  const body = `${hi}\n\nI'm looking forward to our ${kindW} on ${when}. Before we meet, please take a few minutes to fill out ${named?`${first}'s`:"your"} homeopathy follow-up form so I can see how ${named?`${first} has`:"you've"} been doing since we last talked.\n\nGo straight to the form here:\nhttps://portal.dawnspain.com/#followup\n\nOr sign in at portal.dawnspain.com and choose Forms. Sign in with this email address (${to})${fam?`, then choose ${first} at the top`:""}, and your answers will come straight to me.\n\nIf you have any questions, just reply to this email or text me at ${PRACTICE.phone}.\n\n${emailSign()}`;
   return {id, tpl:"_fu", kind:"followup", subject, body, noAppt:!next};
 }
 function openMail(to, subject, body){ location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }
@@ -1897,6 +1904,7 @@ function detailsPane(id,c){
       <label class="field"><span>Display name</span><input id="d-name" value="${esc(c.name||"")}" placeholder="${esc(nm)}"></label>
       <label class="field"><span>Next scan due (drops finish)</span><input id="d-next" type="date" value="${esc(c.nextVisit||"")}"></label>
       <label class="check" style="align-self:end"><input type="checkbox" id="d-zoom" ${c.zoomClient?"checked":""}><span>Usually has a Zoom consult with their scan <span class="small muted">(scan reminders invite them to set up the call)</span></span></label>
+      ${famRole(id).fam?`<label class="check" style="align-self:end"><input type="checkbox" id="d-holder" ${famRole(id).holder?"checked":""}><span>Main person on this sign-in <span class="small muted">(emails speak to them directly; family members are mentioned by name)</span></span></label>`:""}
       ${mine ? `<label class="field"><span>Email they'll sign in with</span><input id="d-email" type="email" inputmode="email" value="${esc(c.email || clientEmail(id))}" placeholder="name@example.com"></label>` : ""}
     </div>
     <div class="row"><button type="button" class="primary" data-act="savedetails">Save details</button></div>
@@ -2219,7 +2227,7 @@ function bindClients(){
       else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
       else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; if(qest.delivery===IMPRINT_REMOTE && S.imprintFor===S.sel && S.imprint) qest.imprintPic=`Uploaded ${fmtDate(S.imprintAt)}`; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
       else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
-      else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim()}; const dn=$("#d-next"); if(dn) patch.nextVisit=dn.value||""; const dz=$("#d-zoom"); if(dz) patch.zoomClient=dz.checked; const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
+      else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim()}; const dn=$("#d-next"); if(dn) patch.nextVisit=dn.value||""; const dz=$("#d-zoom"); if(dz) patch.zoomClient=dz.checked; const dh=$("#d-holder"); if(dh){ patch.accountHolder=dh.checked; if(dh.checked){ const base=S.sel.split("~")[0]; for(const x of Object.keys(S.clients)) if(x!==S.sel && (x===base||x.startsWith(base+"~")) && S.clients[x].accountHolder) await S.db.doc("clients/"+x).update({accountHolder:false}); } } const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
       else if(act==="askmerge"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to}; renderClients(); }
       else if(act==="askfamily"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to, family:true}; renderClients(); }
       else if(act==="addfamily"){ const cm=S.confirmMerge; if(!cm || cm.from!==S.sel || !cm.family) return; a.disabled=true;
