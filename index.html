@@ -1000,12 +1000,13 @@ function clientName(id){
   return c.name || c.intake?.fullName || c.qest?.fullName || c.followup?.fullName || c.email || (S.profiles[id]?.name) || "Unnamed client";
 }
 /* ---------- billing: invoices/<id> = {clientId, number, date, due, items:[{kind,desc,qty,price,sessions,credit}], discount:{label,type,value}, status:"draft"|"sent"|"void", payments:[{id,date,amount,method,note}], note, pay:{...}, apptId} ---------- */
-const BILL_KINDS = {scan:"Qest4 scan", consult:"Consult", imprint:"Remote imprint", remedy:"Remedies", shipping:"Shipping", package:"Prepaid package", other:"Other"};
+const BILL_KINDS = {scan:"Qest4 scan", consult:"Consult", imprint:"Remote imprint", remedy:"Remedies", shipping:"Shipping", package:"Prepaid package", other:"Other", discount:"Discount"};
+const lineAmt = i => i.credit ? 0 : (i.kind==="discount" ? -1 : 1) * Math.abs((+i.qty||0)*(+i.price||0));
 const PAY_METHODS = ["Online payment","Venmo","Zelle","Cash App","Other"];
 const money = n => { const v=Math.round((+n||0)*100)/100; return (v<0?"-":"")+"$"+Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,","); };
 const r2 = n => Math.round((+n||0)*100)/100;
 function invMath(v){
-  const items=v?.items||[]; const sub=r2(items.reduce((t,i)=>t+(i.credit?0:(+i.qty||0)*(+i.price||0)),0));
+  const items=v?.items||[]; const sub=Math.max(0, r2(items.reduce((t,i)=>t+lineAmt(i),0)));
   const d=v?.discount||{}; const disc = !(+d.value) ? 0 : d.type==="pct" ? r2(sub*(+d.value)/100) : Math.min(sub, r2(d.value));
   const total=Math.max(0, r2(sub-disc)); const paid=r2((v?.payments||[]).reduce((t,p)=>t+(+p.amount||0),0));
   return {sub, disc, total, paid, bal:r2(total-paid)};
@@ -1043,7 +1044,7 @@ function payBlock(pay, no, bal){
 function invLinesHtml(v){
   const m=invMath(v);
   return `<table class="inv-tab"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>
-    ${(v.items||[]).map(i=>`<tr><td>${esc(i.desc||BILL_KINDS[i.kind]||"Item")}${i.kind==="package"&&i.sessions?` <span class="muted">(${esc(i.sessions)} sessions)</span>`:""}${i.credit?` <span class="muted">(prepaid session)</span>`:""}</td><td class="num">${esc(i.qty||1)}</td><td class="num">${i.credit?"Prepaid":esc(money(i.price))}</td><td class="num">${i.credit?money(0):esc(money((+i.qty||0)*(+i.price||0)))}</td></tr>`).join("")}
+    ${(v.items||[]).map(i=>`<tr><td>${esc(i.desc||BILL_KINDS[i.kind]||"Item")}${i.kind==="package"&&i.sessions?` <span class="muted">(${esc(i.sessions)} sessions)</span>`:""}${i.credit?` <span class="muted">(prepaid session)</span>`:""}</td><td class="num">${esc(i.qty||1)}</td><td class="num">${i.credit?"Prepaid":i.kind==="discount"?"":esc(money(i.price))}</td><td class="num">${esc(money(lineAmt(i)))}</td></tr>`).join("")}
     </tbody><tfoot>
     ${m.disc?`<tr><td colspan="3">Subtotal</td><td class="num">${money(m.sub)}</td></tr><tr><td colspan="3">${esc(v.discount?.label||"Discount")}${v.discount?.type==="pct"?` (${esc(v.discount.value)}%)`:""}</td><td class="num">-${money(m.disc)}</td></tr>`:""}
     <tr><td colspan="3"><b>Total</b></td><td class="num"><b>${money(m.total)}</b></td></tr>
@@ -1072,7 +1073,7 @@ function invPrint(v, name){
 function invEmail(cid, v){
   const to=clientEmail(cid); if(!to){ toast("This client has no email address on file"); return false; }
   const first=clientFirst(cid), m=invMath(v), pay=v.pay||payInfo();
-  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${(+i.qty||1)>1?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money((+i.qty||0)*(+i.price||0))}`).join("\n");
+  const lines=(v.items||[]).map(i=>`- ${i.desc||BILL_KINDS[i.kind]||"Item"}${(+i.qty||1)>1&&i.kind!=="discount"?` (${i.qty} x ${money(i.price)})`:""}: ${i.credit?"prepaid session":money(lineAmt(i))}`).join("\n");
   const subject=`Invoice #${v.number} from Wellness From Within`;
   const body=`Hi ${first&&first!=="Unnamed"?first:"there"},\n\nHere is your invoice #${v.number}, dated ${fmtDate(v.date)}.\n\n${lines}\n${m.disc?`${v.discount?.label||"Discount"}: -${money(m.disc)}\n`:""}Total: ${money(m.total)}\n${m.paid?`Paid so far: ${money(m.paid)}\n`:""}Balance due: ${money(m.bal)}${v.due?` by ${fmtDate(v.due)}`:""}\n\n${v.note?v.note+"\n\n":""}${payLines(pay, v.number)}\n\nYou can also see this invoice in your client portal under Billing:\nhttps://portal.dawnspain.com/#billing\n\nThank you!\n\n${emailSign()}`;
   openMail(to, subject, body); logEmail(cid, subject, "invoice"); return true;
@@ -1153,7 +1154,7 @@ function invEditor(id, ed, pp){
       <input class="li-desc" placeholder="Description" value="${esc(i.desc||"")}">
       <select class="li-kind" aria-label="Type">${Object.entries(BILL_KINDS).map(([k,l])=>`<option value="${k}" ${i.kind===k?"selected":""}>${l}</option>`).join("")}</select>
       <input class="li-qty" type="number" min="1" step="1" aria-label="Quantity" value="${esc(i.qty||1)}">
-      <input class="li-price" type="number" min="0" step="0.01" aria-label="Price" value="${esc(i.price??0)}">
+      <input class="li-price" type="number" min="0" step="0.01" aria-label="${i.kind==="discount"?"Amount off":"Price"}" title="${i.kind==="discount"?"Amount off, e.g. 15 for $15 off":"Price"}" value="${esc(i.price??0)}" ${i.kind==="discount"?'style="color:var(--warn,#a8562a)"':""}>
       <span class="li-extra">${i.kind==="package"?`<input class="li-sess" type="number" min="1" step="1" aria-label="Sessions in package" title="Sessions in this package" value="${esc(i.sessions||"")}" placeholder="Sessions">`
         :["scan","consult","imprint"].includes(i.kind)&&(i.credit||pp.left>0)?`<label class="check small"><input type="checkbox" class="li-credit" ${i.credit?"checked":""}><span>Prepaid</span></label>`:""}</span>
       <button type="button" class="ghost small" data-lidel="${n}" aria-label="Remove line">×</button></div>`;
@@ -1162,7 +1163,7 @@ function invEditor(id, ed, pp){
     <div class="grid2"><label class="field"><span>Date</span><input id="iv-date" type="date" value="${esc(v.date||today())}"></label>
       <label class="field"><span>Due</span><input id="iv-due" type="date" value="${esc(v.due||"")}"></label></div>
     <div class="stack" style="gap:6px"><span class="small muted">Items${pp.left>0?` · ${pp.left} prepaid session${pp.left===1?"":"s"} left: tick Prepaid to use one`:""}</span>${v.items.map(line).join("")}
-      <div><button type="button" class="small" data-act="liadd">Add line</button></div></div>
+      <div class="row" style="gap:6px"><button type="button" class="small" data-act="liadd">Add line</button><button type="button" class="small" data-act="liadddisc">Add discount line</button></div></div>
     <div class="grid2"><label class="field"><span>Discount (optional)</span><input id="iv-dlabel" placeholder="e.g. Family discount" value="${esc(v.discount?.label||"")}"></label>
       <div class="row" style="gap:6px;align-items:end"><label class="field" style="flex:1"><span>Amount</span><input id="iv-dval" type="number" min="0" step="0.01" value="${esc(v.discount?.value||"")}"></label>
         <select id="iv-dtype" style="width:auto"><option value="pct" ${v.discount?.type!=="amt"?"selected":""}>%</option><option value="amt" ${v.discount?.type==="amt"?"selected":""}>$</option></select></div></div>
@@ -1240,6 +1241,7 @@ async function billingClick(e){
   if(act==="invnew"){ S.invEdit={cid:S.sel, id:genId(), isNew:true, v:blankInvoice(S.sel)}; S.invConfirm=null; S.payFor=null; renderClients(); return true; }
   if(act==="invcancel"){ S.invEdit=null; S.invConfirm=null; renderClients(); return true; }
   if(act==="liadd"){ readInvForm(); S.invEdit.v.items.push({kind:"other",desc:"",qty:1,price:0}); renderClients(); document.querySelector("#inv-form [data-li]:last-of-type .li-desc")?.focus(); return true; }
+  if(act==="liadddisc"){ readInvForm(); S.invEdit.v.items.push({kind:"discount",desc:"Discount",qty:1,price:0}); renderClients(); const ls=document.querySelectorAll("#inv-form [data-li]"); const last=ls[ls.length-1]; last?.querySelector(".li-desc")?.select(); return true; }
   if(act==="invsave"){ a.disabled=true; await saveInvoice(a.dataset.mode); a.disabled=false; return true; }
   if(act==="invaskvoid"){ readInvForm(); S.invConfirm="void"; renderClients(); return true; }
   if(act==="invaskdel"){ readInvForm(); S.invConfirm="del"; renderClients(); return true; }

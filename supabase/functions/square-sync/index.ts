@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     const method = "Square" + (p.application_details?.square_product === "APPOINTMENTS" ? " (booking)" : "") + (p.receipt_number ? ` · receipt ${p.receipt_number}` : "");
     const pay = { id: pid.slice(0, 20), date: day, amount, method, note: [p.note, ...(order.line_items || []).map((i: Rec) => i.note).filter(Boolean)].filter(Boolean).join(" · ").slice(0, 200) };
     // An open invoice for this client: prefer one whose balance equals the payment; else the oldest open one.
-    const bal = (v: Rec) => { const sub = (v.items || []).reduce((t: number, i: Rec) => t + (i.credit ? 0 : (+i.qty || 0) * (+i.price || 0)), 0); const d = v.discount || {}; const disc = !(+d.value) ? 0 : d.type === "pct" ? r2(sub * (+d.value) / 100) : Math.min(sub, r2(d.value)); return r2(Math.max(0, r2(sub - disc)) - (v.payments || []).reduce((t: number, x: Rec) => t + (+x.amount || 0), 0)); };
+    const bal = (v: Rec) => { const sub = Math.max(0, (v.items || []).reduce((t: number, i: Rec) => t + (i.credit ? 0 : (i.kind === "discount" ? -1 : 1) * Math.abs((+i.qty || 0) * (+i.price || 0))), 0)); const d = v.discount || {}; const disc = !(+d.value) ? 0 : d.type === "pct" ? r2(sub * (+d.value) / 100) : Math.min(sub, r2(d.value)); return r2(Math.max(0, r2(sub - disc)) - (v.payments || []).reduce((t: number, x: Rec) => t + (+x.amount || 0), 0)); };
     const open = invs.filter(({ v }) => v.clientId === cid && v.status === "sent" && bal(v) > 0).sort((a, b) => String(a.v.date).localeCompare(String(b.v.date)));
     const target = open.find(({ v }) => Math.abs(bal(v) - amount) < 0.01) || (open.length === 1 && amount <= bal(open[0].v) + 0.01 ? open[0] : null);
     if (cid && target) {
