@@ -859,7 +859,7 @@ const isZoom = a => /zoom|video/i.test(a?.how||"");
 const zoomUrlOf = a => isZoom(a) ? (a.zoomUrl || (S.prac ? (S.settings?.zoomUrl||"") : "")) : "";
 const zoomLink = (a, cls) => { const u=zoomUrlOf(a); return u ? `<a class="btn ${cls||"small"}" href="${esc(u)}" target="_blank" rel="noopener" data-zoomlink>Join Zoom</a>` : ""; };
 const apptDelivery = a => a.type!=="scan" ? "" : (a.delivery || (a.imprint===false ? "none" : "imprint"));
-function apptLabel(a){ const d=apptDelivery(a); return (APPT_TYPES[a.type]||"Appointment") + (d==="imprint" ? " + imprint" : d==="ship" ? " + shipped treatment" : ""); }
+function apptLabel(a){ const d=apptDelivery(a); return (APPT_TYPES[a.type]||"Appointment") + (a.type==="scan"&&a.how ? ` + ${a.how==="Phone"?"phone":"Zoom"} consult` : "") + (d==="imprint" ? " + imprint" : d==="ship" ? " + shipped treatment" : ""); }
 function clientShipAddress(c){ const q=c?.qest||{};
   const lines = q.shipDifferent ? [q.shipStreet, [q.shipCity, [q.shipState, q.shipZip].filter(Boolean).join(" ")].filter(Boolean).join(", ")]
                                 : [q.street, [q.city, [q.state, q.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")];
@@ -975,8 +975,8 @@ function apptsPane(id){
         <label class="field"><span>Date</span><input id="ap-date" type="date" value="${esc(a.date||"")}"></label>
         <label class="field" id="ap-time-f"><span id="ap-time-l">Time (Eastern)${a.type==="consult"?"":" · optional"}</span><input id="ap-time" type="time" value="${esc(a.time||"")}"></label>
         <label class="field" id="ap-mins-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>Length</span><select id="ap-mins">${[30,45,60,90].map(m=>`<option value="${m}" ${(a.mins||60)===m?"selected":""}>${m} minutes</option>`).join("")}</select></label>
-        <label class="field" id="ap-how-f" ${a.type==="consult"||a.type==="qfu"?"":"hidden"}><span>How</span><select id="ap-how">${["","Zoom","Phone"].map(h=>`<option value="${h}" ${(a.how==="Video"?"Zoom":a.how)===h?"selected":""}>${h||"Not set"}</option>`).join("")}</select></label>
-        <label class="field" id="ap-zoom-f" ${(a.type==="consult"||a.type==="qfu")&&isZoom(a)?"":"hidden"} style="grid-column:1/-1"><span>Zoom link <span class="muted">(clients see a Join button)</span></span><input id="ap-zoom" type="url" placeholder="${esc(S.settings?.zoomUrl||"https://zoom.us/j/…")}" value="${esc(a.zoomUrl||"")}"></label>
+        <label class="field" id="ap-how-f" ${a.type==="consult"||a.type==="qfu"||a.type==="scan"?"":"hidden"}><span id="ap-how-l">${a.type==="scan"?"Consult with this scan":"How"}</span><select id="ap-how">${["","Zoom","Phone"].map(h=>`<option value="${h}" ${(a.how==="Video"?"Zoom":a.how)===h?"selected":""}>${h||(a.type==="scan"?"No consult":"Not set")}</option>`).join("")}</select></label>
+        <label class="field" id="ap-zoom-f" ${(a.type==="consult"||a.type==="qfu"||a.type==="scan")&&isZoom(a)?"":"hidden"} style="grid-column:1/-1"><span>Zoom link <span class="muted">(clients see a Join button)</span></span><input id="ap-zoom" type="url" placeholder="${esc(S.settings?.zoomUrl||"https://zoom.us/j/…")}" value="${esc(a.zoomUrl||"")}"></label>
       </div>
       <div class="grid2" id="ap-imp-f" ${a.type==="scan"?"":"hidden"}>
         <label class="field"><span>After the scan</span><select id="ap-deliv">${[["imprint","Remote imprint"],["ship","Ship treatment"],["none","Nothing"]].map(([v,l])=>`<option value="${v}" ${apptDelivery(a)===v?"selected":""}>${l}</option>`).join("")}</select></label>
@@ -2367,8 +2367,8 @@ function bindClients(){
   app.querySelectorAll("[data-remname]").forEach(inp => inp.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); document.querySelector(`[data-act="addremedy"][data-i="${inp.dataset.remname}"]`)?.click(); } });
   const fu = $("#file-up"); if(fu) fu.onchange = async () => { const id=S.sel; await uploadClientFiles(id, fu.files, $("#file-share-now")?.checked); fu.value=""; };
   const apShip = () => { const sc=$("#ap-type")?.value==="scan", sh=$("#ap-deliv")?.value==="ship"; const f=$("#ap-ship-f"); if(f) f.hidden=!(sc&&sh); };
-  const aph = $("#ap-how"); if(aph) aph.onchange = () => { const zf=$("#ap-zoom-f"), v=$("#ap-type").value; if(zf) zf.hidden=!((v==="consult"||v==="qfu") && aph.value==="Zoom"); };
-  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; ["ap-mins-f","ap-how-f"].forEach(i=>$("#"+i).hidden=!(v==="consult"||v==="qfu")); const zf=$("#ap-zoom-f"); if(zf) zf.hidden=!((v==="consult"||v==="qfu") && $("#ap-how").value==="Zoom"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
+  const aph = $("#ap-how"); if(aph) aph.onchange = () => { const zf=$("#ap-zoom-f"), v=$("#ap-type").value; if(zf) zf.hidden=!((v==="consult"||v==="qfu"||v==="scan") && aph.value==="Zoom"); };
+  const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; $("#ap-mins-f").hidden=!(v==="consult"||v==="qfu"); $("#ap-how-f").hidden=!(v==="consult"||v==="qfu"||v==="scan"); const hl=$("#ap-how-l"); if(hl) hl.textContent=v==="scan"?"Consult with this scan":"How"; const zf=$("#ap-zoom-f"); if(zf) zf.hidden=!((v==="consult"||v==="qfu"||v==="scan") && $("#ap-how").value==="Zoom"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
   const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
   const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
@@ -2409,7 +2409,7 @@ function bindClients(){
       if(act==="back"){ S.sel=null; S.compose=null; S.apptEdit=null; renderClients(); }
       else if(act==="apnew"){ S.apptEdit={cid:S.sel, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", imprint:true}}; renderClients(); }
       else if(act==="apcancel"){ S.apptEdit=null; renderClients(); }
-      else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-how")?.value||"", zoomUrl:($("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
+      else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-type").value==="imprint"?"":($("#ap-how")?.value||""), zoomUrl:($("#ap-type").value!=="imprint" && $("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
         if(!/^\d{4}-\d{2}-\d{2}$/.test(a.date)){ toast("Choose a date"); return; } if(a.type==="consult" && !a.time){ toast("Choose a time for the call"); return; }
         const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null; toast("Appointment saved"); renderClients(); }
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
