@@ -59,10 +59,10 @@ function reminderZoom(o: Rec, nm: string, hi: string){
                : `I hope you've been feeling well! Your drops should be finishing up about now, which makes this a lovely time for your next Qest4 scan and our Zoom consult. I always look forward to catching up, hearing how you've been, and talking through what your body needs next.`);
   const sched = o.booked
     ? `I'm looking forward to our Zoom call on ${o.booked}.`
-    : `Just reply with a few days and times that work for you, and I'll set up our Zoom call and send you the details. Or, if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}`;
+    : `This time, you're welcome to choose what feels right for you: a scan with our Zoom consult, or just the scan on its own.\n\nFor the scan and consult, just reply with a few days and times that work, or if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\n\nFor just the scan, simply fill out ${o.named?"the":"your"} pre-scan form and choose “Not this time, just the scan.” I'll take it from there.`;
   const form = o.formIn
     ? `Thank you for already sending ${o.named?"the":"your"} pre-scan form. I have everything I need.`
-    : `Before we meet, please fill out ${o.named?"the":"your"} pre-scan form in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
+    : `${o.booked?"Before we meet, please fill out":"Either way, here's where to fill out"} ${o.named?"the":"your"} pre-scan form in your client portal:\n${o.link}\nSign in with this email address (${o.to}).${(o.named||o.pick)?` Then choose ${nm} at the top.`:""} ${o.named?"Details":"Your details"} carry over, so it only takes a few minutes.`;
   const close = `If now isn't the right time, or you have any questions at all, just reply or text me at ${o.phone}. I'm always glad to hear how you're doing.`;
   return { subject, text:`${hi}\n\n${open}\n\n${sched}\n\n${form}\n\n${close}\n\n${o.sign}` };
 }
@@ -91,7 +91,7 @@ function reminderGroup(o: Rec){ // o: {kind, people:[{first, holder, formIn, zoo
   const open = o.kind==="week"
     ? `I hope you're all doing well! The drops for ${who} should be finishing up in about a week${o.whenLong?`, around ${o.whenLong}`:""}, so I wanted to reach out a little ahead of time. That's a great moment for new Qest4 scans, to see how things have shifted and what's needed next.`
     : `I hope you're all doing well! The drops for ${who} should be finishing up about now, which makes this a lovely time for new Qest4 scans. Fresh scans show how everyone has responded since last time, so I can adjust the support to where each of ${hasHolder?"you":"them"} is today.`;
-  const zoom = ppl.some(p=>p.zoom) ? `Just reply with a few days and times that work for you, and I'll set up our Zoom call and send you the details. Or, if you'd rather pick a time yourself, you can book it here:\n${o.bookUrl}\n\n` : "";
+  const zoom = ppl.some(p=>p.zoom) ? `This time, you're welcome to choose what feels right: scans with our Zoom consult, or just the scans on their own. For a Zoom consult, just reply with a few days and times that work, or book it here:\n${o.bookUrl}\nFor just the scans, choose “Not this time, just the scan” on the pre-scan form.\n\n` : "";
   const done=ppl.filter(p=>p.formIn), need=ppl.filter(p=>!p.formIn);
   const form = !need.length ? `Thank you for already sending the pre-scan forms. I have everything I need, and I'll be in touch soon with the scan dates.`
     : `When you're ready, just fill out a pre-scan form for ${list(need.map(p=>p.holder?"yourself":p.first))} in your client portal and I'll take it from there:\n${o.link}\nSign in with this email address (${o.to}), ${need.length===1?`then choose ${need[0].first} at the top. Details carry over, so it only takes a few minutes.`:"then choose each name at the top. Details carry over, so it only takes a few minutes each."}${done.length?` (Thank you, I already have the form for ${list(done.map(p=>p.holder?"you":p.first))}.)`:""}`;
