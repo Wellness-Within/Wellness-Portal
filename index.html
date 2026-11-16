@@ -998,7 +998,8 @@ function apptsPane(id){
 async function saveAppts(id, list){
   const clean=list.map(a=>{ const o={id:a.id==="nv"?genId().slice(0,10):a.id, type:a.type, date:a.date, time:a.time||"", note:a.note||""};
     if(a.type==="consult"||a.type==="qfu"){ o.mins=a.mins||60; o.how=a.how||""; }
-    if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; } }
+    if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; } if(a.how) o.how=a.how; }
+    if(o.how && /zoom|video/i.test(o.how) && a.zoomUrl) o.zoomUrl=a.zoomUrl;
     return o; });
   const sts=(S.clients[id]||{}).scanToSchedule, done=sts && clean.some(a=>a.type==="scan" && a.date>=(sts.orderedAt||""));
   await S.db.doc("clients/"+id).update({appointments:clean, reschedReq:null, ...(done?{scanToSchedule:null}:{})});
