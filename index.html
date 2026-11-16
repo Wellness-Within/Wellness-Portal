@@ -367,6 +367,7 @@ const INTAKE = [
 
 const AREAS = ["Sleep","Energy","Hormones","Skin","Stress","Digestion","Pain","Detox","Anxiety","Immune","Headaches","Weight","Mood","Allergies","Focus / brain fog","Emotional support"];
 const IMPRINT_REMOTE = "Remote imprint";
+const RX_OTHER = "Other item (remote imprint only)";
 const QEST = [
   {sec:"About you", fields:[
     {id:"fullName",label:"Full name",type:"text",req:true},{id:"dob",label:"Date of birth",type:"dob"},
@@ -395,7 +396,9 @@ const QEST = [
   {sec:"Your bioenergetic treatment", note:"How you'd like to receive the treatment from this scan.", fields:[
     {id:"zoomThis",label:"Would you like a Zoom consult with this scan?",type:"choice",options:["Yes, please","Not this time, just the scan"]},
     {id:"delivery",jot:"How would you like to receive your treatment",label:"Remote imprint or shipped?",type:"choice",req:true,options:[IMPRINT_REMOTE,"Shipped to me"]},
-    {id:"rxForm",jot:"Pellets or liquid",label:"Pellets or liquid?",type:"choice",req:true,options:["Pellets","Liquid"]},
+    {id:"rxForm",jot:"Pellets or liquid",label:"Pellets, liquid or another item?",type:"choice",req:true,options:["Pellets","Liquid",RX_OTHER]},
+    {id:"rxOther",jot:"Other item for the imprint",label:"What item? (for example a bracelet or a crystal)",type:"text",wide:true,showIf:["rxForm",RX_OTHER]},
+    {id:"quartz",jot:"Also imprint on a quartz crystal",label:"Also imprint my treatment onto a quartz crystal, at no charge (helpful if you're sensitive)",type:"check",wide:true,showIf:["delivery","Shipped to me"]},
     {id:"imprintPic",label:"Picture of your prepared remote imprint medium",type:"imprint",wide:true,showIf:["delivery",IMPRINT_REMOTE]}]},
   {sec:"Acknowledgement", fields:[
     {id:"ack",jot:"Wellness services acknowledgement",label:"Qest4 bioenergetic testing and homeopathy are wellness services. They do not diagnose, treat, or cure disease and are not a substitute for care from a licensed medical provider.",type:"check",wide:true,req:true},
@@ -564,7 +567,7 @@ window.addEventListener("hashchange", () => {
   store("wfw.wantForm", {h, t:Date.now()});
   if(S.me && !S.prac){ S.cviewAuto=false; S.cview="forms"; S.form = h==="#intake" ? "homeo" : h==="#followup" ? "followup" : "qest"; if(h==="#nextscan"){ S.wantNext=true; S.qestNew=true; } renderClient(); window.scrollTo(0,0); }
 });
-function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip","shipDifferent","shipStreet","shipCity","shipState","shipZip","delivery","rxForm"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
+function qestCarry(q){ q=q||{}; const o={}; ["fullName","dob","email","phone","country","street","city","state","zip","shipDifferent","shipStreet","shipCity","shipState","shipZip","delivery","rxForm","rxOther","quartz"].forEach(k=>{ if(q[k]) o[k]=q[k]; }); o.firstScan="No, I've had a scan before"; return o; }
 /* ---------- boot ---------- */
 (async function boot(){
   if(!window.supabase || !window.WFW_CONFIG){ $("#app").innerHTML=`<div class="sheet stack"><h1>Not set up yet</h1><p class="muted">The portal's connection settings are missing.</p></div>`; return; }
@@ -934,7 +937,7 @@ function apptsPane(id){
       </div>
       <div class="grid2" id="ap-imp-f" ${a.type==="scan"?"":"hidden"}>
         <label class="field"><span>After the scan</span><select id="ap-deliv">${[["imprint","Remote imprint"],["ship","Ship treatment"],["none","Nothing"]].map(([v,l])=>`<option value="${v}" ${apptDelivery(a)===v?"selected":""}>${l}</option>`).join("")}</select></label>
-        <span class="small muted" style="align-self:end;padding-bottom:10px">${wantsShipped(c)?"Their Qest4 form says: shipped to them.":c.qest?.delivery?"Their Qest4 form says: remote imprint.":""}</span>
+        <span class="small muted" style="align-self:end;padding-bottom:10px">${wantsShipped(c)?`Their Qest4 form says: shipped to them${c.qest?.quartz?", plus a quartz crystal imprint (no charge)":""}.`:c.qest?.delivery?`Their Qest4 form says: remote imprint${c.qest?.rxForm===RX_OTHER&&c.qest?.rxOther?` onto ${c.qest.rxOther}`:""}.`:""}</span>
       </div>
       <label class="field" id="ap-ship-f" ${a.type==="scan"&&apptDelivery(a)==="ship"?"":"hidden"}><span>Ship to (from their Qest4 form; edit if needed)</span><textarea id="ap-ship" style="min-height:84px">${esc(a.shipTo||clientShipAddress(c))}</textarea></label>
       <label class="field"><span>Note for the client (optional, they see this)</span><input id="ap-note" value="${esc(a.note||"")}" placeholder="e.g. Please have your bottle ready"></label>
@@ -1612,7 +1615,7 @@ function renderHome(){
     card("Messages", unread.length, unread.length?`<div>${unread.slice(0,6).map(id=>row(id,"messages",`<b>${nm(id)}</b><span class="small muted">${esc(fmtWhen(S.clients[id].lastMsg.at))}</span>`,'<span class="dot" aria-label="unread"></span>')).join("")}</div>`:empty("All caught up."), `<button type="button" class="ghost" data-htab="inbox">All messages</button>`),
     card("New forms in", forms.length, forms.length?`<div>${forms.slice(0,6).map(id=>row(id,"",`<b>${nm(id)}</b><span class="small muted">${esc(formKind(S.clients[id]))} · ${esc(fmtWhen(lastSubmitted(S.clients[id])))}</span>`,'<span class="chip acc">New</span>')).join("")}</div>`:empty("No new forms since you last looked.")),
     card("Website orders", orders.length, orders.length?`<div>${orders.slice(0,6).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">${esc(fmtDate(v.date))} · ${esc((v.items||[])[0]?.desc||"Order")}</span>`,`<b>${esc(money(invMath(v).total))}</b>`)).join("")}</div>`:empty("No website orders in the last 7 days.")),
-    card("To ship", ship.length, ship.length?`<div>${ship.slice(0,6).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Scan ${esc(dayLbl(a.date))}</span>`,'<span class="chip acc">To ship</span>')).join("")}</div>`:empty("Nothing waiting to ship this week.")),
+    card("To ship", ship.length, ship.length?`<div>${ship.slice(0,6).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Scan ${esc(dayLbl(a.date))}${S.clients[id].qest?.quartz?" · + quartz crystal":""}</span>`,'<span class="chip acc">To ship</span>')).join("")}</div>`:empty("Nothing waiting to ship this week.")),
     card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
@@ -1986,7 +1989,7 @@ function intakeChip(c){
 }
 function clientDetail(id){
   const c = S.clients[id];
-  const subs = [["qest","Qest4 form"],["intake","Homeopathy intake"],["followups","Follow-ups"],["consults","Consults"],["progress","Progress"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
+  const subs = [["qest","Qest4 Scan Intake"],["intake","Homeopathy intake"],["followups","Follow-ups"],["consults","Consults"],["progress","Progress"],["files","Reports & files"],["plans","Treatment plans"],["appts","Appointments"],["billing","Billing"],["messages","Messages"],["scans","Scan sessions"],["notes","Private notes"],["details","Details"]];
   let body = "";
   if(S.sub==="intake") body = `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="intake">Download PDF</button></div>` + intakeForm(c.intake||{}, "pi") + `<div class="row"><button type="button" class="primary" data-act="saveintake">Save intake</button><label class="check small"><input type="checkbox" id="pi-submitted" ${c.intakeStatus==="submitted"?"checked":""}> Mark as complete</label></div>`;
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
@@ -2478,7 +2481,9 @@ const PREP = {
   Liquid: {title:"How to prepare your remedy bottle", need:["A clean 2 oz bottle","Alcohol (vodka works well)","Filtered or bottled water","A measuring teaspoon"],
     steps:["Put 1 level teaspoon of alcohol in the bottle.","Fill the rest of the bottle with filtered or bottled water.","Close the bottle and set it somewhere it can stay undisturbed."], thing:"bottle"},
   Pellets: {title:"How to prepare your pellet jar", need:["A clean glass jar with a lid","Blank pellets"],
-    steps:["Fill the glass jar with blank pellets.","Close the jar and set it somewhere it can stay undisturbed."], thing:"jar"}
+    steps:["Fill the glass jar with blank pellets.","Close the jar and set it somewhere it can stay undisturbed."], thing:"jar"},
+  [RX_OTHER]: {title:"How to prepare your item", need:["The bracelet, crystal or other item you'd like your treatment imprinted onto"],
+    steps:["Set the item somewhere it can stay undisturbed."], thing:"item"}
 };
 function prepHtml(pre, rx){
   return Object.entries(PREP).map(([k,p])=>`<div class="notice" data-rx="${k}" ${rx && rx!==k ? "hidden" : ""} style="margin:0">
@@ -4253,12 +4258,12 @@ function renderClient(){
   } else {
     const denied = S.clientWrite==="denied"?`<div class="notice">Your portal access lets you view your plans but not save forms here. Please email your answers and photo to ${esc(PRACTICE.email)}, or ask Dawn for Contributor access.</div>`:"";
     const seg = `<div class="seg" role="tablist" aria-label="Which form">
-      <button type="button" role="tab" data-form="qest" aria-current="${S.form==="qest"}">Qest4 pre-scan form${qestIn?" ✓":""}</button>
+      <button type="button" role="tab" data-form="qest" aria-current="${S.form==="qest"}">Qest4 Scan Intake${qestIn?" ✓":""}</button>
       <button type="button" role="tab" data-form="homeo" aria-current="${S.form==="homeo"}">Homeopathy intake${homeoIn?" ✓":""}</button>
       <button type="button" role="tab" data-form="followup" aria-current="${S.form==="followup"}">Homeopathy follow-up</button></div>`;
     if(S.form==="qest"){
       body = `${seg}<div class="sheet stack">
-        <div><h2>Pre-scan wellness form</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
+        <div><h2>Qest4 Scan Intake</h2><p class="small muted">Please complete before your Qest4 scan. Everything you share is confidential.</p></div>
         ${denied}
         ${S.qestEdit && qestIn ? `<div class="notice">You're changing the form you sent${S.myRec?.qestSubmittedAt?" on "+esc(fmtDate(S.myRec.qestSubmittedAt)):""}. Make your changes, then press Send changes to Dawn.</div>
         ${photoBlock("cp", S.myPhoto, true, true, true)}
@@ -4355,6 +4360,8 @@ function renderClient(){
       if(isQ && !S.myPhoto && !vals.photoOnFile){ toast("Please add a recent photo of the person being scanned, or tick the box to use the photo on file"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
       if(miss.length){ const m0=miss[0]; if(m0.type==="choice"){ toast(`Please answer: ${m0.label}`); document.getElementById(`${pre}-${m0.id}-0`)?.scrollIntoView({block:"center"}); return; } }
       if(isQ && !miss.length && vals.delivery===IMPRINT_REMOTE && (!S.myImprint || imprintStale())){ toast(S.myImprint ? "Please upload a picture of the medium you've prepared for this scan" : "Please upload a picture of your prepared remote imprint medium"); document.getElementById("cs-imprintbox")?.scrollIntoView({block:"center"}); return; }
+      if(isQ && !miss.length && vals.delivery==="Shipped to me" && vals.rxForm===RX_OTHER){ toast("Another item works for remote imprint only. For shipping, please choose pellets or liquid"); document.getElementById(`${pre}-rxForm-0`)?.scrollIntoView({block:"center"}); return; }
+      if(isQ && !miss.length && vals.rxForm===RX_OTHER && !vals.rxOther){ toast("Please tell Dawn what item you'd like your treatment imprinted onto"); document.getElementById(`${pre}-rxOther`)?.focus(); return; }
       if(isQ && !miss.length && vals.delivery==="Shipped to me"){ const need=(vals.shipDifferent ? [["shipStreet","shipping address"],["shipCity","shipping city"],["shipZip","shipping ZIP code"]] : [["street","street address"],["city","city"],["zip","ZIP code"]]).filter(([k])=>!vals[k]); if(need.length){ toast(`To ship your treatment, please fill in your ${need.map(x=>x[1]).join(", ")}`); document.getElementById("cs-"+need[0][0])?.focus(); document.getElementById("cs-"+need[0][0])?.scrollIntoView({block:"center"}); return; } }
       if(miss.length){ toast(miss.some(f=>f.type==="check") ? "Please check the acknowledgement and sign at the end" : `Please fill in: ${miss.map(f=>f.label).join(", ")}`); const el=document.getElementById(pre+"-"+miss[0].id); if(el){ el.focus(); el.scrollIntoView({block:"center"}); } return; }
     }
