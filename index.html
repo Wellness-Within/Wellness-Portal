@@ -89,6 +89,7 @@ nav.tabs button{display:inline-flex;align-items:center;gap:7px}
 .prog-chart .grid{stroke:var(--line);stroke-width:1}.prog-chart .ax{font-size:11px;fill:var(--muted)}.prog-chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.prog-chart .dot{fill:var(--accent);stroke:var(--surface);stroke-width:2}.prog-chart .hit{fill:transparent}.prog-chart .pt:hover .dot{r:8}
 .prog-up{color:#2f7d4f}.prog-down{color:#a8562a}.dash-wide{grid-column:1/-1}.prog-row{gap:10px}.prog-row>span:first-child{flex:1;min-width:0}.spark{flex:none}.spark .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}.spark .dot{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
 .dash-link{width:100%;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 0;font:inherit;color:inherit;cursor:pointer;text-align:left}.dash-link:hover b{color:var(--accent)}.dash-link:last-child{border-bottom:0}
+.sched-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start}
 .inv-tab{width:100%;border-collapse:collapse;font-size:14px}.inv-tab th,.inv-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.inv-tab th{font-weight:600;color:var(--muted);font-size:12px}.inv-tab .num{text-align:right;white-space:nowrap}.inv-tab tfoot td{border:0;padding:3px 4px}
 .inv-line{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr) minmax(110px,1fr) 64px 92px auto auto;gap:6px;align-items:center}
 @media (max-width:760px){.inv-line{grid-template-columns:1fr 1fr}.inv-line .li-desc{grid-column:1/-1}}
@@ -896,17 +897,29 @@ function renderSchedule(){
   const rows=[]; Object.keys(S.clients).forEach(id=>upcomingAppts(S.clients[id]).forEach(a=>rows.push({id,a})));
   rows.sort((x,y)=>(x.a.date+(x.a.time||"")).localeCompare(y.a.date+(y.a.time||"")));
   const asks=Object.keys(S.clients).filter(id=>S.clients[id].reschedReq);
-  const groups={}; const t=today(); const wk=new Date(t+"T12:00:00"); wk.setDate(wk.getDate()+7); const wkS=wk.toISOString().slice(0,10);
-  rows.forEach(r=>{ const g=r.a.date===t?"Today":r.a.date<wkS?"Next 7 days":"Later"; (groups[g]=groups[g]||[]).push(r); });
-  $("#app").innerHTML=`<div class="sheet stack" style="max-width:860px">
-    <div class="row"><h1 class="grow">Schedule</h1><span class="small muted">${rows.length} upcoming</span></div>
+  const t=today(); const wk=new Date(t+"T12:00:00"); wk.setDate(wk.getDate()+7); const wkS=wk.toISOString().slice(0,10);
+  const grp=(list,dateOf,past)=>{ const g={}; list.forEach(r=>{ const d=dateOf(r); const k=d<t?past:d===t?"Today":d<wkS?"Next 7 days":"Later"; (g[k]=g[k]||[]).push(r); }); return g; };
+  const tile=d=>`<div class="date-tile" style="width:52px;height:54px;flex:none"><span>${esc(new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b style="font-size:22px">${new Date(d+"T12:00:00").getDate()}</b></div>`;
+  const ag=grp(rows, r=>r.a.date, "Earlier");
+  const booked = !rows.length?`<div class="empty small">Nothing booked. Add appointments from a client's Appointments tab.</div>`:
+    ["Today","Next 7 days","Later"].filter(g=>ag[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${ag[g].map(({id,a})=>`<button type="button" class="item" data-sched="${esc(id)}">
+      <div class="row" style="gap:12px;flex-wrap:nowrap">${tile(a.date)}
+      <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${esc(apptLabel(a))}${a.time?` · ${esc(fmtTime12(a.time))}`:""}${a.how?` · ${esc(a.how)}`:""}</div></div>
+      ${apptDelivery(a)==="ship"?(a.shippedAt?'<span class="chip ok">Shipped</span>':'<span class="chip acc">To ship</span>'):""}${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></button>`).join("")}</div>`).join("");
+  const dues=Object.keys(S.clients).map(id=>({id, nv:S.clients[id].nextVisit})).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.nv||"")).sort((a,b)=>a.nv.localeCompare(b.nv));
+  const dg=grp(dues, r=>r.nv, "Past due");
+  const drops = !dues.length?`<div class="empty small">No next-scan-due dates set. Add one on a client's Details or Appointments tab.</div>`:
+    ["Past due","Today","Next 7 days","Later"].filter(g=>dg[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${dg[g].map(({id,nv})=>{ const c=S.clients[id], dd=dayDiff(nv,t), bk=upcomingAppts(c).find(a=>a.type==="scan");
+      return `<button type="button" class="item" data-sched="${esc(id)}"><div class="row" style="gap:12px;flex-wrap:nowrap">${tile(nv)}
+        <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">Drops finish${dd<0?`ed ${-dd} day${dd===-1?"":"s"} ago`:dd===0?" today":` in ${dd} day${dd===1?"":"s"}`}</div></div>
+        ${bk?`<span class="chip ok">Scan ${esc(fmtDate(bk.date))}</span>`:c.scanToSchedule?'<span class="chip acc">Needs a scan date</span>':scanFormIn(c)?'<span class="chip acc">Form in</span>':dd<0?'<span class="chip warn">Past due</span>':""}</div></button>`; }).join("")}</div>`).join("");
+  $("#app").innerHTML=`<div class="stack" style="max-width:1180px;margin:0 auto">
+    <div class="row"><h1 class="grow">Schedule</h1></div>
     ${asks.length?`<div class="notice stack" style="gap:6px"><b>Date change requests</b>${asks.map(id=>`<button type="button" class="ghost" style="justify-content:flex-start;padding:2px 0" data-sched="${esc(id)}">${esc(clientName(id))} · asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</button>`).join("")}</div>`:""}
-    ${!rows.length?`<div class="empty small">Nothing scheduled. Add appointments from a client's Appointments tab.</div>`:
-      ["Today","Next 7 days","Later"].filter(g=>groups[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${groups[g].map(({id,a})=>`<button type="button" class="item" data-sched="${esc(id)}">
-        <div class="row" style="gap:12px;flex-wrap:nowrap"><div class="date-tile" style="width:56px;height:58px"><span>${esc(new Date(a.date+"T12:00:00").toLocaleDateString(undefined,{month:"short"}).toUpperCase())}</span><b style="font-size:24px">${new Date(a.date+"T12:00:00").getDate()}</b></div>
-        <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${esc(apptLabel(a))}${a.time?` · ${esc(fmtTime12(a.time))}`:""}${a.how?` · ${esc(a.how)}`:""}</div></div>
-        ${apptDelivery(a)==="ship"?(a.shippedAt?'<span class="chip ok">Shipped</span>':'<span class="chip acc">To ship</span>'):""}${S.clients[id].reschedReq?'<span class="chip warn">Asked to change</span>':""}</div></button>`).join("")}</div>`).join("")}
-  </div>`;
+    <div class="sched-cols">
+      <section class="sheet stack"><div class="row"><h2 class="grow" style="margin:0">Booked appointments</h2><span class="small muted">${rows.length} upcoming</span></div>${booked}</section>
+      <section class="sheet stack"><div class="row"><h2 class="grow" style="margin:0">Next scan due</h2><span class="small muted">when drops finish</span></div>${drops}</section>
+    </div></div>`;
   $("#app").onclick=e=>{ const b=e.target.closest("[data-sched]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.sched; S.sub="appts"; S.apptEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
 function messagesPane(id){
