@@ -209,7 +209,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 td.code{font-family:var(--f-mono);white-space:nowrap;color:var(--accent)}
 details.poly{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:10px 14px}
 details.poly summary{cursor:pointer;font-weight:600}
-.planview{display:flex;flex-direction:column;gap:14px}
+.planview{display:flex;flex-direction:column;gap:14px}.plan-narr{padding:14px 16px;border-left:3px solid var(--brand);background:var(--bg);border-radius:6px;line-height:1.55}
 .planview .rx{font-family:var(--f-mono);font-size:14px}
 .freq{font-weight:600}
 .contact{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:13.5px}
@@ -1675,9 +1675,10 @@ function renderHome(){
     card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
-  if(dueSoon.length) cards.splice(1,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv,bottle})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${bottle?`${esc(bottle)} · `:""}Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id], nv)?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
-  if(need.length) cards.splice(1,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">${n.source==="form"?"Form sent":"Ordered"} ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span>${n.zoom==="yes"?'<span class="chip ok">with Zoom</span>':n.zoom==="no"?'<span class="chip">scan only</span>':""}<span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
-  if(asks.length) cards.splice(1,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
+  { const fi=cards.findIndex(c=>c.includes("<h2>New forms in</h2>")); cards.splice(1,0,cards.splice(fi,1)[0]); }
+  if(dueSoon.length) cards.splice(3,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv,bottle})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${bottle?`${esc(bottle)} · `:""}Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id], nv)?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
+  if(need.length) cards.splice(dueSoon.length?4:3,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">${n.source==="form"?"Form sent":"Ordered"} ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span>${n.zoom==="yes"?'<span class="chip ok">with Zoom</span>':n.zoom==="no"?'<span class="chip">scan only</span>':""}<span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
+  if(asks.length) cards.splice(dueSoon.length?4:3,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
   if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind,nv,bottle})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"}${bottle?` · ${esc(bottle)}`:""} · ${esc(fmtDate(nv))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
   const hr=new Date().getHours(), hi=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
   $("#app").innerHTML=`<div class="stack" style="gap:20px;max-width:1180px;margin:0 auto">
@@ -2290,6 +2291,7 @@ function planEditor(ep){
       <label class="field"><span>Date</span><input id="pl-date" type="date" value="${esc(p.date)}"></label>
       <label class="field"><span>Visibility</span><select id="pl-status"><option value="draft" ${p.status!=="shared"?"selected":""}>Draft (only you)</option><option value="shared" ${p.status==="shared"?"selected":""}>Shared with client</option></select></label>
     </div>
+    <label class="field"><span>Narrative <span class="muted" style="font-weight:400">(shows at the top of the plan)</span></span><textarea id="pl-narr" style="min-height:110px" placeholder="Write to the client about this plan: what you saw, what you're working on, what to expect. Leave blank to skip.">${esc(p.narrative||"")}</textarea></label>
     ${p.previousId ? `<div class="notice ok small">Updated from the plan of ${esc(fmtDate(p.previousDate)||"an earlier date")}. That plan is kept as it was. ${p.status==="shared"?"":"When you share this one, the client sees it as their current plan and the earlier one moves to <b>Previous plans</b>."}</div>` : ""}
     ${p.replacedBy ? `<div class="notice small">This is a previous plan. A newer plan has replaced it; the client sees it under <b>Previous plans</b>.</div>` : ""}
     <p class="small muted" style="margin:0">Mix and match: each item can be a wet dose bottle, a TT-1 basket or pellets. Change an item's type with the menu next to its name.</p>
@@ -2340,11 +2342,13 @@ function readPlanForm(){
   if(v("pl-status")) ep.data.status = v("pl-status").value;
   if(v("pl-instr")) ep.data.instructions = v("pl-instr").value;
   if(v("pl-extra")) ep.data.extra = v("pl-extra").value;
+  if(v("pl-narr")) ep.data.narrative = v("pl-narr").value;
   document.querySelectorAll(".bottle").forEach(el => { const b = ep.data.bottles[+el.dataset.b]; if(!b) return;
     el.querySelectorAll("[data-bf]").forEach(inp => b[inp.dataset.bf] = inp.value); });
 }
 function planText(p, name){
   const lines = [`${p.title||"Treatment plan"} — ${name}`, fmtDate(p.date), ""];
+  if((p.narrative||"").trim()) lines.push(p.narrative.trim(), "");
   const groups=displayGroups(p);
   groups.flatMap(g=>g.items).forEach((b,i,all)=>{
     if(groups.length>1 && (i===0 || all[i-1]._form!==b._form)) lines.push(FORMS[b._form].many.toUpperCase(), "");
@@ -2403,7 +2407,7 @@ function bindClients(){
     const ai = e.target.closest("[data-apptics]"); if(ai){ const a=apptsOf(S.clients[S.sel]).find(x=>x.id===ai.dataset.apptics); if(a) apptIcs(a, clientName(S.sel)); return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
     const scn = e.target.closest("[data-scan]"); if(scn){ const x=S.scans.find(v=>v.id===scn.dataset.scan); if(x){ const {id:sid,...data}=x; openScan(S.sel, sid, data); } return; }
-    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",extra:p.extra||"",instructions:cleanInstr(p.instructions),bottles:p.bottles||[], ...(p.previousId?{previousId:p.previousId, previousDate:p.previousDate||""}:{}), ...(p.replacedBy?{replacedBy:p.replacedBy, replacedAt:p.replacedAt||""}:{})})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
+    const pl = e.target.closest("[data-plan]"); if(pl){ const p=S.plans.find(x=>x.id===pl.dataset.plan); S.editPlan={clientId:S.sel,id:p.id,data:JSON.parse(JSON.stringify({title:p.title||"",date:p.date||today(),status:p.status||"draft",form:p.form||"wet",extra:p.extra||"",narrative:p.narrative||"",instructions:cleanInstr(p.instructions),bottles:p.bottles||[], ...(p.previousId?{previousId:p.previousId, previousDate:p.previousDate||""}:{}), ...(p.replacedBy?{replacedBy:p.replacedBy, replacedAt:p.replacedAt||""}:{})})),dirty:false}; S.confirmPlanDel=false; renderClients(); return; }
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
@@ -2793,6 +2797,11 @@ async function planPdf(p, clientLabel){
   };
   const room=h=>{ if(y+h>H-FOOT){ doc.addPage(); header(false); } };
   header(true);
+  if((p.narrative||"").trim()){
+    p.narrative.trim().split(/\n+/).map(t=>t.trim()).filter(Boolean).forEach(par=>{
+      wrap(par, CW, SANS, 11).forEach(l=>{ room(16); font(SANS,11,ink); doc.text(l,M,y); y+=15.5; }); y+=7; });
+    y+=10;
+  }
   const bottles=displayItems(p).filter(b=>b.issue||b.remedies||b.freq||b.duration||b.notes);
   const mixed=new Set(bottles.map(b=>b._form)).size>1;
   const PAD=18, BADGE=26, IX=M+PAD+BADGE+14, IW=W-M-PAD-IX;
@@ -4518,6 +4527,7 @@ function doseCalendar(p, who){
 function planCard(p){
   return `<article class="sheet planview">
     <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">${esc(fmtDate(p.date))}</p><h2>${esc(!p.title||/^remedy plan$/i.test(p.title)?"Treatment plan":p.title)}</h2></div><div class="row" style="gap:6px"><button type="button" data-cplanpdf="${esc(p.id||"")}">Download PDF</button><button type="button" class="ghost" data-ccal="${esc(p.id||"")}">Dose calendar</button></div></div>
+    ${(p.narrative||"").trim()?`<div class="plan-narr"><p style="white-space:pre-wrap;margin:0">${esc(p.narrative.trim())}</p></div>`:""}
     ${(()=>{ const gs=displayGroups(p); return gs.map(g=>`${gs.length>1?`<h3 style="margin-top:4px">${esc(g.title)}</h3>`:g.form==="pellets"?`<p class="small muted" style="margin:0">Your remedies are pellets.</p>`:g.form==="tt1"?`<p class="small muted" style="margin:0">TT-1</p>`:""}`+g.items.map(b=>`<div class="bottle">
       <div class="bottle-head"><span class="bottle-num">${esc(b._label)}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
       ${b.remedies?`<ul class="rxlist">${remedyLines(b.remedies).map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
