@@ -1748,15 +1748,63 @@ function autoMailSection(){
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
 }
 /* ---------- client list filters ---------- */
-function clientLastSeen(c){ const past=apptsOf(c).filter(a=>a.date<=today()).map(a=>a.date); return [lastSubmitted(c||{}).slice(0,10), ...past, (c.createdAt||"").slice(0,10)].filter(Boolean).sort().pop()||""; }
+function clientLastSeen(c){ const past=apptsOf(c).filter(a=>a.date<=today()).map(a=>a.date); return [lastSubmitted(c||{}).slice(0,10), ...past, (c.square?.lastVisit||""), (c.importedAt?"":(c.createdAt||"").slice(0,10))].filter(Boolean).sort().pop()||""; }
 const CLIENT_FILTERS = {
   all:["All clients", ()=>true],
   attention:["New forms or messages", c=>isNewForm(c)||msgUnreadDawn(c)],
   month:["Scan this month", c=>{ const m=today().slice(0,7); return apptsOf(c).some(a=>a.type==="scan" && a.date.slice(0,7)===m); }],
   quiet:["Not seen in 3+ months", c=>{ const ls=clientLastSeen(c); if(!ls) return false; const d=new Date(today()+"T12:00:00"); d.setMonth(d.getMonth()-3); return ls<d.toISOString().slice(0,10) && !upcomingAppts(c).length; }],
   owes:["Owes money", (c,id)=>clientBalance(id)>0],
+  square:["Brought in from Square", c=>!!c.importedAt],
   unsched:["Needs a scan date", c=>!!needsScan(c)],
 };
+/* ---------- bring in clients from a Square customer export (CSV) ---------- */
+function parseCSV(text){
+  const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=ch; }
+    else if(ch==='"') q=true; else if(ch===','){ row.push(f); f=""; } else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=""; } else f+=ch; }
+  if(f||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>String(x).trim()));
+}
+function sqDate(v){ v=String(v||"").trim(); if(!v) return ""; let m=v.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0]; m=v.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/); if(m){ const y=m[3].length===2?"20"+m[3]:m[3]; return `${y}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`; } const d=new Date(v); return isNaN(d)?"":d.toISOString().slice(0,10); }
+function squareRows(text){
+  const rows=parseCSV(text.replace(/^\uFEFF/,"")); if(rows.length<2) return [];
+  const h=rows[0].map(x=>x.trim().toLowerCase()), col=(...names)=>{ for(const n of names){ const i=h.findIndex(x=>x===n); if(i>=0) return i; } for(const n of names){ const i=h.findIndex(x=>x.includes(n)); if(i>=0) return i; } return -1; };
+  const C={first:col("first name","given name"), last:col("last name","surname","family name"), email:col("email address","email"), phone:col("phone number","phone"),
+    street:col("street address 1","address line 1","address 1","street"), street2:col("street address 2","address line 2","address 2"), city:col("city","locality"), state:col("state","region"), zip:col("postal code","zip"),
+    bday:col("birthday"), memo:col("memo","note"), first1:col("first visit"), last1:col("last visit"), visits:col("transaction count","visits"), created:col("creation date","created")};
+  const g=(r,k)=>C[k]>=0?String(r[C[k]]||"").trim():"";
+  return rows.slice(1).map(r=>{ const name=[g(r,"first"),g(r,"last")].filter(Boolean).join(" "); return {name, email:g(r,"email").toLowerCase(), phone:g(r,"phone"), street:[g(r,"street"),g(r,"street2")].filter(Boolean).join(", "), city:g(r,"city"), state:g(r,"state"), zip:g(r,"zip"), bday:sqDate(g(r,"bday")), memo:g(r,"memo"), firstVisit:sqDate(g(r,"first1")), lastVisit:sqDate(g(r,"last1")), visits:g(r,"visits"), created:sqDate(g(r,"created"))}; }).filter(x=>x.name||x.email);
+}
+function squarePlan(list){
+  const byEmail=new Map(), byName=new Map();
+  Object.keys(S.clients||{}).forEach(id=>{ const e=(clientEmail(id)||"").trim().toLowerCase(); if(e) byEmail.set(e,id); byName.set(clientName(id).trim().toLowerCase(), id); });
+  const seen=new Set(); return list.map(x=>{ const key=x.email||x.name.toLowerCase(); if(seen.has(key)) return {...x, status:"dup"}; seen.add(key);
+    const match=(x.email&&byEmail.get(x.email)) || (x.name&&byName.get(x.name.toLowerCase())); return {...x, status: match?"have":"new", match}; });
+}
+function squareImportSection(){
+  const im=S.sqImport;
+  const body = !im ? `<label class="field"><span>Square customer file (.csv)</span><input type="file" id="sq-file" accept=".csv,text/csv"></label>`
+    : (()=>{ const nw=im.filter(x=>x.status==="new"), have=im.filter(x=>x.status==="have");
+      return `<div class="notice ok small"><b>${nw.length} new client${nw.length===1?"":"s"}</b> to add. ${have.length} already in the portal${im.length-nw.length-have.length?`, ${im.length-nw.length-have.length} repeated in the file`:""} (left as they are).</div>
+      ${nw.length?`<div style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px"><table><thead><tr><th>Name</th><th>Email</th><th>Last visit</th></tr></thead><tbody>${nw.map(x=>`<tr><td>${esc(x.name||"(no name)")}</td><td class="small">${esc(x.email)}</td><td class="small">${esc(x.lastVisit?fmtDate(x.lastVisit):"")}</td></tr>`).join("")}</tbody></table></div>`:""}
+      <div class="row" style="gap:8px">${nw.length?`<button type="button" class="primary" id="sq-go">Add ${nw.length} client${nw.length===1?"":"s"}</button>`:""}<button type="button" class="ghost" id="sq-cancel">${nw.length?"Cancel":"Done"}</button></div>`; })();
+  return `<div class="formsec stack" id="sq-imp"><h3>Bring in clients from Square</h3>
+    <p class="small muted">In your Square Dashboard: Customers \u2192 Directory \u2192 Import/Export \u2192 Export customers \u2192 All customers, then download the file and choose it here. You'll see who's new before anything is added. Clients already in the portal (same email or name) are skipped, nothing is emailed, and no one gets portal access until they sign in themselves.</p>
+    ${body}</div>`;
+}
+document.addEventListener("change", async e=>{ if(e.target?.id!=="sq-file") return; const f=e.target.files?.[0]; if(!f) return;
+  try{ const rows=squareRows(await f.text()); if(!rows.length){ toast("That file has no customers I can read. Use Square's Export customers file."); return; } S.sqImport=squarePlan(rows); renderSettings(); $("#sq-imp")?.scrollIntoView({block:"start"}); }catch(err){ console.warn(err); toast("Couldn't read that file."); } });
+document.addEventListener("click", async e=>{
+  if(e.target?.id==="sq-cancel"){ S.sqImport=null; renderSettings(); $("#sq-imp")?.scrollIntoView({block:"start"}); return; }
+  if(e.target?.id!=="sq-go" || !S.sqImport) return; const b=e.target; b.disabled=true;
+  const nw=S.sqImport.filter(x=>x.status==="new"), now=new Date().toISOString(); let n=0;
+  for(const x of nw){ b.textContent=`Adding ${++n} of ${nw.length}\u2026`;
+    const intake=Object.fromEntries(Object.entries({fullName:x.name, email:x.email, phone:x.phone, street:x.street, city:x.city, state:x.state, zip:x.zip, dob:x.bday}).filter(([,v])=>v));
+    const sq=Object.fromEntries(Object.entries({firstVisit:x.firstVisit, lastVisit:x.lastVisit, visits:x.visits, memo:x.memo}).filter(([,v])=>v));
+    try{ await S.db.doc("clients/"+rid("c-")).set({name:x.name||x.email, ...(x.email?{email:x.email}:{}), ...(x.phone?{phone:x.phone}:{}), intake, square:sq, importedAt:now, createdAt:(x.created?x.created+"T12:00:00.000Z":now)}); }catch(err){ console.warn(err); toast(`Stopped at ${x.name||x.email}. Try again; already-added clients will be skipped.`); b.disabled=false; return; } }
+  S.sqImport=null; toast(`Added ${nw.length} client${nw.length===1?"":"s"} from Square`); renderSettings(); });
 /* ---------- monthly summary + CSV ---------- */
 function monthlySummary(){
   const rows={}; const mk=m=>rows[m]=rows[m]||{m, income:0, scans:0, consults:0, newClients:0};
@@ -4243,6 +4291,7 @@ function renderSettings(){
     <div class="formsec stack" id="zoom-set"><h3>Zoom</h3>
       <p class="small muted">Your usual Zoom meeting link. It's added to Zoom appointments (including Square bookings), so you and the client get a “Join Zoom” button. You can change it on any single appointment.</p>
       <div class="row" style="gap:8px;align-items:end"><label class="field grow"><span>Zoom meeting link</span><input id="zs-url" type="url" placeholder="https://us02web.zoom.us/j/…" value="${esc(S.settings?.zoomUrl||"")}"></label><button type="button" class="primary" id="zs-save">Save</button></div></div>
+    ${squareImportSection()}
     ${autoMailSection()}
     ${planTplSettings()}
     ${backupSection()}
