@@ -686,7 +686,7 @@ function notifyMail(id, kind){
     ? `${hi}\n\n${whose} Qest4 scan and Wellness Summary reports are complete, and I've added them to your client portal. You can view all of your reports there anytime, under \u201cMy reports.\u201d\n\n${signin}\n\nTake your time reading through them. If anything raises a question or you'd like to talk it over, I'm always happy to hear from you.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`
     : `${hi}\n\n${whose} treatment plan is ready, and I've added it to your client portal. You'll find it under \u201cMy treatment plans,\u201d along with how often to take each remedy and for how long. You can come back to it anytime.\n\n${signin}\n\nIf anything is unclear, or you notice changes you'd like to share as you go, please reach out. I'm here to support you every step of the way.\n\nThank you for trusting me with your wellness journey.\n\n${sign}`;
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  logEmail(id, subject, kind);
+  logEmail(id, subject, kind==="files" ? "filesYou" : "planYou");
 }
 /* ---------- scan reminders (Dawn sends with one click from her Mail app) ---------- */
 const dayDiff = (a, b) => Math.round((new Date(a+"T12:00:00") - new Date(b+"T12:00:00")) / 864e5);
@@ -901,7 +901,7 @@ async function logEmail(id, subject, kind){
   try{ const c=S.clients?.[id]||{}; const log=[{at:new Date().toISOString(), subject:String(subject||"").slice(0,200), kind}, ...(c.emailLog||[])].slice(0,50);
     await S.db.doc("clients/"+id).update({emailLog:log}); }catch(e){ console.warn(e); }
 }
-const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready", plan:"Plan ready", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", invoice:"Invoice", receipt:"Receipt", welcome:"Website order welcome (automatic)", auto:"New-message email (automatic)"};
+const EMAIL_KINDS = {email:"Email", template:"Template", files:"Reports ready (automatic)", plan:"Plan ready (automatic)", filesYou:"Reports ready (you, via Mail)", planYou:"Plan ready (you, via Mail)", week:"Scan reminder (week before)", day:"Scan reminder (drops finished)", msg:"New-message heads-up", followup:"Follow-up form request", invoice:"Invoice", receipt:"Receipt", welcome:"Website order welcome (automatic)", auto:"New-message email (automatic)"};
 function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Within\nA Roaring Fork Homeopathy Associate\n${PRACTICE.phone}\n${PRACTICE.site}`; }
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
@@ -974,7 +974,7 @@ function emailHistory(id){
   const log=(S.clients[id]||{}).emailLog||[];
   return `<div class="formsec stack"><h3>Emails from the portal</h3>
     ${log.length?`<div class="stack" style="gap:4px">${log.map(e=>`<div class="row small" style="gap:8px"><span class="muted" style="min-width:150px">${esc(fmtWhen(e.at))}</span><span class="grow">${esc(e.subject||"(no subject)")}</span><span class="chip">${esc(EMAIL_KINDS[e.kind]||"Email")}</span></div>`).join("")}</div>
-      <p class="small muted">Emails you started from the portal and opened in Mail. Mail is where they're actually sent.</p>`
+      <p class="small muted">Ones marked automatic were sent by the portal. Ones marked “via Mail” were opened in your Mail app, so they only went out if you pressed Send there.</p>`
     :`<p class="small muted">None yet. Emails you start from the portal (reminders, “plan ready”, and the Email button) are listed here.</p>`}</div>`;
 }
 function renderInbox(){
@@ -2214,7 +2214,7 @@ function filesPane(id){
     <div class="row" style="gap:8px;flex-wrap:wrap">
       <label class="btn primary" for="file-up" style="cursor:pointer">Upload files</label><input type="file" id="file-up" class="sr" multiple accept=".pdf,image/*,.doc,.docx">
       <label class="check small"><input type="checkbox" id="file-share-now" checked> Share with client right away</label>
-      ${clientEmail(id) && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto" class="${autoOn("reports")?"ghost small":""}">${autoOn("reports")?"Email them again":"Let client know"}</button>` : ""}
+      ${clientEmail(id) && files.some(f=>f.status==="shared") ? `<button type="button" data-act="notifyfiles" data-id="${esc(id)}" title="Opens an email to the client in your Mail app" style="margin-left:auto" class="${autoOn("reports")?"ghost small":""}">${autoOn("reports")?"Email them again":"Let client know"}</button>${autoOn("reports")&&(S.clients[id]||{}).reportsEmailedAt?`<span class="small muted">Emailed automatically ${esc(fmtWhen(S.clients[id].reportsEmailedAt))}</span>`:""}` : ""}
     </div>
     <div id="file-status" class="small muted"></div>
     <div class="stack" style="gap:8px">${!S.filesLoaded&&S.filesFor===id?`<div class="empty">Loading…</div>`:files.length?files.map(f=>fileRow(f,true)).join(""):`<div class="empty small">No files yet.</div>`}</div>
