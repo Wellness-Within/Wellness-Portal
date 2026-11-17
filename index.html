@@ -2096,11 +2096,14 @@ async function loadRecentWork(){
 function dayAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
 function needsScan(c){
   if(!c) return null;
-  const id=Object.keys(S.clients||{}).find(k=>S.clients[k]===c), work=((S.recentWork||{})[id]||"").slice(0,10), done=(c.scanDoneAt||"").slice(0,10);
-  const cleared=at=>(work && work>=at) || (done && done>=at);
+  // compare exact times: a report or "Done" from earlier the same day doesn't count against a form that came in later
+  const ms=x=>{ if(!x) return 0; const v=Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(x)?x+"T00:00:00":x); return isNaN(v)?0:v; };
+  const id=Object.keys(S.clients||{}).find(k=>S.clients[k]===c), work=ms((S.recentWork||{})[id]), done=ms(c.scanDoneAt);
+  const cleared=t=>{ const v=ms(t); return !!v && (work>=v || done>=v); };
   if(c.scanToSchedule) return cleared(c.scanToSchedule.orderedAt||"") ? null : c.scanToSchedule;
   // the client sent it, or you entered it and marked it complete
-  const at=[c.qestSubmittedAt||"", c.qestCompletedAt||"", !c.qestSubmittedAt && c.qestStatus==="submitted" ? (c.qestUpdatedAt||"") : ""].sort().pop().slice(0,10); if(!at || cleared(at)) return null;
+  const full=[c.qestSubmittedAt||"", c.qestCompletedAt||"", !c.qestSubmittedAt && c.qestStatus==="submitted" ? (c.qestUpdatedAt||"") : ""].sort((x,y)=>ms(x)-ms(y)).pop();
+  const at=full.slice(0,10); if(!at || cleared(full)) return null;
   const ago=new Date(); ago.setDate(ago.getDate()-30); if(at < ago.toISOString().slice(0,10)) return null;
   if(apptsOf(c).some(a=>a.type==="scan" && a.date>=at)) return null;
   const by=new Date(at+"T12:00:00"); by.setDate(by.getDate()+7); const q=c.qest||{};
