@@ -149,6 +149,19 @@ textarea{min-height:72px;resize:vertical}
 .subtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 16px;overflow-x:auto}
 .subtabs button{border:0;background:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 12px;color:var(--muted)}
 .subtabs button[aria-current="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.client-nav{display:none}
+@media (min-width:1100px){
+  .cl-panes.has-sel{grid-template-columns:1fr}.cl-panes.has-sel>.list-pane{display:none}
+  .client-split{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px;align-items:start}
+  .client-tabs{display:none}
+  .client-nav{display:block;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 10px}
+  .client-nav .cn-back{color:var(--accent);border:0;padding:4px 10px;font-weight:600}
+  .client-nav .cn-name{padding:6px 10px 2px;font-weight:600;color:var(--ink)}
+  .client-nav .nav-group{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 4px 10px}
+  .client-nav button[data-sub]{display:flex;width:100%;justify-content:space-between;align-items:center;gap:6px;text-align:left;border:0;background:none;border-left:3px solid transparent;border-radius:0 8px 8px 0;padding:7px 10px;color:var(--muted)}
+  .client-nav button[data-sub]:hover{background:var(--soft);color:var(--ink)}
+  .client-nav button[data-sub][aria-current="true"]{border-left-color:var(--accent);background:var(--soft);color:var(--ink);font-weight:600}
+}
 fieldset{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
 legend{font-family:var(--f-display);font-size:17px;padding:0;margin-bottom:8px}
 .formsec{padding-block:14px;border-top:1px solid var(--line)} .formsec:first-child{border-top:0;padding-top:0}
@@ -2050,7 +2063,7 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
     : shown.map(id => { const c=S.clients[id]; const st=intakeChip(c);
         return `<button type="button" class="item" data-client="${esc(id)}" aria-current="${id===sel}"><b>${esc(clientName(id))}</b><span class="meta">${st}${id.includes("~")?'<span class="chip acc">Family account</span>':!id.startsWith("c-")?'<span class="chip acc">Portal account</span>':""}${c.nextVisit?`<span>Next scan due: ${esc(fmtDate(c.nextVisit))}${(c.bottles||[]).length?` (+${(c.bottles||[]).length} bottle${(c.bottles||[]).length>1?"s":""})`:""}</span>`:(c.bottles||[]).length?`<span>${(c.bottles||[]).length} bottle${(c.bottles||[]).length>1?"s":""} due</span>`:""}</span></button>`; }).join("") || `<div class="empty">No match.</div>`;
   $("#app").innerHTML = `
-  <div class="panes ${sel?"has-sel":""}">
+  <div class="panes cl-panes ${sel?"has-sel":""}">
     <section class="list-pane" aria-label="Clients">
       <div class="head">
         <div class="row"><h2 class="grow">Clients</h2><button type="button" class="primary" data-act="newclient">New client</button></div>
@@ -2123,15 +2136,18 @@ function clientDetail(id){
   if(S.sub==="notes") body = `<div class="stack"><p class="small muted">Only you can see these notes. Clients never see this tab.</p><textarea id="notesBox" style="min-height:260px" placeholder="Case notes, Qest4 session observations, follow-up ideas">${esc(S.notesFor===id?S.notes:"")}</textarea><div class="row"><button type="button" class="primary" data-act="savenotes">Save notes</button></div></div>`;
   if(S.sub==="details") body = detailsPane(id, c);
   ensureClientSubs(id);
-  return `<div class="sheet stack">
+  const subBtn=k=>{ const l=(subs.find(x=>x[0]===k)||[])[1]; return l?`<button type="button" role="tab" data-sub="${k}" aria-current="${S.sub===k}">${l}${k==="messages"&&msgUnreadDawn(c)?'<span class="dot" aria-label="new"></span>':""}</button>`:""; };
+  const sideNav=`<nav class="client-nav" aria-label="Client sections"><button type="button" class="ghost cn-back" data-act="back">\u2190 All clients</button><div class="cn-name">${esc(clientName(id))}</div>${SUB_GROUPS.map(([g,ks])=>`<span class="nav-group">${g}</span>`+ks.map(subBtn).join("")).join("")}</nav>`;
+  return `<div class="client-split">${sideNav}<div class="sheet stack">
     <button type="button" class="ghost back-btn" data-act="back">← All clients</button>
     <div class="row"><h1 class="grow">${esc(clientName(id))}</h1>${intakeChip(c)}</div>
     <div class="row" style="gap:8px"><p class="small muted grow">${[c.intake?.phone||c.qest?.phone||c.phone, c.intake?.email||c.qest?.email||c.email].filter(Boolean).map(esc).join(" · ") || "No contact details yet"}</p>${clientEmail(id)&&!(S.compose&&S.compose.id===id)?`<button type="button" class="small" data-act="cmstart">Email</button>`:""}</div>
     ${composePanel(id)}
-    <div class="subtabs" role="tablist">${subs.map(([k,l])=>`<button type="button" role="tab" data-sub="${k}" aria-current="${S.sub===k}">${l}${k==="messages"&&msgUnreadDawn(c)?'<span class="dot" aria-label="new"></span>':""}</button>`).join("")}</div>
+    <div class="subtabs client-tabs" role="tablist">${SUB_GROUPS.flatMap(([,ks])=>ks).map(subBtn).join("")}</div>
     ${body}
-  </div>`;
+  </div></div>`;
 }
+const SUB_GROUPS = [["Forms",["qest","intake","followups","consults"]],["Care",["plans","files","scans","progress"]],["Contact & schedule",["appts","messages","billing"]],["Private",["notes","details"]]];
 function detailsPane(id,c){
   const mine = id.startsWith("c-");
   const em = clientEmail(id).trim().toLowerCase();
