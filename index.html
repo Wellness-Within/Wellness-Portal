@@ -921,6 +921,23 @@ function fillTemplate(t, id){
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
     .replace(/\{nextScan\}/gi, (()=>{ const sc=upcomingAppts(c).find(x=>x.type==="scan"); return sc ? apptWhen(sc,true) : c.nextVisit ? fmtDate(c.nextVisit) : "your next scan"; })()).replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
 }
+/* automatic portal welcome for brand-new clients (runs while Dawn has the portal open) */
+const AUTO_WELCOME_FROM = "2026-11-17T18:00:00Z";
+async function autoWelcome(){
+  if(!S.prac || !S.clientsLoaded || S.autoWelcomeBusy || !autoOn("portalWelcome") || !S.settings.autoEmail) return;
+  if(S.autoWelcomeAt && Date.now()-S.autoWelcomeAt < 5*60000) return; S.autoWelcomeAt=Date.now();
+  const cutoff=new Date(Date.now()-10*60000).toISOString();
+  const fresh=Object.keys(S.clients).filter(id=>{ const c=S.clients[id]; return !isFamilyShell(id) && !c.importedAt && (c.createdAt||"")>=AUTO_WELCOME_FROM && (c.createdAt||"")<=cutoff
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail(id)||"") && !(c.emailLog||[]).some(x=>x.kind==="welcome"); });
+  const ids=inviteList(fresh); if(!ids.length) return;
+  S.autoWelcomeBusy=true;
+  try{ for(const id of ids){ const e=(clientEmail(id)||"").trim().toLowerCase(), at=new Date().toISOString();
+      const same=Object.keys(S.clients).filter(x=>(clientEmail(x)||"").trim().toLowerCase()===e);
+      for(const x of same) await S.db.doc("clients/"+x).update({invitedAt:at}).catch(()=>{});
+      if(!(await sendMsg(id, "dawn", welcomeMsg(id)))) for(const x of same) await S.db.doc("clients/"+x).update({invitedAt:null}).catch(()=>{});
+      await new Promise(r=>setTimeout(r,1500)); } }
+  finally{ S.autoWelcomeBusy=false; }
+}
 /* who can be invited: has an email, no portal sign-in of their own yet, not invited before; one per email */
 function inviteList(ids){
   const seen=new Set(), out=[];
@@ -1700,7 +1717,7 @@ function openClientAt(id, sub){
   S.sub=sub; renderTabs(); render(); window.scrollTo(0,0);
 }
 function renderHome(){
-  loadRecentWork();
+  loadRecentWork(); autoWelcome();
   const t=today(), wk=new Date(t+"T12:00:00"); wk.setDate(wk.getDate()+7); const wkS=wk.toISOString().slice(0,10);
   const ago=new Date(t+"T12:00:00"); ago.setDate(ago.getDate()-7); const agoS=ago.toISOString().slice(0,10);
   const ids=Object.keys(S.clients||{}), nm=id=>esc(clientName(id));
@@ -1752,7 +1769,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
+  const items=[["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
