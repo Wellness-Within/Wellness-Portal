@@ -2100,7 +2100,7 @@ function needsScan(c){
   const ms=x=>{ if(!x) return 0; const v=Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(x)?x+"T00:00:00":x); return isNaN(v)?0:v; };
   const id=Object.keys(S.clients||{}).find(k=>S.clients[k]===c), work=ms((S.recentWork||{})[id]), done=ms(c.scanDoneAt);
   const cleared=t=>{ const v=ms(t); return !!v && (work>=v || done>=v); };
-  if(c.scanToSchedule) return cleared(c.scanToSchedule.orderedAt||"") ? null : c.scanToSchedule;
+  if(c.scanToSchedule){ const n=c.scanToSchedule, when=n.at || (n.source==="form" && c.qestSubmittedAt) || n.orderedAt || ""; return cleared(when) ? null : n; }
   // the client sent it, or you entered it and marked it complete
   const full=[c.qestSubmittedAt||"", c.qestCompletedAt||"", !c.qestSubmittedAt && c.qestStatus==="submitted" ? (c.qestUpdatedAt||"") : ""].sort((x,y)=>ms(x)-ms(y)).pop();
   const at=full.slice(0,10); if(!at || cleared(full)) return null;
@@ -2116,7 +2116,9 @@ function scanNeedNote(c){
   const id=Object.keys(S.clients||{}).find(k=>S.clients[k]===c), work=(S.recentWork||{})[id]||"";
   const full=[c.qestSubmittedAt||"", c.qestCompletedAt||"", !c.qestSubmittedAt && c.qestStatus==="submitted" ? (c.qestUpdatedAt||"") : ""].sort((x,y)=>ms(x)-ms(y)).pop();
   let why;
-  if(!full) why="no Qest4 Scan Intake has been sent or marked complete";
+  if(c.scanToSchedule && !n){ const t=c.scanToSchedule, when=t.at || (t.source==="form" && c.qestSubmittedAt) || t.orderedAt; if(ms(c.scanDoneAt)>=ms(when)) why=`you tapped Done ${fmtWhen(c.scanDoneAt)}`; else if(ms(work)>=ms(when)) why=`a report, scan record or plan was saved ${fmtWhen(work)}, after their form`; }
+  if(why);
+  else if(!full) why="no Qest4 Scan Intake has been sent or marked complete";
   else if(ms(full) < Date.now()-30*864e5) why=`their last Qest4 form (${fmtDate(full.slice(0,10))}) is more than 30 days old`;
   else if(ms(c.scanDoneAt)>=ms(full)) why=`you tapped Done ${fmtWhen(c.scanDoneAt)}`;
   else if(ms(work)>=ms(full)) why=`a report, scan record or plan was saved ${fmtWhen(work)}, after their form`;
@@ -4589,7 +4591,7 @@ function renderClient(){
     if(isF && submit){ patch[key] = {fullName: vals.fullName||""}; patch.followupSubmittedAt = now; }
     if(submit) patch[key+"SubmittedAt"] = now;
     if(isQ && submit && !(S.myRec?.appointments||[]).some(a=>a.type==="scan" && a.date>=today()) && !S.myRec?.scanToSchedule){
-      const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":"", zoom: /^yes/i.test(vals.zoomThis||"") ? "yes" : vals.zoomThis ? "no" : ""}; }
+      const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), at:now, by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":"", zoom: /^yes/i.test(vals.zoomThis||"") ? "yes" : vals.zoomThis ? "no" : ""}; }
     if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now, ...(fq?{kind:"qest"}:{})}].slice(-60);
     try{
       const who=S.who||S.me;
