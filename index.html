@@ -908,6 +908,18 @@ function fillTemplate(t, id){
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
     .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
 }
+/* built-in message: intake received, scan scheduled (fills from the next scan appointment) */
+function scanScheduledMsg(id){
+  const c=S.clients[id]||{}, first=clientFirst(id), hi=`Hi ${first && first!=="Unnamed" ? first : "there"},`;
+  const a=upcomingAppts(c).find(x=>x.type==="scan"), d=a?apptDelivery(a):"", q=c.qest||{};
+  const rx=/pellet/i.test(q.rxForm||"")?"pellets":/liquid/i.test(q.rxForm||"")?"liquid drops":"";
+  const L=[hi, "", `Thank you for sending in your form! I've scheduled your Qest4 scan for ${a?apptWhen(a,true):"[date]"}.`, ""];
+  if(a && isZoom(a)) L.push("We'll have our Zoom consult then too. You'll find a Join Zoom button on your Home page in the portal when it's time.", "");
+  if(d==="ship") L.push(`I'll ship your treatment${rx?` (${rx})`:""} to you after your scan, to the address on your form. If anything has changed, just let me know.`, "");
+  else if(d==="imprint") L.push(`For your remote imprint, please prepare your ${rx==="pellets"?"jar of blank pellets":rx==="liquid drops"?"2 oz bottle (alcohol and water)":"2 oz bottle or jar of blank pellets"} and send me a picture before your scan day.`, "");
+  L.push("After your scan, your reports and treatment plan will be waiting for you here in the portal, and I'll let you know as soon as they're ready.", "", "If you have any questions before then, just reply here.", "", "Warmly,", "Dawn");
+  return L.join("\n");
+}
 function nextFollowAppt(c){ const ups=upcomingAppts(c); return ups.find(a=>a.type==="consult") || ups[0] || null; }
 function followupMail(id){
   const to=clientEmail(id), c=S.clients[id]||{}, first=clientFirst(id);
@@ -1039,6 +1051,7 @@ function messagesPane(id){
   const auto=!!S.settings.autoEmail;
   return `<div class="stack">
     ${!loaded?`<div class="empty small">Loading messages…</div>`:msgThread(S.msgs||[], "dawn", clientFirst(id)||clientName(id))}
+    <label class="field"><span>Start from a template</span><select id="msg-tpl"><option value="">Blank message</option><option value="_scan">Scan scheduled (form received)</option>${(S.settings.emailTemplates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>
     <label class="field"><span>Reply to ${esc(clientFirst(id)||clientName(id))}</span><textarea id="msg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write a message. ${esc(clientFirst(id)||"They")} sees it in their portal under Messages.">${esc(S.msgDraft?.[id]||"")}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="msgsend">Send message</button>
       ${auto?`<span class="small muted">It's also emailed to them, and their email replies come to your inbox.</span>`
@@ -2376,6 +2389,10 @@ function bindClients(){
   const apt = $("#ap-type"); if(apt) apt.onchange = () => { const v=apt.value; $("#ap-mins-f").hidden=!(v==="consult"||v==="qfu"); $("#ap-how-f").hidden=!(v==="consult"||v==="qfu"||v==="scan"); const hl=$("#ap-how-l"); if(hl) hl.textContent=v==="scan"?"Consult with this scan":"How"; const zf=$("#ap-zoom-f"); if(zf) zf.hidden=!((v==="consult"||v==="qfu"||v==="scan") && $("#ap-how").value==="Zoom"); $("#ap-imp-f").hidden=v!=="scan"; $("#ap-time-l").textContent="Time (Eastern)"+(v==="consult"?"":" · optional"); apShip(); };
   const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
+  const mt = $("#msg-tpl"); if(mt && mb) mt.onchange = () => { const id=S.sel; let body="";
+    if(mt.value==="_scan") body=scanScheduledMsg(id);
+    else if(mt.value){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===mt.value); body=t?fillTemplate(t.body, id):""; }
+    if(!mt.value) return; mb.value=body.slice(0,MSG_MAX); S.msgDraft={...(S.msgDraft||{}), [id]:mb.value}; mb.focus(); mb.setSelectionRange(0,0); mb.scrollTop=0; };
   const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
       subject: t ? fillTemplate(t.subject, S.sel) : S.compose.subject, body: t ? fillTemplate(t.body, S.sel) : `Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
