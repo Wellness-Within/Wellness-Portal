@@ -908,6 +908,29 @@ function fillTemplate(t, id){
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
     .replace(/\{nextScan\}/gi, (()=>{ const sc=upcomingAppts(c).find(x=>x.type==="scan"); return sc ? apptWhen(sc,true) : c.nextVisit ? fmtDate(c.nextVisit) : "your next scan"; })()).replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
 }
+/* built-in welcome: their portal account is set up (family-aware) */
+function famPeople(id){
+  const base=id.split("~")[0], to=(clientEmail(id)||"").trim().toLowerCase();
+  const group=Object.keys(S.clients).filter(x=>x===base||x.startsWith(base+"~"));
+  const same=to?Object.keys(S.clients).filter(x=>(clientEmail(x)||"").trim().toLowerCase()===to):[id];
+  return [...new Set([id, ...group, ...same])].filter(x=>!isFamilyShell(x));
+}
+function welcomeMsg(id, email){
+  const fr=famRole(id), first=clientFirst(id), me=(fr.fam && !fr.holder && fr.holderFirst) ? fr.holderFirst : (first && first!=="Unnamed" ? first : "there");
+  const em=clientEmail(id)||famPeople(id).map(x=>clientEmail(x)).find(Boolean)||"[your email]";
+  const names=famPeople(id).map(x=>clientFirst(x)).filter(n=>n && n!=="Unnamed");
+  const others=names.filter(n=>n!==me), list=a=>a.length<2?a.join(""):a.slice(0,-1).join(", ")+" and "+a[a.length-1];
+  const L=[`Hi ${me},`, "", others.length
+    ? `I've set up your Wellness From Within client portal, and I've added you and ${list(others)} together under one account, so you can find everything in one place.`
+    : "I've set up your Wellness From Within client portal, so you can find everything in one place.", "",
+    "How to sign in:", "1. Go to portal.dawnspain.com", `2. Enter your email: ${em}`, "3. Tap \u201cEmail me a sign-in link,\u201d then open that email and tap the link. No password needed.", "",
+    "Please use this same email each time so everything stays together. If you'd rather use a password, you can set one inside the portal and choose \u201cUse a password\u201d next time.", ""];
+  if(others.length) L.push(`Near the top of the page you'll see ${names.length===2?"both":"all"} of your names. Tap a name to see that person's forms, treatment plans and reports.`, "");
+  L.push("What you'll find:", "\u2022 Treatment plans: each remedy, how often to take it and for how long, with a PDF and a dose calendar you can print. Earlier plans are kept under Previous plans.", "\u2022 My forms: your intake and follow-up forms.", "\u2022 My reports: your scan reports, when you have them.", "\u2022 Messages: write to me anytime. My replies also come to your email, so you don't have to keep logging in to check.", "\u2022 Home: your next appointment and anything that needs your attention.", "",
+    "If anything doesn't work or looks confusing, just reply and I'll help.", "");
+  if(email) L.push(emailSign()); else L.push("Warmly,", "Dawn");
+  return L.join("\n");
+}
 /* built-in message: intake received, scan scheduled (fills from the next scan appointment) */
 function scanScheduledMsg(id){
   const c=S.clients[id]||{}, first=clientFirst(id), hi=`Hi ${first && first!=="Unnamed" ? first : "there"},`;
@@ -939,7 +962,7 @@ function composePanel(id){
   return `<div class="formsec stack" id="compose" style="gap:10px">
     <div class="row"><h3 class="grow">Email ${esc(clientName(id))}</h3><span class="small muted">${esc(clientEmail(id))}</span></div>
     ${cp.noAppt?`<div class="notice warn small">No upcoming appointment is on file for ${esc(clientName(id))}, so the date says [date and time]. Fill it in here, or add the appointment under Appointments first.</div>`:""}
-    ${true?`<label class="field"><span>Start from a template</span><select id="cm-tpl"><option value="">Blank email</option><option value="_fu" ${cp.tpl==="_fu"?"selected":""}>Follow-up form request</option>${tpls.map(t=>`<option value="${esc(t.id)}" ${cp.tpl===t.id?"selected":""}>${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>`
+    ${true?`<label class="field"><span>Start from a template</span><select id="cm-tpl"><option value="">Blank email</option><option value="_fu" ${cp.tpl==="_fu"?"selected":""}>Follow-up form request</option><option value="_welcome" ${cp.tpl==="_welcome"?"selected":""}>Welcome: your portal is set up</option>${tpls.map(t=>`<option value="${esc(t.id)}" ${cp.tpl===t.id?"selected":""}>${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>`
       :`<p class="small muted">Tip: save emails you send often as templates in Settings.</p>`}
     <label class="field"><span>Subject</span><input id="cm-subj" value="${esc(cp.subject||"")}"></label>
     <label class="field"><span>Message</span><textarea id="cm-body" style="min-height:200px">${esc(cp.body||"")}</textarea></label>
@@ -1051,7 +1074,7 @@ function messagesPane(id){
   const auto=!!S.settings.autoEmail;
   return `<div class="stack">
     ${!loaded?`<div class="empty small">Loading messages…</div>`:msgThread(S.msgs||[], "dawn", clientFirst(id)||clientName(id))}
-    <label class="field"><span>Start from a template</span><select id="msg-tpl"><option value="">Blank message</option><option value="_scan">Scan scheduled (form received)</option>${(S.settings.emailTemplates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>
+    <label class="field"><span>Start from a template</span><select id="msg-tpl"><option value="">Blank message</option><option value="_welcome">Welcome: your portal is set up</option><option value="_scan">Scan scheduled (form received)</option>${(S.settings.emailTemplates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>
     <label class="field"><span>Reply to ${esc(clientFirst(id)||clientName(id))}</span><textarea id="msg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write a message. ${esc(clientFirst(id)||"They")} sees it in their portal under Messages.">${esc(S.msgDraft?.[id]||"")}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="msgsend">Send message</button>
       ${auto?`<span class="small muted">It's also emailed to them, and their email replies come to your inbox.</span>`
@@ -2391,9 +2414,10 @@ function bindClients(){
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
   const mt = $("#msg-tpl"); if(mt && mb) mt.onchange = () => { const id=S.sel; let body="";
     if(mt.value==="_scan") body=scanScheduledMsg(id);
+    else if(mt.value==="_welcome") body=welcomeMsg(id);
     else if(mt.value){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===mt.value); body=t?fillTemplate(t.body, id):""; }
     if(!mt.value) return; mb.value=body.slice(0,MSG_MAX); S.msgDraft={...(S.msgDraft||{}), [id]:mb.value}; mb.focus(); mb.setSelectionRange(0,0); mb.scrollTop=0; };
-  const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
+  const tp = $("#cm-tpl"); if(tp) tp.onchange = () => { if(tp.value==="_fu"){ S.compose=followupMail(S.sel); renderClients(); return; } if(tp.value==="_welcome"){ S.compose={...S.compose, tpl:"_welcome", subject:"Your Wellness From Within client portal", body:welcomeMsg(S.sel, true)}; renderClients(); return; } const t=(S.settings.emailTemplates||[]).find(x=>x.id===tp.value); S.compose = {...S.compose, tpl:tp.value,
       subject: t ? fillTemplate(t.subject, S.sel) : S.compose.subject, body: t ? fillTemplate(t.body, S.sel) : `Hi ${fillTemplate("{first}", S.sel)},\n\n\n\n${emailSign()}`}; renderClients(); };
   const cf = $("#clientFilter"); if(cf) cf.oninput = () => { S.clientFilter = cf.value; const pos=cf.selectionStart; renderClients(); const n=$("#clientFilter"); n.focus(); n.setSelectionRange(pos,pos); };
   app.querySelectorAll("[data-bf]").forEach(inp => inp.addEventListener("input", () => { if(S.editPlan && !S.editPlan.dirty){ S.editPlan.dirty=true; } if(inp.dataset.bf==="freq"){ const s=inp.parentElement.querySelector("small"); if(s) s.textContent=plainFreq(inp.value);} }));
