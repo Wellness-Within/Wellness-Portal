@@ -45,12 +45,44 @@ async function sendFromPortal(req: Request, s: Rec) {
   return out({ sent: true });
 }
 
+// Email Dawn (her own inbox) when a client writes a portal message or sends a form. Called by the database (dawn-notify.sql).
+// Safety: only for a client message or form sent in the last 10 minutes that hasn't been pinged yet, so calling it any other way does nothing.
+const fresh = (t: string) => !!t && Date.now() - Date.parse(t) < 10 * 60_000;
+async function notifyDawn(path: string, form: string) {
+  const say = async (subject: string, text: string) => { await mail.sendMail({ from: `"Wellness From Within portal" <${Deno.env.get("SMTP_USER")}>`, to: REPLY_TO, subject, text }); };
+  const mm = /^clients\/([A-Za-z0-9~_-]{1,80})\/messages\/[A-Za-z0-9_-]{1,80}$/.exec(path);
+  if (mm) {
+    const { data: mrow } = await db.from("docs").select("data").eq("path", path).maybeSingle();
+    const m: Rec = mrow?.data || {};
+    if (m.from !== "client" || !fresh(m.at) || m.dawnPingedAt) return Response.json({ sent: false, why: "not a new client message" });
+    const { data: row } = await db.from("docs").select("data").eq("path", "clients/" + mm[1]).maybeSingle();
+    const who = nameOf(row?.data || {}) || emailOf(row?.data || {}) || "A client";
+    await db.rpc("doc_merge", { p_path: path, p_data: { dawnPingedAt: new Date().toISOString() } });
+    try { await say(`New portal message from ${who}`, `${who} wrote:\n\n${String(m.body || "").trim()}\n\n————————————\nReply in the portal: https://portal.dawnspain.com`); }
+    catch (e) { console.error("ping failed", (e as Error)?.message); return Response.json({ sent: false }, { status: 502 }); }
+    return Response.json({ sent: true });
+  }
+  const fm = /^clients\/([A-Za-z0-9~_-]{1,80})$/.exec(path), kinds: Rec = { intake: "Homeopathy intake", qest: "Qest4 Scan Intake", followup: "follow-up form" };
+  if (fm && kinds[form]) {
+    const { data: row } = await db.from("docs").select("data").eq("path", path).maybeSingle();
+    const rec: Rec = row?.data || {}, at = String(rec[form + "SubmittedAt"] || "");
+    if (!fresh(at) || (rec.dawnPinged || {})[form] === at) return Response.json({ sent: false, why: "not a new form" });
+    await db.rpc("doc_merge", { p_path: path, p_data: { dawnPinged: { ...(rec.dawnPinged || {}), [form]: at } } });
+    const who = nameOf(rec) || emailOf(rec) || "A client";
+    try { await say(`New ${kinds[form]} from ${who}`, `${who} sent their ${kinds[form]}.\n\nOpen your portal to read it: https://portal.dawnspain.com`); }
+    catch (e) { console.error("ping failed", (e as Error)?.message); return Response.json({ sent: false }, { status: 502 }); }
+    return Response.json({ sent: true });
+  }
+  return new Response("bad request", { status: 400 });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
   let path = "", body: Rec = {};
   try { body = await req.json(); path = String(body.path || ""); } catch { /* fall through */ }
   if (body.send) return sendFromPortal(req, body.send);
+  if (body.notify) return notifyDawn(String(body.notify), String(body.form || ""));
   const pm = /^clients\/([A-Za-z0-9~_-]{1,80})\/messages\/[A-Za-z0-9_-]{1,80}$/.exec(path);
   if (!pm) return new Response("bad request", { status: 400 });
   const cid = pm[1];
