@@ -906,7 +906,7 @@ function emailSign(){ return `With warmth,\n\n${PRACTICE.name}\nWellness From Wi
 function fillTemplate(t, id){
   const c=S.clients[id]||{}, first=clientFirst(id);
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
-    .replace(/\{nextScan\}/gi, c.nextVisit ? fmtDate(c.nextVisit) : "your next scan").replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
+    .replace(/\{nextScan\}/gi, (()=>{ const sc=upcomingAppts(c).find(x=>x.type==="scan"); return sc ? apptWhen(sc,true) : c.nextVisit ? fmtDate(c.nextVisit) : "your next scan"; })()).replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
 }
 /* built-in message: intake received, scan scheduled (fills from the next scan appointment) */
 function scanScheduledMsg(id){
@@ -4108,7 +4108,7 @@ function templatesSection(){
       <label class="field"><span>Template name (only you see this)</span><input id="tp-name" value="${esc(ed.name||"")}" placeholder="e.g. Appointment confirmation"></label>
       <label class="field"><span>Subject</span><input id="tp-subj" value="${esc(ed.subject||"")}"></label>
       <label class="field"><span>Message</span><textarea id="tp-body" style="min-height:180px">${esc(ed.body||"")}</textarea></label>
-      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> next appointment date, <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature, <span class="mono">{followup}</span> link to their follow-up form, <span class="mono">{appointment}</span> their next consult (or appointment) date and time.</p>
+      <p class="small muted">These fill in automatically: <span class="mono">{first}</span> first name, <span class="mono">{name}</span> full name, <span class="mono">{nextScan}</span> their booked scan (or, if none is booked yet, the date their drops finish), <span class="mono">{portal}</span> portal address, <span class="mono">{signature}</span> your signature, <span class="mono">{followup}</span> link to their follow-up form, <span class="mono">{appointment}</span> their next consult (or appointment) date and time.</p>
       <div class="row"><button type="button" class="primary" data-act="tplsave">Save template</button><button type="button" data-act="tplcancel">Cancel</button></div></div>` : "";
   return `<div class="formsec stack">
       <h3>Email templates</h3>
