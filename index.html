@@ -2181,7 +2181,7 @@ function intakeChip(c){
   if(msgUnreadDawn(c)) out.push(`<span class="chip acc" style="font-weight:700">New message</span>`);
   if(isNewForm(c)) out.push(`<span class="chip warn" style="font-weight:700">New form</span>`);
   if(c.intakeStatus==="submitted") out.push(`<span class="chip ok">Intake in</span>`);
-  else if(c.intake && Object.entries(c.intake).some(([k,v])=>v!=="" && v!=null && !(c.importedAt && CONTACT_KEYS.includes(k)))) out.push(`<span class="chip warn">Intake started</span>`);
+  else if(c.intake && Object.entries(c.intake).some(([k,v])=>v!=="" && v!=null && v!==false && !CONTACT_KEYS.includes(k))) out.push(`<span class="chip warn">Intake started</span>`);
   else if(c.importedAt) out.push(`<span class="chip">From Square</span>`);
   if(c.qestStatus==="submitted") out.push(`<span class="chip ok">Qest4 form in</span>`);
   if((c.followupHistory||[]).length) out.push(`<span class="chip ok">Follow-up ${esc(fmtDate(c.followupSubmittedAt))}</span>`);
