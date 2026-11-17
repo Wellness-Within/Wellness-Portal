@@ -1509,8 +1509,8 @@ function renderBilling(){
     <div class="row" style="gap:24px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${money(owed)}</b></span>
       <span><span class="small muted">Received this month</span><br><b style="font-size:22px">${money(paidMo)}</b></span>
       ${overdue?`<span><span class="small muted">Overdue</span><br><b style="font-size:22px">${overdue}</b></span>`:""}</div>
-    <div class="seg" role="tablist">${[["unpaid","Unpaid"],["paid","Paid"],["drafts","Drafts"],["all","All"]].map(([k,l])=>`<button type="button" data-bf="${k}" aria-current="${f===k}">${l}</button>`).join("")}</div>
-    ${!S.invLoaded?`<div class="empty">Loading…</div>`:!rows.length?`<div class="empty small">${f==="unpaid"?"Nothing outstanding.":"None yet."} To bill someone, open a client and choose Billing, or use “Bill” on an appointment.</div>`
+    <div class="seg" role="tablist">${[["unpaid","Unpaid"],["paid","Paid"],["drafts","Drafts"],["all","All"],["month","By month"]].map(([k,l])=>`<button type="button" data-bf="${k}" aria-current="${f===k}">${l}</button>`).join("")}</div>
+    ${f==="month" ? (S.invLoaded ? monthBills(all) : `<div class="empty">Loading…</div>`) : !S.invLoaded?`<div class="empty">Loading…</div>`:!rows.length?`<div class="empty small">${f==="unpaid"?"Nothing outstanding.":"None yet."} To bill someone, open a client and choose Billing, or use “Bill” on an appointment.</div>`
       :`<div class="list-pane">${rows.map(v=>{ const [st,cls]=invStatus(v), m=invMath(v); return `<button type="button" class="item" data-billopen="${esc(v.clientId)}" data-inv="${esc(v.id)}">
         <div class="row" style="gap:10px;flex-wrap:nowrap"><div class="grow" style="min-width:0"><b>${esc(clientName(v.clientId))}</b><div class="small muted">#${esc(v.number||"—")} · ${esc(fmtDate(v.date))}${v.due&&invOpen(v)?` · due ${esc(fmtDate(v.due))}`:""}</div></div>
         <b>${esc(money(f==="unpaid"?m.bal:m.total))}</b><span class="chip ${cls}">${st}</span></div></button>`; }).join("")}</div>`}
@@ -1519,8 +1519,36 @@ function renderBilling(){
   </div>`;
   $("#app").onclick=e=>{ const cv=e.target.closest('[data-act="csvpay"],[data-act="csvinv"]'); if(cv){ cv.dataset.act==="csvpay"?csvPayments():csvInvoices(); return; }
     const bf=e.target.closest("[data-bf]"); if(bf){ S.billFilter=bf.dataset.bf; renderBilling(); return; }
+    if(e.target.closest('[data-act="mbcsv"]')){ monthBillsCsv(all); return; }
+    if(e.target.closest('[data-act="mbprint"]')){ window.print(); return; }
     const b=e.target.closest("[data-billopen]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.billopen; S.sub="billing"; S.invOpenId=b.dataset.inv; S.invEdit=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
+/* Billing → By month: every invoice dated in a month, and the people served (for the monthly Roaring Fork payment) */
+function monthBillRows(all){
+  const mo=S.billMonth||today().slice(0,7);
+  return all.filter(v=>v.status==="sent" && (v.serviceDate||v.date||"").startsWith(mo)).sort((a,b)=>(a.serviceDate||a.date||"").localeCompare(b.serviceDate||b.date||""));
+}
+function monthBills(all){
+  const mo=S.billMonth||today().slice(0,7), rows=monthBillRows(all);
+  const people=new Map(); rows.forEach(v=>{ const items=(v.items||[]).filter(i=>i.kind!=="discount"); const who=[...new Set(items.map(i=>i.for||clientName(v.clientId)))]; (who.length?who:[clientName(v.clientId)]).forEach(n=>{ const k=n.trim(); const p=people.get(k)||{name:k, services:[]}; p.services.push(...items.filter(i=>(i.for||clientName(v.clientId))===n).map(i=>i.desc||BILL_KINDS[i.kind]||"Item")); people.set(k,p); }); });
+  const tot=r2(rows.reduce((t,v)=>t+invMath(v).total,0)), paid=r2(rows.reduce((t,v)=>t+invMath(v).paid,0));
+  const label=new Date(mo+"-15T12:00:00").toLocaleDateString(undefined,{month:"long",year:"numeric"});
+  return `<div class="stack" id="month-bills">
+    <div class="row" style="gap:10px;align-items:end;flex-wrap:wrap"><label class="field" style="margin:0"><span>Month</span><input type="month" id="mb-month" value="${esc(mo)}"></label><span class="grow"></span><button type="button" data-act="mbcsv">Download CSV</button><button type="button" class="ghost" data-act="mbprint">Print</button></div>
+    <div class="row" style="gap:24px"><span><span class="small muted">Clients served</span><br><b style="font-size:22px">${people.size}</b></span><span><span class="small muted">Invoices</span><br><b style="font-size:22px">${rows.length}</b></span><span><span class="small muted">Billed</span><br><b style="font-size:22px">${money(tot)}</b></span><span><span class="small muted">Paid so far</span><br><b style="font-size:22px">${money(paid)}</b></span></div>
+    ${!rows.length?`<div class="empty small">No invoices dated in ${esc(label)}.</div>`:`
+    <h3 style="margin:6px 0 0">Clients served in ${esc(label)}</h3>
+    <table><thead><tr><th>#</th><th>Client</th><th>Services</th></tr></thead><tbody>${[...people.values()].sort((a,b)=>a.name.localeCompare(b.name)).map((p,i)=>`<tr><td class="small muted">${i+1}</td><td>${esc(p.name)}</td><td class="small">${esc(p.services.join(", "))}</td></tr>`).join("")}</tbody></table>
+    <h3 style="margin:10px 0 0">Invoices</h3>
+    <table><thead><tr><th>Date</th><th>Invoice</th><th>Client</th><th>Services</th><th style="text-align:right">Total</th><th>Status</th></tr></thead><tbody>${rows.map(v=>{ const m=invMath(v), [st,cls]=invStatus(v); return `<tr><td class="small" style="white-space:nowrap">${esc(fmtDate(v.serviceDate||v.date))}</td><td class="small">#${esc(v.number||"—")}</td><td>${esc(clientName(v.clientId))}</td><td class="small">${esc((v.items||[]).filter(i=>i.kind!=="discount").map(i=>(i.desc||BILL_KINDS[i.kind]||"Item")+(i.for?` (${i.for})`:"")).join(", "))}</td><td style="text-align:right">${esc(money(m.total))}</td><td><span class="chip ${cls}">${st}</span></td></tr>`; }).join("")}</tbody></table>`}
+    <p class="small muted">Counts invoices you've sent (not drafts or voided), by service date, or invoice date if no service date. Each person on a family invoice counts separately.</p></div>`;
+}
+function monthBillsCsv(all){
+  const mo=S.billMonth||today().slice(0,7), out=[["Date","Invoice","Client","Person served","Service","Amount","Invoice status"]];
+  monthBillRows(all).forEach(v=>{ const st=invStatus(v)[0]; (v.items||[]).filter(i=>i.kind!=="discount").forEach(i=>out.push([v.serviceDate||v.date, v.number, clientName(v.clientId), i.for||clientName(v.clientId), i.desc||BILL_KINDS[i.kind]||"Item", lineAmt(i).toFixed(2), st])); });
+  downloadCsv(`Billing ${mo}.csv`, out);
+}
+document.addEventListener("change", e=>{ if(e.target?.id==="mb-month" && e.target.value){ S.billMonth=e.target.value; renderBilling(); } });
 /* settings: prices and payment options */
 function billingSettingsSection(){
   const b=billSet(), items=S.priceDraft || (b.items||[]);
