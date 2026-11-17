@@ -2175,12 +2175,14 @@ function scanNeedNote(c){
 }
 function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||"", c.followupSubmittedAt||""].sort().pop(); }
 function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
+const CONTACT_KEYS=["fullName","preferredName","email","phone","street","city","state","zip","country","dob"];
 function intakeChip(c){
   const out = [];
   if(msgUnreadDawn(c)) out.push(`<span class="chip acc" style="font-weight:700">New message</span>`);
   if(isNewForm(c)) out.push(`<span class="chip warn" style="font-weight:700">New form</span>`);
   if(c.intakeStatus==="submitted") out.push(`<span class="chip ok">Intake in</span>`);
-  else if(c.intake && Object.keys(c.intake).length) out.push(`<span class="chip warn">Intake started</span>`);
+  else if(c.intake && Object.entries(c.intake).some(([k,v])=>v!=="" && v!=null && !(c.importedAt && CONTACT_KEYS.includes(k)))) out.push(`<span class="chip warn">Intake started</span>`);
+  else if(c.importedAt) out.push(`<span class="chip">From Square</span>`);
   if(c.qestStatus==="submitted") out.push(`<span class="chip ok">Qest4 form in</span>`);
   if((c.followupHistory||[]).length) out.push(`<span class="chip ok">Follow-up ${esc(fmtDate(c.followupSubmittedAt))}</span>`);
   else if(c.qest && Object.keys(c.qest).length) out.push(`<span class="chip warn">Qest4 form started</span>`);
