@@ -2331,13 +2331,31 @@ function plansPane(id){
     S.plans.map(p => `<button type="button" class="item" data-plan="${esc(p.id)}" style="border:1px solid var(--line);border-radius:8px"><b>${esc(p.title||"Untitled plan")}</b><span class="meta"><span>${esc(fmtDate(p.date))}</span>${p.replacedBy?'<span class="chip">Previous</span>':p.status==="shared"?'<span class="chip ok">Current · shared</span>':'<span class="chip warn">Draft</span>'}${p.previousId?`<span>updated from ${esc(fmtDate(p.previousDate))}</span>`:""}<span>${esc(itemCount(p))}</span></span></button>`).join("");
   return `<div class="stack"><div class="row"><p class="grow small muted">A plan can mix wet dose bottles, TT-1 baskets and pellets.</p><div class="row" style="gap:6px">${planTemplatePicker()}<button type="button" class="primary" data-act="newplan">New plan</button></div></div>${rows}</div>`;
 }
+/* doses per day, for sorting a plan by schedule (most often first, as-needed last) */
+function freqRate(f){
+  const t=String(f||"").trim().toLowerCase().replace(/\s+/g,""); let m;
+  if(!t) return -2;
+  if(/^(sos|prn|asneeded)$/.test(t)) return -1;
+  if((m=t.match(/^e(\d+)h$/))) return 24/+m[1];
+  if((m=t.match(/^e(\d+)(min|m)$/))) return 1440/+m[1];
+  if((m=t.match(/^(\d+)(x)?\/?d(ay|aily)?$/))) return +m[1];
+  if(/^(daily|od|qd)$/.test(t)) return 1;
+  if(/^(bid)$/.test(t)) return 2; if(/^(tid)$/.test(t)) return 3; if(/^(qid)$/.test(t)) return 4;
+  if(/^eod$/.test(t)) return 0.5;
+  if((m=t.match(/^e(\d+)d$/))) return 1/+m[1];
+  if((m=t.match(/^(\d+)(x)?\/?w(k|eek|eekly)?$/))) return +m[1]/7;
+  if(/^weekly$/.test(t)) return 1/7;
+  if((m=t.match(/^e(\d+)w$/))) return 1/(7*+m[1]);
+  return -1.5;
+}
 function planEditor(ep){
   const p = ep.data;
+  const nB = p.bottles.length, moveBtns = i => nB<2 ? "" : `<button type="button" class="ghost" data-act="mvbottle" data-i="${i}" data-d="-1" ${i===0?"disabled":""} title="Move up" aria-label="Move up">\u2191</button><button type="button" class="ghost" data-act="mvbottle" data-i="${i}" data-d="1" ${i===nB-1?"disabled":""} title="Move down" aria-label="Move down">\u2193</button>`;
   const typeSel = (b,i) => `<select data-bf="form" data-formsel="${i}" aria-label="Type for item ${i+1}" style="width:auto;padding:4px 8px">${FORM_ORDER.map(f=>`<option value="${f}" ${itemForm(p,b)===f?"selected":""}>${f==="wet"?"Wet dose bottle":f==="tt1"?"TT-1 basket":"Pellets"}</option>`).join("")}</select>`;
   const items = p.bottles.map((b,i) => {
     const f=itemForm(p,b), lbl=itemLabelAt(p,i), u=FORMS[f].one.toLowerCase();
     if(f==="pellets") return `<div class="bottle" data-b="${i}">
-      <div class="bottle-head"><span class="bottle-num">${lbl}</span>${typeSel(b,i)}<input class="grow mono" data-bf="remedies" value="${esc(remedyLines(b.remedies).join(", "))}" placeholder="Arnica 30C" aria-label="${lbl}"><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove ${lbl}">Remove</button></div>
+      <div class="bottle-head"><span class="bottle-num">${lbl}</span>${typeSel(b,i)}<input class="grow mono" data-bf="remedies" value="${esc(remedyLines(b.remedies).join(", "))}" placeholder="Arnica 30C" aria-label="${lbl}">${moveBtns(i)}<button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove ${lbl}">Remove</button></div>
       <div class="grid2">
         <label class="field"><span>What it's for (optional)</span><input data-bf="issue" value="${esc(b.issue)}" placeholder="Bruising"></label>
         <label class="field"><span>Frequency</span><input data-bf="freq" list="freqs" value="${esc(b.freq)}" placeholder="2D"><small class="muted">${esc(plainFreq(b.freq))}</small></label>
@@ -2346,7 +2364,7 @@ function planEditor(ep){
       <label class="field"><span>Note for client</span><input data-bf="notes" value="${esc(b.notes)}" placeholder="Take 15 minutes before food"></label>
     </div>`;
     return `<div class="bottle" data-b="${i}">
-      <div class="bottle-head"><span class="bottle-num">${lbl}</span>${typeSel(b,i)}<input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for ${lbl}"><button type="button" class="ghost" data-act="bottlelib" data-i="${i}" title="Find a protocol in the library and add it to this ${u}">+ Add protocol</button><button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove ${lbl}">Remove</button></div>
+      <div class="bottle-head"><span class="bottle-num">${lbl}</span>${typeSel(b,i)}<input class="grow" data-bf="issue" value="${esc(b.issue)}" placeholder="Issue, e.g. Sinus congestion" aria-label="Issue for ${lbl}"><button type="button" class="ghost" data-act="bottlelib" data-i="${i}" title="Find a protocol in the library and add it to this ${u}">+ Add protocol</button>${moveBtns(i)}<button type="button" class="ghost danger" data-act="rmbottle" data-i="${i}" aria-label="Remove ${lbl}">Remove</button></div>
       <label class="field"><span>Remedies</span><textarea data-bf="remedies" class="mono" style="min-height:58px" placeholder="Sanguinaria 200 + Belladonna 3C">${esc(b.remedies)}</textarea></label>
       <div class="row" style="gap:6px;flex-wrap:wrap">
         <input data-remname="${i}" list="remlist" placeholder="Add a remedy, e.g. Arnica or Moldavite" aria-label="Remedy to add to ${lbl}" style="flex:1 1 220px">
@@ -2370,7 +2388,7 @@ function planEditor(ep){
     <label class="field"><span>Narrative <span class="muted" style="font-weight:400">(shows at the top of the plan)</span></span><textarea id="pl-narr" style="min-height:110px" placeholder="Write to the client about this plan: what you saw, what you're working on, what to expect. Leave blank to skip.">${esc(p.narrative||"")}</textarea></label>
     ${p.previousId ? `<div class="notice ok small">Updated from the plan of ${esc(fmtDate(p.previousDate)||"an earlier date")}. That plan is kept as it was. ${p.status==="shared"?"":"When you share this one, the client sees it as their current plan and the earlier one moves to <b>Previous plans</b>."}</div>` : ""}
     ${p.replacedBy ? `<div class="notice small">This is a previous plan. A newer plan has replaced it; the client sees it under <b>Previous plans</b>.</div>` : ""}
-    <p class="small muted" style="margin:0">Mix and match: each item can be a wet dose bottle, a TT-1 basket or pellets. Change an item's type with the menu next to its name.</p>
+    <div class="row" style="gap:8px;align-items:center"><p class="small muted grow" style="margin:0">Mix and match: each item can be a wet dose bottle, a TT-1 basket or pellets. Change an item's type with the menu next to its name. Use \u2191 \u2193 to reorder.</p>${p.bottles.length>1?`<button type="button" data-act="sortbottles" title="Most often first (e.g. 3D, 2D, 1D, every other day, weekly), as-needed (SOS) last">Sort by schedule</button>`:""}</div>
     ${items || `<div class="empty small">Nothing added yet. Add a bottle, basket or pellet remedy below, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" data-act="addbottle" data-form="wet">+ Wet dose bottle</button><button type="button" data-act="addbottle" data-form="tt1">+ TT-1 basket</button><button type="button" class="ghost" data-act="tolibrary">Add from protocol library</button></div>
     <div class="row" style="gap:6px;flex-wrap:wrap">
@@ -2556,6 +2574,10 @@ function bindClients(){
       else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",form:"wet",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({form:a.dataset.form||"wet",issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
+      else if(act==="mvbottle"||act==="sortbottles"){ readPlanForm(); const ep=S.editPlan, bs=ep.data.bottles, tgt=ep.target!=null?bs[ep.target]:null;
+        if(act==="mvbottle"){ const i=+a.dataset.i, j=i+(+a.dataset.d); if(j<0||j>=bs.length) return; [bs[i],bs[j]]=[bs[j],bs[i]]; }
+        else bs.splice(0, bs.length, ...bs.map((b,i)=>({b,i,r:freqRate(b.freq)})).sort((x,y)=>(y.r-x.r)||(x.i-y.i)).map(x=>x.b));
+        if(tgt) ep.target=bs.indexOf(tgt); ep.dirty=true; renderClients(); if(act==="sortbottles") toast("Sorted by schedule. Save the plan to keep it."); }
       else if(act==="rmbottle"){ readPlanForm(); { const ri=+a.dataset.i, t=S.editPlan.target; if(t===ri) S.editPlan.target=null; else if(t!=null && t>ri) S.editPlan.target=t-1; } S.editPlan.data.bottles.splice(+a.dataset.i,1); S.editPlan.dirty=true; renderClients(); }
       else if(act==="addremedy"){ readPlanForm(); const i=+a.dataset.i; const nm=(document.querySelector(`[data-remname="${a.dataset.i}"]`)?.value||"").trim(); const pot=document.querySelector(`[data-rempot="${a.dataset.i}"]`)?.value||"";
         if(!nm){ toast("Type a remedy name first"); return; }
