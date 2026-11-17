@@ -1058,7 +1058,7 @@ function renderSchedule(){
     ["Past due","Today","Next 7 days","Later"].filter(g=>dg[g]).map(g=>`<h3>${g}</h3><div class="list-pane">${dg[g].map(({id,nv,bottle})=>{ const c=S.clients[id], dd=dayDiff(nv,t), bk=upcomingAppts(c).find(a=>a.type==="scan");
       return `<button type="button" class="item" data-sched="${esc(id)}"><div class="row" style="gap:12px;flex-wrap:nowrap">${tile(nv)}
         <div class="grow" style="min-width:0"><b>${esc(clientName(id))}</b><div class="small muted">${bottle?`${esc(bottle)} · `:""}Drops finish${dd<0?`ed ${-dd} day${dd===-1?"":"s"} ago`:dd===0?" today":` in ${dd} day${dd===1?"":"s"}`}</div></div>
-        ${bk?`<span class="chip ok">Scan ${esc(fmtDate(bk.date))}</span>`:c.scanToSchedule?'<span class="chip acc">Needs a scan date</span>':scanFormIn(c, nv)?'<span class="chip acc">Form in</span>':dd<0?'<span class="chip warn">Past due</span>':""}</div></button>`; }).join("")}</div>`).join("");
+        ${bk?`<span class="chip ok">Scan ${esc(fmtDate(bk.date))}</span>`:needsScan(c)?'<span class="chip acc">Needs a scan date</span>':scanFormIn(c, nv)?'<span class="chip acc">Form in</span>':dd<0?'<span class="chip warn">Past due</span>':""}</div></button>`; }).join("")}</div>`).join("");
   $("#app").innerHTML=`<div class="stack" style="max-width:1180px;margin:0 auto">
     <div class="row"><h1 class="grow">Schedule</h1></div>
     ${asks.length?`<div class="notice stack" style="gap:6px"><b>Date change requests</b>${asks.map(id=>`<button type="button" class="ghost" style="justify-content:flex-start;padding:2px 0" data-sched="${esc(id)}">${esc(clientName(id))} · asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</button>`).join("")}</div>`:""}
@@ -1698,8 +1698,8 @@ function renderHome(){
   const open=invs.filter(invOpen), owed=r2(open.reduce((s,v)=>s+invMath(v).bal,0)), overdue=open.filter(v=>invStatus(v)[0]==="Overdue");
   // date-change requests, scan reminders
   const asks=ids.filter(id=>S.clients[id].reschedReq), rem=autoOn("reminders")?[]:remindersDue();
-  const dueSoon=ids.flatMap(id=>dueDates(S.clients[id]).map(d=>({id, nv:d.date, bottle:d.name}))).filter(({id,nv})=>nv<=wkS && !S.clients[id].scanToSchedule && !upcomingAppts(S.clients[id]).some(a=>a.type==="scan") && !apptsOf(S.clients[id]).some(a=>a.type==="scan" && a.date>=nv)).sort((a,b)=>a.nv.localeCompare(b.nv));
-  const need=ids.filter(id=>S.clients[id].scanToSchedule).sort((a,b)=>(S.clients[a].scanToSchedule.by||"").localeCompare(S.clients[b].scanToSchedule.by||""));
+  const dueSoon=ids.flatMap(id=>dueDates(S.clients[id]).map(d=>({id, nv:d.date, bottle:d.name}))).filter(({id,nv})=>nv<=wkS && !needsScan(S.clients[id]) && !upcomingAppts(S.clients[id]).some(a=>a.type==="scan") && !apptsOf(S.clients[id]).some(a=>a.type==="scan" && a.date>=nv)).sort((a,b)=>a.nv.localeCompare(b.nv));
+  const need=ids.filter(id=>needsScan(S.clients[id])).sort((a,b)=>(needsScan(S.clients[a]).by||"").localeCompare(needsScan(S.clients[b]).by||""));
   const card=(title, count, body, foot)=>`<section class="dash-card"><div class="head"><h2>${title}</h2>${count?`<span class="count">${count}</span>`:""}</div>${body}${foot||""}</section>`;
   const empty=s=>`<p class="small muted">${s}</p>`;
   const cards=[
@@ -1713,14 +1713,14 @@ function renderHome(){
   ];
   { const fi=cards.findIndex(c=>c.includes("<h2>New forms in</h2>")); cards.splice(1,0,cards.splice(fi,1)[0]); }
   if(dueSoon.length) cards.splice(3,0,card("Next scan due", dueSoon.filter(x=>x.nv<t).length?`${dueSoon.filter(x=>x.nv<t).length} past due`:dueSoon.length, `<div>${dueSoon.slice(0,8).map(({id,nv,bottle})=>{ const dd=dayDiff(nv,t); return row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${bottle?`${esc(bottle)} · `:""}Drops finish${dd<0?"ed":""} ${esc(dayLbl(nv))}${scanFormIn(S.clients[id], nv)?" · form in":""}</span>`, dd<0?`<span class="chip warn">${-dd} day${dd===-1?"":"s"} past due</span>`:dd===0?'<span class="chip acc">Today</span>':`<span class="chip">in ${dd} day${dd===1?"":"s"}</span>`); }).join("")}</div>${dueSoon.length>8?`<p class="small muted">and ${dueSoon.length-8} more</p>`:""}<p class="small muted">Drops finished or finishing this week, with no scan booked yet.</p>`));
-  if(need.length) cards.splice(dueSoon.length?4:3,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=S.clients[id].scanToSchedule, late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">${n.source==="form"?"Form sent":"Ordered"} ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span>${n.zoom==="yes"?'<span class="chip ok">with Zoom</span>':n.zoom==="no"?'<span class="chip">scan only</span>':""}<span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
+  if(need.length) cards.splice(dueSoon.length?4:3,0,card("Needs a scan date", need.length, `<div>${need.map(id=>{ const n=needsScan(S.clients[id]), late=(n.by||"")<t; return `<button type="button" class="dash-row dash-link" data-hneed="${esc(id)}"><span style="display:flex;flex-direction:column;min-width:0;text-align:left"><b>${nm(id)}</b><span class="small muted">${n.source==="form"?"Form sent":"Ordered"} ${esc(fmtDate(n.orderedAt))}${n.delivery==="ship"?" · shipped":n.delivery==="none"?" · reports only":n.delivery==="imprint"?" · remote imprint":""}</span></span>${n.zoom==="yes"?'<span class="chip ok">with Zoom</span>':n.zoom==="no"?'<span class="chip">scan only</span>':""}<span class="chip ${late?"warn":"acc"}">by ${esc(dayLbl(n.by))}</span></button>`; }).join("")}</div>`));
   if(asks.length) cards.splice(dueSoon.length?4:3,0,card("Date change requests", asks.length, `<div>${asks.map(id=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">asked ${esc(fmtWhen(S.clients[id].reschedReq.at))}</span>`,'<span class="chip warn">Asked</span>')).join("")}</div>`));
   if(rem.length) cards.push(card("Scan reminders to send", rem.length, `<div>${rem.slice(0,6).map(({id,kind,nv,bottle})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">${kind==="week"?"Week before":"Drops finished"}${bottle?` · ${esc(bottle)}`:""} · ${esc(fmtDate(nv))}</span>`)).join("")}</div>`, `<button type="button" class="ghost" data-htab="clients">Send from Clients</button>`));
   const hr=new Date().getHours(), hi=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
   $("#app").innerHTML=`<div class="stack" style="gap:20px;max-width:1180px;margin:0 auto">
     <div class="dash-hello"><h1>${hi}, Dawn</h1><p class="muted">${esc(new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}))}</p></div>
     ${!S.clientsLoaded?`<div class="empty">Loading…</div>`:`<div class="dash-grid">${cards.join("")}</div>`}</div>`;
-  $("#app").onclick=e=>{ const nd=e.target.closest("[data-hneed]"); if(nd){ const id=nd.dataset.hneed, n=S.clients[id].scanToSchedule||{}; openClientAt(id,"appts"); S.apptEdit={cid:id, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", ...(n.delivery?{delivery:n.delivery}:{})}}; renderClients(); $("#ap-date")?.focus(); return; }
+  $("#app").onclick=e=>{ const nd=e.target.closest("[data-hneed]"); if(nd){ const id=nd.dataset.hneed, n=needsScan(S.clients[id])||{}; openClientAt(id,"appts"); S.apptEdit={cid:id, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", ...(n.delivery?{delivery:n.delivery}:{})}}; renderClients(); $("#ap-date")?.focus(); return; }
     const o=e.target.closest("[data-hopen]"); if(o){ openClientAt(o.dataset.hopen, o.dataset.hsub||""); return; }
     const tb=e.target.closest("[data-htab]"); if(tb){ S.tab=tb.dataset.htab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); } };
 }
@@ -1740,7 +1740,7 @@ const CLIENT_FILTERS = {
   month:["Scan this month", c=>{ const m=today().slice(0,7); return apptsOf(c).some(a=>a.type==="scan" && a.date.slice(0,7)===m); }],
   quiet:["Not seen in 3+ months", c=>{ const ls=clientLastSeen(c); if(!ls) return false; const d=new Date(today()+"T12:00:00"); d.setMonth(d.getMonth()-3); return ls<d.toISOString().slice(0,10) && !upcomingAppts(c).length; }],
   owes:["Owes money", (c,id)=>clientBalance(id)>0],
-  unsched:["Needs a scan date", c=>!!c.scanToSchedule],
+  unsched:["Needs a scan date", c=>!!needsScan(c)],
 };
 /* ---------- monthly summary + CSV ---------- */
 function monthlySummary(){
@@ -1935,7 +1935,7 @@ function dueBox(id){
     <div class="row" style="gap:10px;align-items:end">
       <label class="field" style="flex:0 1 220px"><span>Drops finish / next scan due</span><input type="date" id="due-date" value="${esc(nv)}"></label>
       <button type="button" class="primary small" data-act="duesave">Save</button>${nv?`<button type="button" class="ghost small" data-act="dueclear">Clear</button>`:""}
-      <span class="grow small">${nv?(d<0?`<span class="chip warn">${-d} day${d===-1?"":"s"} past due</span>`:d===0?`<span class="chip acc">Due today</span>`:`<span class="chip">In ${d} day${d===1?"":"s"}</span>`):""} ${booked?`<span class="chip ok">Scan booked ${esc(fmtDate(booked.date))}</span>`:c.scanToSchedule?`<span class="chip acc">Needs a scan date</span>`:""}</span></div>
+      <span class="grow small">${nv?(d<0?`<span class="chip warn">${-d} day${d===-1?"":"s"} past due</span>`:d===0?`<span class="chip acc">Due today</span>`:`<span class="chip">In ${d} day${d===1?"":"s"}</span>`):""} ${booked?`<span class="chip ok">Scan booked ${esc(fmtDate(booked.date))}</span>`:needsScan(c)?`<span class="chip acc">Needs a scan date</span>`:""}</span></div>
     <p class="small muted" style="margin:0">This isn't an appointment. ${autoOn("reminders")?"A reminder email goes out a week before and again on this date, asking them to fill in their Qest4 Scan Intake.":"Reminders for this date appear on your Home page."} When their form comes in, they show up under “Needs a scan date” on your Home page.</p>
     ${nv?`<div class="row small muted" style="gap:6px">Reminders: week before ${st("week")} · drops finished ${st("day")}
       <button type="button" class="ghost small" data-remind="${esc(id)}" data-kind="${d>0?"week":"day"}" data-date="${esc(nv)}">Email a reminder now</button></div>`:""}
@@ -2066,6 +2066,15 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
   bindClients();
   const cfs=$("#clientFilterSel"); if(cfs) cfs.onchange=()=>{ S.cf=cfs.value; renderClients(); };
   const pft=$("#pl-from-tpl"); if(pft) pft.onchange=()=>{ if(pft.value) startPlanFromTpl(pft.value); };
+}
+/* a client needs a scan date: an order/booking/form flag, or a Qest4 intake sent (new or updated) in the last 30 days with no scan booked on or after it */
+function needsScan(c){
+  if(!c) return null; if(c.scanToSchedule) return c.scanToSchedule;
+  const at=(c.qestSubmittedAt||"").slice(0,10); if(!at) return null;
+  const ago=new Date(); ago.setDate(ago.getDate()-30); if(at < ago.toISOString().slice(0,10)) return null;
+  if(apptsOf(c).some(a=>a.type==="scan" && a.date>=at)) return null;
+  const by=new Date(at+"T12:00:00"); by.setDate(by.getDate()+7); const q=c.qest||{};
+  return {orderedAt:at, by:by.toISOString().slice(0,10), source:"form", delivery: q.delivery==="Shipped to me"?"ship":q.delivery?"imprint":"", zoom: /^yes/i.test(q.zoomThis||"") ? "yes" : q.zoomThis ? "no" : ""};
 }
 function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||"", c.followupSubmittedAt||""].sort().pop(); }
 function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
@@ -4507,7 +4516,7 @@ function renderClient(){
     if(editing) patch.qestEditedAt = now;
     if(isF && submit){ patch[key] = {fullName: vals.fullName||""}; patch.followupSubmittedAt = now; }
     if(submit) patch[key+"SubmittedAt"] = now;
-    if(isQ && submit && !editing && !(S.myRec?.appointments||[]).some(a=>a.type==="scan" && a.date>=today()) && !S.myRec?.scanToSchedule){
+    if(isQ && submit && !(S.myRec?.appointments||[]).some(a=>a.type==="scan" && a.date>=today()) && !S.myRec?.scanToSchedule){
       const by=new Date(); by.setDate(by.getDate()+7); patch.scanToSchedule = {orderedAt:today(), by:by.toISOString().slice(0,10), source:"form", delivery: vals.delivery==="Shipped to me"?"ship":vals.delivery?"imprint":"", zoom: /^yes/i.test(vals.zoomThis||"") ? "yes" : vals.zoomThis ? "no" : ""}; }
     if(isF && submit) patch.followupHistory = [...(S.myRec?.followupHistory||[]), {form:vals, submittedAt:now, ...(fq?{kind:"qest"}:{})}].slice(-60);
     try{
