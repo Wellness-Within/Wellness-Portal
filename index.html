@@ -2109,6 +2109,20 @@ function needsScan(c){
   const by=new Date(at+"T12:00:00"); by.setDate(by.getDate()+7); const q=c.qest||{};
   return {orderedAt:at, by:by.toISOString().slice(0,10), source:"form", delivery: q.delivery==="Shipped to me"?"ship":q.delivery?"imprint":"", zoom: /^yes/i.test(q.zoomThis||"") ? "yes" : q.zoomThis ? "no" : ""};
 }
+/* plain-English reason a client is or isn't on "Needs a scan date" */
+function scanNeedNote(c){
+  const n=needsScan(c); if(n) return `<div class="notice small">On <b>Needs a scan date</b> (form ${esc(fmtDate(n.orderedAt))}). Book their scan below, or tap Done on the Home card.</div>`;
+  const ms=x=>x?Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(x)?x+"T00:00:00":x)||0:0;
+  const id=Object.keys(S.clients||{}).find(k=>S.clients[k]===c), work=(S.recentWork||{})[id]||"";
+  const full=[c.qestSubmittedAt||"", c.qestCompletedAt||"", !c.qestSubmittedAt && c.qestStatus==="submitted" ? (c.qestUpdatedAt||"") : ""].sort((x,y)=>ms(x)-ms(y)).pop();
+  let why;
+  if(!full) why="no Qest4 Scan Intake has been sent or marked complete";
+  else if(ms(full) < Date.now()-30*864e5) why=`their last Qest4 form (${fmtDate(full.slice(0,10))}) is more than 30 days old`;
+  else if(ms(c.scanDoneAt)>=ms(full)) why=`you tapped Done ${fmtWhen(c.scanDoneAt)}`;
+  else if(ms(work)>=ms(full)) why=`a report, scan record or plan was saved ${fmtWhen(work)}, after their form`;
+  else { const a=apptsOf(c).find(x=>x.type==="scan" && x.date>=full.slice(0,10)); why = a ? `a scan is on their Appointments for ${fmtDate(a.date)}` : "of something I can't see"; }
+  return `<p class="small muted">Not on Needs a scan date because ${esc(why)}.</p>`;
+}
 function lastSubmitted(c){ return [c.intakeSubmittedAt||"", c.qestSubmittedAt||"", c.followupSubmittedAt||""].sort().pop(); }
 function isNewForm(c){ const t=lastSubmitted(c||{}); return t && t > (c.seenAt||"") ? 1 : 0; }
 function intakeChip(c){
@@ -2130,7 +2144,7 @@ function clientDetail(id){
   if(S.sub==="qest") body = (c.qest?.photoOnFile ? `<div class="notice">Returning client: asked you to use the photo already on file${S.photoFor===id && S.photo ? " (or the one below if it's newer)" : ""}.</div>` : "") + `<div class="row" style="justify-content:flex-end"><button type="button" data-act="formpdf" data-kind="qest">Download PDF</button>${S.photoFor===id && S.photo ? `<button type="button" data-act="dlphoto">Download photo</button>`:""}</div>` + photoBlock("pp", S.photoFor===id ? S.photo : "", true) + intakeForm(c.qest||{}, "ps", false, QEST) + `<div class="row"><button type="button" class="primary" data-act="saveqest">Save Qest4 form</button><label class="check small"><input type="checkbox" id="ps-submitted" ${c.qestStatus==="submitted"?"checked":""}> Mark as complete</label></div>` + qestHistory(id);
   if(S.sub==="plans") body = plansPane(id);
   if(S.sub==="files") body = filesPane(id);
-  if(S.sub==="appts") body = dueBox(id) + apptsPane(id);
+  if(S.sub==="appts") body = scanNeedNote(c) + dueBox(id) + apptsPane(id);
   if(S.sub==="billing") body = billingPane(id);
   if(S.sub==="progress") body = progressPane(id);
   if(S.sub==="consults") body = consultsPane(id);
