@@ -921,6 +921,16 @@ function fillTemplate(t, id){
   return String(t||"").replace(/\{first\}/gi, first && first!=="Unnamed" ? first : "there").replace(/\{name\}/gi, clientName(id))
     .replace(/\{nextScan\}/gi, (()=>{ const sc=upcomingAppts(c).find(x=>x.type==="scan"); return sc ? apptWhen(sc,true) : c.nextVisit ? fmtDate(c.nextVisit) : "your next scan"; })()).replace(/\{portal\}/gi, "https://portal.dawnspain.com").replace(/\{followup\}/gi, "https://portal.dawnspain.com/#followup").replace(/\{appointment\}/gi, (()=>{ const a=nextFollowAppt(c); return a ? apptWhen(a) : "[date and time]"; })()).replace(/\{signature\}/gi, emailSign());
 }
+/* who can be invited: has an email, no portal sign-in of their own yet, not invited before; one per email */
+function inviteList(ids){
+  const seen=new Set(), out=[];
+  ids.forEach(id=>{ const c=S.clients[id]||{}, e=(clientEmail(id)||"").trim().toLowerCase();
+    if(!e || !id.startsWith("c-") || c.invitedAt || seen.has(e)) return;
+    const fam=Object.keys(S.clients).filter(x=>(clientEmail(x)||"").trim().toLowerCase()===e);
+    if(fam.some(x=>!x.startsWith("c-") || S.clients[x].invitedAt)) return;
+    seen.add(e); const fr=famRole(id); out.push(fr.fam && !fr.holder ? (fam.find(x=>famRole(x).holder)||id) : id); });
+  return out;
+}
 /* built-in welcome: their portal account is set up (family-aware) */
 function famPeople(id){
   const base=id.split("~")[0], to=(clientEmail(id)||"").trim().toLowerCase();
@@ -1756,6 +1766,7 @@ const CLIENT_FILTERS = {
   quiet:["Not seen in 3+ months", c=>{ const ls=clientLastSeen(c); if(!ls) return false; const d=new Date(today()+"T12:00:00"); d.setMonth(d.getMonth()-3); return ls<d.toISOString().slice(0,10) && !upcomingAppts(c).length; }],
   owes:["Owes money", (c,id)=>clientBalance(id)>0],
   square:["Brought in from Square", c=>!!c.importedAt],
+  notin:["Not in the portal yet", (c,id)=>id.startsWith("c-") && !!clientEmail(id) && !c.invitedAt],
   unsched:["Needs a scan date", c=>!!needsScan(c)],
 };
 /* ---------- bring in clients from a Square customer export (CSV) ---------- */
@@ -2121,6 +2132,10 @@ function renderClients(){ store("wfw.editPlan", S.editPlan||undefined);
         ${remindersPanel()}
         <input id="clientFilter" type="search" placeholder="Find a client" value="${esc(S.clientFilter||"")}" aria-label="Find a client">
         <div class="row" style="gap:6px;flex-wrap:nowrap"><select id="clientFilterSel" aria-label="Show">${Object.entries(CLIENT_FILTERS).map(([k,[l]])=>`<option value="${k}" ${(S.cf||"all")===k?"selected":""}>${l}</option>`).join("")}</select>${(S.cf||"all")!=="all"&&S.clientsLoaded?`<span class="small muted" style="white-space:nowrap">${shown.length} shown</span>`:""}</div>
+        ${(()=>{ const inv=inviteList(shown); if(!S.clientsLoaded || (!inv.length && !S.invAsk)) return "";
+          if(S.invBusy) return `<div class="notice small">Sending ${esc(S.invBusy)}\u2026</div>`;
+          if(!S.invAsk) return `<button type="button" class="ghost small" data-act="invask" title="Sends the Welcome message (sign-in steps) to clients in this list who haven't signed in or been invited yet">Invite ${inv.length} to the portal</button>`;
+          return `<div class="notice small stack" style="gap:6px"><span>Send the <b>Welcome: your portal is set up</b> message to <b>${inv.length}</b> client${inv.length===1?"":"s"} in this list who haven't signed in or been invited yet. Each one is emailed to them, and family members sharing an email get one together.${S.settings.autoEmail?"":" <b>Automatic message emails are off</b>, so they'd only see it after signing in."}</span><div class="row" style="gap:6px"><button type="button" class="primary small" data-act="invsend">Send ${inv.length}</button><button type="button" class="ghost small" data-act="invcancel">Cancel</button></div></div>`; })()}
       </div>
       <div class="list">${list}</div>
     </section>
@@ -2595,6 +2610,16 @@ function bindClients(){
       else if(act==="cmcancel"){ S.compose=null; renderClients(); }
       else if(act==="cmopen"){ const subj=$("#cm-subj").value.trim(), body=$("#cm-body").value; if(!subj){ toast("Add a subject first"); return; } const id=S.sel, kind=S.compose?.tpl==="_fu" ? "followup" : S.compose?.tpl ? "template" : "email";
         openMail(clientEmail(id), subj, body); S.compose=null; await logEmail(id, subj, kind); renderClients(); toast("Opened in Mail. Noted in this client's email history."); }
+      else if(act==="invask"){ S.invAsk=true; renderClients(); }
+      else if(act==="invcancel"){ S.invAsk=false; renderClients(); }
+      else if(act==="invsend"){ const ids=inviteList(Object.keys(S.clients).filter(id=>!isFamilyShell(id) && (CLIENT_FILTERS[S.cf||"all"]||CLIENT_FILTERS.all)[1](S.clients[id], id) && (!S.clientFilter || clientName(id).toLowerCase().includes(S.clientFilter.toLowerCase()))));
+        S.invAsk=false; let n=0, bad=0;
+        for(const id of ids){ S.invBusy=`${++n} of ${ids.length}`; renderClients();
+          if(await sendMsg(id, "dawn", welcomeMsg(id))){ const e=(clientEmail(id)||"").trim().toLowerCase(), at=new Date().toISOString();
+            for(const x of Object.keys(S.clients).filter(x=>(clientEmail(x)||"").trim().toLowerCase()===e)) await S.db.doc("clients/"+x).update({invitedAt:at}).catch(()=>{}); }
+          else bad++;
+          await new Promise(r=>setTimeout(r,1500)); }
+        S.invBusy=null; renderClients(); toast(bad?`Sent ${ids.length-bad}; ${bad} didn't go through. Try again for the rest.`:`Welcome sent to ${ids.length} client${ids.length===1?"":"s"}`); }
       else if(act==="newclient"){ const id=rid("c-"); await S.db.doc("clients/"+id).set({name:"New client", createdAt:new Date().toISOString(), intake:{}}); S.sel=id; S.sub="details"; renderClients(); setTimeout(()=>{const n=$("#d-name"); if(n){n.value="";n.focus();}},50); }
       else if(act==="jotfill"){ const txt=$("#jot-text").value; const kind=a.dataset.kind; const def=kind==="qest"?QEST:INTAKE; const r=jotParse(txt, def);
         if(r.count){ const key=kind==="qest"?"qest":"intake"; const cur=S.clients[S.sel]?.[key]||{}; const merged={...cur, ...r.vals}; const patch={[key]:merged, [key+"Status"]:"submitted", [key+"UpdatedAt"]:new Date().toISOString()};
