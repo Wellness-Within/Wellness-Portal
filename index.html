@@ -2098,7 +2098,8 @@ function needsScan(c){
   const id=Object.keys(S.clients||{}).find(k=>S.clients[k]===c), work=((S.recentWork||{})[id]||"").slice(0,10), done=(c.scanDoneAt||"").slice(0,10);
   const cleared=at=>(work && work>=at) || (done && done>=at);
   if(c.scanToSchedule) return cleared(c.scanToSchedule.orderedAt||"") ? null : c.scanToSchedule;
-  const at=(c.qestSubmittedAt||"").slice(0,10); if(!at || cleared(at)) return null;
+  // the client sent it, or you entered it and marked it complete
+  const at=[c.qestSubmittedAt||"", c.qestCompletedAt||"", !c.qestSubmittedAt && c.qestStatus==="submitted" ? (c.qestUpdatedAt||"") : ""].sort().pop().slice(0,10); if(!at || cleared(at)) return null;
   const ago=new Date(); ago.setDate(ago.getDate()-30); if(at < ago.toISOString().slice(0,10)) return null;
   if(apptsOf(c).some(a=>a.type==="scan" && a.date>=at)) return null;
   const by=new Date(at+"T12:00:00"); by.setDate(by.getDate()+7); const q=c.qest||{};
@@ -2555,7 +2556,7 @@ function bindClients(){
         catch(e1){ toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent="Download PDF"; }
       else if(act==="saveintake"){ const intake = readIntake("pi"); a.disabled=true; await S.db.doc("clients/"+S.sel).update({intake, intakeStatus: $("#pi-submitted").checked?"submitted":"draft", intakeUpdatedAt:new Date().toISOString()}); toast("Intake saved"); }
-      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; if(qest.delivery===IMPRINT_REMOTE && S.imprintFor===S.sel && S.imprint) qest.imprintPic=`Uploaded ${fmtDate(S.imprintAt)}`; a.disabled=true; await S.db.doc("clients/"+S.sel).update({qest, qestStatus: $("#ps-submitted").checked?"submitted":"draft", qestUpdatedAt:new Date().toISOString()}); toast("Qest4 form saved"); }
+      else if(act==="saveqest"){ const qest = readIntake("ps", QEST); if(S.clients[S.sel]?.qest?.photoOnFile) qest.photoOnFile=true; if(qest.delivery===IMPRINT_REMOTE && S.imprintFor===S.sel && S.imprint) qest.imprintPic=`Uploaded ${fmtDate(S.imprintAt)}`; a.disabled=true; const done=$("#ps-submitted").checked, was=S.clients[S.sel]||{}, nowIso=new Date().toISOString(); await S.db.doc("clients/"+S.sel).update({qest, qestStatus: done?"submitted":"draft", qestUpdatedAt:nowIso, ...(done && was.qestStatus!=="submitted" ? {qestCompletedAt:nowIso} : {})}); toast("Qest4 form saved"); }
       else if(act==="savenotes"){ a.disabled=true; await S.db.doc("notes/"+S.sel).set({text:$("#notesBox").value, updatedAt:new Date().toISOString()}); a.disabled=false; toast("Notes saved"); }
       else if(act==="savedetails"){ const patch={name:$("#d-name").value.trim()}; const dn=$("#d-next"); if(dn) patch.nextVisit=dn.value||""; const dz=$("#d-zoom"); if(dz) patch.zoomClient=dz.checked; const dh=$("#d-holder"); if(dh){ patch.accountHolder=dh.checked; if(dh.checked){ const base=S.sel.split("~")[0]; for(const x of Object.keys(S.clients)) if(x!==S.sel && (x===base||x.startsWith(base+"~")) && S.clients[x].accountHolder) await S.db.doc("clients/"+x).update({accountHolder:false}); } } const de=$("#d-email"); if(de){ const v=de.value.trim(); if(v && !/^\S+@\S+\.\S+$/.test(v)){ toast("That email doesn't look right"); return; } patch.email=v; } await S.db.doc("clients/"+S.sel).update(patch); toast("Details saved"); }
       else if(act==="askmerge"){ const to=$("#mergeTo")?.value; if(!to){ toast("Choose a portal account first"); return; } S.confirmMerge={from:S.sel, to}; renderClients(); }
