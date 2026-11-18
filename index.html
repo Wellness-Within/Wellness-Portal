@@ -2731,7 +2731,7 @@ function bindClients(){
     if(await dueClick(e)) return;
     { const ho=e.target.closest("[data-hcopen]"); if(ho){ const p=(S.hcList||[]).find(x=>x.id===ho.dataset.hcopen); if(p){ const {id:_i,...d}=p; openHConsult(S.sel, p.id, d); } return; }
       const hs=e.target.closest('[data-act="hcnew"],[data-hcstart]'); if(hs){ hs.disabled=true; await newHConsult(S.sel); return; } }
-    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
+    const c = e.target.closest("[data-client]"); if(c){ if(S.editPlan?.dirty && S.editPlan.clientId!==c.dataset.client){ toast("Save or close the open plan first"); return; } if(!S.sel) S.listY=window.scrollY; S.lastOpened=c.dataset.client; S.sel=c.dataset.client; S.sub=msgUnreadDawn(S.clients[c.dataset.client])&&!isNewForm(S.clients[c.dataset.client])?"messages":"qest"; S.compose=null; S.fuEdit=null; { const rec=S.clients[S.sel]; if(isNewForm(rec)){ const ls=lastSubmitted(rec); if(rec.followupSubmittedAt===ls) S.sub="followups"; else if(rec.qestSubmittedAt===ls) S.sub="qest"; S.db.doc("clients/"+S.sel).update({seenAt:new Date().toISOString()}).catch(()=>{}); } } S.confirmDel=null; renderClients(); return; }
     const rm = e.target.closest("[data-remind]"); if(rm){ if(scanMail(rm.dataset.remind, rm.dataset.kind, rm.dataset.date)){ await markReminder(rm.dataset.remind, rm.dataset.kind, rm.dataset.date); toast("Email opened in Mail. Marked as sent."); } return; }
     const rs = e.target.closest("[data-remskip]"); if(rs){ await markReminder(rs.dataset.remskip, rs.dataset.kind, rs.dataset.date); toast("Reminder skipped"); return; }
     const fo = e.target.closest("[data-fopen]"); if(fo){ const f=S.files.find(x=>x.id===fo.dataset.fopen); if(f) openClientFile(f); return; }
@@ -2747,7 +2747,10 @@ function bindClients(){
     const a = e.target.closest("[data-act]"); if(!a) return;
     const act = a.dataset.act;
     try{
-      if(act==="back"){ S.sel=null; S.compose=null; S.apptEdit=null; renderClients(); }
+      if(act==="back"){ S.sel=null; S.compose=null; S.apptEdit=null; renderClients();
+        // back where you were in the list, with the client you just had open in view
+        requestAnimationFrame(()=>{ window.scrollTo(0, S.listY||0); const it=S.lastOpened && document.querySelector(`[data-client="${CSS.escape(S.lastOpened)}"]`);
+          if(it){ const r=it.getBoundingClientRect(); if(r.top<0 || r.bottom>window.innerHeight) it.scrollIntoView({block:"center"}); it.focus({preventScroll:true}); } }); }
       else if(act==="apnew"){ S.apptEdit={cid:S.sel, isNew:true, a:{id:genId().slice(0,10), type:"scan", date:"", imprint:true}}; renderClients(); }
       else if(act==="apcancel"){ S.apptEdit=null; renderClients(); }
       else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-type").value==="imprint"?"":($("#ap-how")?.value||""), zoomUrl:($("#ap-type").value!=="imprint" && $("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
