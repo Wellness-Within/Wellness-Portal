@@ -402,6 +402,7 @@ const QEST = [
   {sec:"Your scan options and price", note:"Start here: choose how you'd like your scan and treatment, and your price is worked out as you go. Then tell Dawn about you below.", fields:[
     {id:"zoomThis",label:"Would you like a Zoom consult with this scan?",type:"choice",options:["Yes, please","Not this time, just the scan"]},
     {id:"delivery",jot:"How would you like to receive your treatment",label:"Remote imprint or shipped?",type:"choice",req:true,options:[IMPRINT_REMOTE,"Shipped to me"]},
+    {id:"reportsOnly",jot:"Scan and reports only, no treatment",label:"I'd like the scan and reports only, no treatment",type:"check",wide:true,gate:"reportsOnly"},
     {id:"rxForm",jot:"Pellets or liquid",label:"Pellets, liquid or another item?",type:"choice",req:true,options:["Pellets","Liquid",RX_OTHER]},
     {id:"rxOther",jot:"Other item for the imprint",label:"What item? (for example a bracelet or a crystal)",type:"text",wide:true,showIf:["rxForm",RX_OTHER]},
     {id:"quartz",jot:"Also imprint on a quartz crystal",label:"Also imprint my treatment onto a quartz crystal, at no charge (helpful if you're sensitive)",type:"check",wide:true,showIf:["delivery","Shipped to me"]},
@@ -1075,7 +1076,7 @@ function renderInbox(){
 function apptsPane(id){
   const c=S.clients[id]||{}, list=apptsOf(c), up=list.filter(a=>a.date>=today()), past=list.filter(a=>a.date<today()).reverse();
   const ed=S.apptEdit && S.apptEdit.cid===id ? S.apptEdit : null;
-  if(ed && ed.isNew && ed.a.type==="scan" && !ed.a.delivery) ed.a.delivery = wantsShipped(c) ? "ship" : "imprint";
+  if(ed && ed.isNew && ed.a.type==="scan" && !ed.a.delivery) ed.a.delivery = (c.qest||{}).reportsOnly ? "none" : wantsShipped(c) ? "ship" : "imprint";
   const row=a=>`<div class="dash-row" style="align-items:flex-start"><div style="display:flex;flex-direction:column;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small muted">${esc(apptWhen(a))}${a.how?` · ${esc(a.how)}`:""}${a.note?` · ${esc(a.note)}`:""}</span>
       ${apptDelivery(a)==="ship"?`<span class="small" style="white-space:pre-line;margin-top:4px"><b>Ship to:</b> ${esc(a.shipTo||clientShipAddress(c)||"No address on file yet")}</span>
         ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>`:""}`:""}</div>
@@ -1239,16 +1240,30 @@ document.addEventListener("change", e=>{ if(e.target?.id==="cd-type") e.target.d
 function priceBoxInner(pre){
   const id=S.prac ? S.sel : S.who, P=S.prac ? pricingFor(id) : ((S.myRec||{}).pricing || {tier:"current", ...QP_DEFAULT.current, disc:null});
   const pick=k=>document.querySelector(`input[name="${pre}-${k}"]:checked`)?.value || (S.prac ? (S.clients[id]?.qest||{})[k] : ((S.myRec||{}).qestDraft||(S.myRec||{}).qest||{})[k]) || "";
-  const e=priceEstimate(P, /^yes/i.test(pick("zoomThis")), pick("delivery")==="Shipped to me"); if(!e) return "";
+  const onlyBox=document.getElementById(pre+"-reportsOnly"), only = onlyBox ? onlyBox.checked : !!(S.prac ? (S.clients[id]?.qest||{}).reportsOnly : ((S.myRec||{}).qestDraft||(S.myRec||{}).qest||{}).reportsOnly);
+  requestAnimationFrame(()=>applyReportsOnly(pre));
+  let e;
+  if(only){ const z=/^yes/i.test(pick("zoomThis")), off=onlyOffFor(P), lines=[["Qest4 scan & reports only (no treatment)", P.only]]; if(z) lines.push([P.zoomFree?"30-minute Zoom consult (included for you)":"30-minute Zoom consult", P.zoomFree?0:P.zoom]);
+    const sub=r2(lines.reduce((t,l)=>t+(+l[1]||0),0)); e={lines, sub, off, total:r2(sub-off)}; }
+  else e=priceEstimate(P, /^yes/i.test(pick("zoomThis")), pick("delivery")==="Shipped to me"); if(!e) return "";
   return `<div class="notice ok" style="margin:0"><div class="row" style="gap:8px"><b class="grow">Your price${P.tier==="founding"?` <span class="chip">RFH Subscriber discount</span>`:""}</b><b style="font-size:18px">${money(e.total)}</b></div>
     <table style="margin-top:6px;font-size:14px"><tbody>${e.lines.map(([l,a])=>`<tr><td>${esc(l)}</td><td style="text-align:right">${money(a)}</td></tr>`).join("")}
     ${e.off?`<tr><td>${esc(P.disc.label||"Your discount")}${P.disc.type==="pct"?` (${esc(P.disc.value)}%)`:""}</td><td style="text-align:right">\u2212${money(e.off)}</td></tr>`:""}</tbody></table>
     <p class="small muted" style="margin:4px 0 0">Updates as you choose Zoom and imprint or shipping. Dawn confirms the final amount on your invoice.</p></div>`;
 }
+document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-onlyok" || !S.prac || !S.sel) return; const on=e.target.checked;
+  try{ await S.db.doc("clients/"+S.sel).update({reportsOnlyOk:on}); toast(on?"Their Qest4 form now offers scan & reports only":"Reports only taken off their form"); }catch(err){ toast("That didn't save. Please try again."); } });
 document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-zoomfree" || !S.prac || !S.sel) return; const on=e.target.checked, id=S.sel;
   try{ await S.db.doc("clients/"+id).update({zoomFree:on}); S.clients[id]={...S.clients[id], zoomFree:on}; await S.db.doc("clients/"+id).update({pricing:pricingFor(id)}); toast(on?"Zoom consults are free for this client":"Zoom consults charged as usual"); const g=document.getElementById("price-grid"); if(g) g.innerHTML=priceGrid(id); }catch(err){ toast("That didn't save. Please try again."); } });
 document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-tier" || !S.prac || !S.sel) return; const tier=e.target.value; try{ S.clients[S.sel]={...S.clients[S.sel], priceTier:tier}; await S.db.doc("clients/"+S.sel).update({priceTier:tier, pricing:pricingFor(S.sel)}); const g=document.getElementById("price-grid"); if(g) g.innerHTML=priceGrid(S.sel); toast(`${clientFirst(S.sel)||"Client"}: ${TIER_LABEL[tier]}`); }catch(err){ toast("That didn't save. Please try again."); } });
-document.addEventListener("change", e=>{ const n=e.target?.name||""; const m=/^(.+)-(zoomThis|delivery)$/.exec(n); if(!m) return; const box=document.getElementById(m[1]+"-pricebox"); if(box) box.innerHTML=priceBoxInner(m[1]); });
+document.addEventListener("change", e=>{ const n=e.target?.name||e.target?.id||""; const m=/^(.+)-(zoomThis|delivery|reportsOnly)$/.exec(n); if(!m) return; const box=document.getElementById(m[1]+"-pricebox"); if(box) box.innerHTML=priceBoxInner(m[1]); applyReportsOnly(m[1]); });
+/* reports only: switched on per client by Dawn; when ticked, the treatment questions step aside */
+function reportsOnlyOn(){ return S.prac ? !!S.clients[S.sel]?.reportsOnlyOk : !!(S.myRec||{}).reportsOnlyOk; }
+function applyReportsOnly(pre){ const box=document.getElementById(pre+"-reportsOnly"); const on=!!box?.checked;
+  ["delivery","rxForm"].forEach(k=>{ const f=document.getElementById(`${pre}-${k}-0`)?.closest(".field"); if(f) f.hidden=on; });
+  ["rxOther","quartz"].forEach(k=>{ const el=document.getElementById(`${pre}-${k}`); const f=el?.closest(".field,.check"); if(f && on) f.hidden=true; });
+  const ib=document.getElementById(pre+"-imprintbox")?.closest(".field"); if(ib && on) ib.hidden=true;
+  if(!on){ const d=document.querySelector(`input[name="${pre}-delivery"]:checked`)?.value; if(ib) ib.hidden = d!==IMPRINT_REMOTE; const q=document.getElementById(`${pre}-quartz`)?.closest(".field,.check"); if(q && !q.dataset.showif) q.hidden=false; } }
 function payInfo(){ const b=billSet(); const o={}; ["payLink","venmo","zelle","cashapp","payNote"].forEach(k=>{ if((b[k]||"").trim()) o[k]=b[k].trim(); }); return o; }
 const venmoUrl = h => "https://venmo.com/u/"+encodeURIComponent(String(h).replace(/^@/,""));
 const cashUrl = h => "https://cash.app/$"+encodeURIComponent(String(h).replace(/^\$/,""));
@@ -1444,7 +1459,7 @@ function billingPane(id){
     <div class="row" style="gap:10px"><div class="grow row" style="gap:16px"><span><span class="small muted">Balance due</span><br><b style="font-size:20px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
       ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
-    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-zoomfree" ${S.clients[id]?.zoomFree?"checked":""}><span>No charge for Zoom</span></label><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
+    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-onlyok" ${S.clients[id]?.reportsOnlyOk?"checked":""}><span>Offer reports only on their form</span></label><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-zoomfree" ${S.clients[id]?.zoomFree?"checked":""}><span>No charge for Zoom</span></label><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
     <div id="price-grid">${priceGrid(id)}</div>
     ${(()=>{ const cd=(billSet().clientDiscounts||{})[id];
       return S.discEdit===id ? `<div class="row" id="disc-form" style="gap:6px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
@@ -2995,9 +3010,10 @@ async function mergeClient(fromId, toId){
 /* ---------- intake form (shared) ---------- */
 function intakeForm(vals, pre, readonly, def = INTAKE){
   return `<form class="stack" id="${pre}-form" onsubmit="return false">` + def.map(s => `<fieldset class="formsec"><legend>${esc(s.sec)}</legend>${s.note?(s.gentle?`<div class="notice ok" style="margin-bottom:4px">${esc(s.note)}</div>`:`<p class="small muted" style="margin-top:-6px">${esc(s.note)}</p>`):""}<div class="grid2">` +
-    s.fields.map(f => { const h = fieldHtml(f) + (def===QEST && f.id==="delivery" ? `<div class="field" style="grid-column:1/-1" id="${pre}-pricebox">${priceBoxInner(pre)}</div>` : ""); if(!f.showIf || f.type==="imprint") return h;
+    s.fields.map(f => { const h = fieldHtml(f) + (def===QEST && f.id==="reportsOnly" ? `<div class="field" style="grid-column:1/-1" id="${pre}-pricebox">${priceBoxInner(pre)}</div>` : ""); if(!f.showIf || f.type==="imprint") return h;
       const [dep, want] = f.showIf; return h.replace(/^<(\w+)/, `<$1 data-showif="${pre}-${dep}|${esc(String(want))}" ${String(vals[dep])===String(want)?"":"hidden"}`); }).join("") + `</div></fieldset>`).join("") + `</form>`;
   function fieldHtml(f){
+      if(f.gate==="reportsOnly" && !reportsOnlyOn() && !vals[f.id]) return "";
       const id = `${pre}-${f.id}`, v = vals[f.id] ?? "", dis = readonly ? "disabled" : "";
       const style = f.wide ? ' style="grid-column:1/-1"' : "";
       const lbl = esc(f.label) + (f.req ? ' <b class="req" aria-hidden="true">*</b>' : "");
@@ -4828,7 +4844,8 @@ function renderClient(){
     const def = isQ ? QEST : isF ? (fq ? QEST_FU : FOLLOWUP) : INTAKE, pre = isQ ? "cs" : isF ? "cf" : "ci";
     const vals = readIntake(pre, def);
     if(submit){
-      const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id]);
+      const miss = def.flatMap(s=>s.fields).filter(f=>f.req && !vals[f.id] && !(isQ && vals.reportsOnly && ["delivery","rxForm"].includes(f.id)));
+      if(isQ && vals.reportsOnly){ ["delivery","rxForm","rxOther","quartz","imprintPic"].forEach(k=>delete vals[k]); }
       if(isQ) vals.photoOnFile = !!document.getElementById("cs-photoOnFile")?.checked || undefined;
       if(isQ && !S.myPhoto && !vals.photoOnFile){ toast("Please add a recent photo of the person being scanned, or tick the box to use the photo on file"); document.querySelector('label[for="cp-photo"]')?.scrollIntoView({block:"center"}); return; }
       if(miss.length){ const m0=miss[0]; if(m0.type==="choice"){ toast(`Please answer: ${m0.label}`); document.getElementById(`${pre}-${m0.id}-0`)?.scrollIntoView({block:"center"}); return; } }
