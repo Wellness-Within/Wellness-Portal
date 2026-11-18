@@ -971,6 +971,17 @@ function welcomeMsg(id, email){
   if(email) L.push(emailSign()); else L.push("Warmly,", "Dawn");
   return L.join("\n");
 }
+/* draft invoice made automatically when Dawn books a scan; she reviews it before it's sent */
+async function autoDraftInvoice(cid, a){
+  try{
+    if(Object.values(S.inv||{}).some(v=>v.apptId===a.id && v.status!=="void")) return;
+    // already paid ahead (website order, Square payment) and not yet tied to a scan: link that instead of billing twice
+    const recent=Object.entries(S.inv||{}).find(([,v])=>v.clientId===cid && v.status==="sent" && !v.apptId && /scan/i.test((v.items||[]).map(i=>i.desc).join(" ")) && Date.now()-Date.parse(v.createdAt||v.date||0) < 45*864e5);
+    if(recent){ await S.db.doc("invoices/"+recent[0]).update({apptId:a.id}); return; }
+    const v=blankInvoice(cid, a); v.auto=true; v.createdAt=v.updatedAt=new Date().toISOString();
+    const id=genId(); await S.db.doc("invoices/"+id).set(v); S.inv={...S.inv, [id]:v};
+  }catch(e){ console.warn(e); }
+}
 /* automatic "you're booked" message (emailed) when Dawn adds a new upcoming appointment; one per email per day for families */
 async function apptBookedMsg(id, a){
   if(!autoOn("apptBooked") || !S.settings.autoEmail || a.type==="imprint" || a.date<today()) return false;
@@ -1186,6 +1197,38 @@ function prepaidLeft(list){ let bought=0, used=0;
   (list||[]).filter(v=>v.status==="sent").forEach(v=>(v.items||[]).forEach(i=>{ if(i.kind==="package") bought+=(+i.qty||1)*(+i.sessions||0); if(i.credit) used+=(+i.qty||1); }));
   return {bought, used, left:bought-used}; }
 const billSet = () => S.settings.billing || {};
+/* Qest4 pricing: two levels (current website prices, founding members). Base = scan + remote balancing treatment. */
+const QP_DEFAULT = { current:{base:150, zoom:25, ship:25, only:75}, founding:{base:100, zoom:25, ship:25, only:75} };
+const TIER_LABEL = { current:"Current pricing", founding:"Founding member pricing" };
+function qestPricing(){ const q=billSet().qestPricing||{}; return { current:{...QP_DEFAULT.current, ...(q.current||{})}, founding:{...QP_DEFAULT.founding, ...(q.founding||{})} }; }
+/* what one client pays: their level's prices and their standing discount (Dawn's view) */
+function pricingFor(id){ const c=S.clients[id]||{}, tier=c.priceTier==="founding"?"founding":"current", P=qestPricing()[tier], cd=(billSet().clientDiscounts||{})[id];
+  return {tier, base:+P.base||0, zoom:+P.zoom||0, ship:+P.ship||0, only:+P.only||0, disc: cd&&+cd.value ? {label:cd.label||"Discount", type:cd.type==="amt"?"amt":"pct", value:+cd.value} : null}; }
+/* clients can't read settings, so each record carries its own copy (kept in step by Dawn's portal) */
+async function syncClientPricing(){
+  if(!S.prac || !S.clientsLoaded || S.priceSyncBusy) return; S.priceSyncBusy=true;
+  try{ for(const id of Object.keys(S.clients)){ if(isFamilyShell(id)) continue; const want=pricingFor(id);
+      if(JSON.stringify(S.clients[id].pricing||null)!==JSON.stringify(want)) await S.db.doc("clients/"+id).update({pricing:want}).catch(e=>console.warn(e)); } }
+  finally{ S.priceSyncBusy=false; }
+}
+function priceEstimate(P, zoom, ship){
+  if(!P) return null; const lines=[["Qest4 scan + balancing treatment", P.base]];
+  if(zoom) lines.push(["30-minute Zoom consult", P.zoom]); if(ship) lines.push(["Shipping of your balancing treatment", P.ship]);
+  const sub=r2(lines.reduce((t,l)=>t+(+l[1]||0),0)); let off=0;
+  if(P.disc) off = P.disc.type==="amt" ? Math.min(sub, r2(P.disc.value)) : r2(sub*P.disc.value/100);
+  return {lines, sub, off, total:r2(sub-off)};
+}
+function priceBoxInner(pre){
+  const id=S.prac ? S.sel : S.who, P=S.prac ? pricingFor(id) : ((S.myRec||{}).pricing || {tier:"current", ...QP_DEFAULT.current, disc:null});
+  const pick=k=>document.querySelector(`input[name="${pre}-${k}"]:checked`)?.value || (S.prac ? (S.clients[id]?.qest||{})[k] : ((S.myRec||{}).qestDraft||(S.myRec||{}).qest||{})[k]) || "";
+  const e=priceEstimate(P, /^yes/i.test(pick("zoomThis")), pick("delivery")==="Shipped to me"); if(!e) return "";
+  return `<div class="notice ok" style="margin:0"><div class="row" style="gap:8px"><b class="grow">Your price${P.tier==="founding"?` <span class="chip">Founding member</span>`:""}</b><b style="font-size:18px">${money(e.total)}</b></div>
+    <table style="margin-top:6px;font-size:14px"><tbody>${e.lines.map(([l,a])=>`<tr><td>${esc(l)}</td><td style="text-align:right">${money(a)}</td></tr>`).join("")}
+    ${e.off?`<tr><td>${esc(P.disc.label||"Your discount")}${P.disc.type==="pct"?` (${esc(P.disc.value)}%)`:""}</td><td style="text-align:right">\u2212${money(e.off)}</td></tr>`:""}</tbody></table>
+    <p class="small muted" style="margin:4px 0 0">Updates as you choose Zoom and imprint or shipping. Dawn confirms the final amount on your invoice.</p></div>`;
+}
+document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-tier" || !S.prac || !S.sel) return; const tier=e.target.value; try{ await S.db.doc("clients/"+S.sel).update({priceTier:tier, pricing:{...pricingFor(S.sel), tier, ...(({base,zoom,ship,only})=>({base,zoom,ship,only}))(qestPricing()[tier])}}); toast(`${clientFirst(S.sel)||"Client"}: ${TIER_LABEL[tier]}`); }catch(err){ toast("That didn't save. Please try again."); } });
+document.addEventListener("change", e=>{ const n=e.target?.name||""; const m=/^(.+)-(zoomThis|delivery)$/.exec(n); if(!m) return; const box=document.getElementById(m[1]+"-pricebox"); if(box) box.innerHTML=priceBoxInner(m[1]); });
 function payInfo(){ const b=billSet(); const o={}; ["payLink","venmo","zelle","cashapp","payNote"].forEach(k=>{ if((b[k]||"").trim()) o[k]=b[k].trim(); }); return o; }
 const venmoUrl = h => "https://venmo.com/u/"+encodeURIComponent(String(h).replace(/^@/,""));
 const cashUrl = h => "https://cash.app/$"+encodeURIComponent(String(h).replace(/^\$/,""));
@@ -1349,7 +1392,15 @@ function blankInvoice(cid, appt){
   const d=today(), due=new Date(d+"T12:00:00"); due.setDate(due.getDate()+14);
   const cd=(billSet().clientDiscounts||{})[cid];
   const v={clientId:cid, date:d, due:due.toISOString().slice(0,10), items:[], discount:cd&&+cd.value?{label:cd.label||"Discount", type:cd.type||"pct", value:+cd.value}:{label:"", type:"pct", value:""}, status:"draft", payments:[], note:""};
-  if(appt){ v.apptId=appt.id; const price=billSet().items||[];
+  if(appt && appt.type==="scan"){ v.apptId=appt.id; const P=pricingFor(cid), dl=apptDelivery(appt), q=S.clients[cid]?.qest||{};
+    const zoom=(appt.how && /zoom|video|phone/i.test(appt.how)) || (!appt.how && /^yes/i.test(q.zoomThis||""));
+    if(dl==="none") v.items.push({kind:"scan", desc:"Qest4 scan & reports only", qty:1, price:P.only});
+    else v.items.push({kind:"scan", desc:"Qest4 scan + balancing treatment", qty:1, price:P.base});
+    if(zoom) v.items.push({kind:"consult", desc:"30-minute Zoom consultation", qty:1, price:P.zoom});
+    if(dl==="ship") v.items.push({kind:"shipping", desc:"Shipping of balancing treatment (US postage included)", qty:1, price:P.ship});
+    if(P.tier==="founding") v.note=v.note||"Founding member pricing";
+  }
+  else if(appt){ v.apptId=appt.id; const price=billSet().items||[];
     const kinds=[appt.type]; if(appt.type==="scan" && apptDelivery(appt)==="ship") kinds.push("shipping");
     const dl=apptDelivery(appt);
     const scanPick = () => { const sc=price.filter(x=>x.kind==="scan"); return dl==="ship" ? sc.find(x=>/mail|ship/i.test(x.name)) : dl==="none" ? sc.find(x=>/only/i.test(x.name)) : sc.find(x=>!/mail|ship|only/i.test(x.name)) || sc[0]; };
@@ -1372,6 +1423,7 @@ function billingPane(id){
     <div class="row" style="gap:10px"><div class="grow row" style="gap:16px"><span><span class="small muted">Balance due</span><br><b style="font-size:20px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
       ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
+    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
     ${(()=>{ const cd=(billSet().clientDiscounts||{})[id];
       return S.discEdit===id ? `<div class="row" id="disc-form" style="gap:6px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
           <label class="field" style="flex:2"><span>Standing discount name</span><input id="cd-label" placeholder="e.g. Family discount" value="${esc(cd?.label||"")}"></label>
@@ -1515,7 +1567,7 @@ async function billingClick(e){
   if(act==="discsave"||act==="discclear"){ const all={...(billSet().clientDiscounts||{})};
     if(act==="discclear") delete all[S.sel]; else { const val=r2($("#cd-val").value); if(!(val>0)){ toast("Enter the discount amount"); return true; } all[S.sel]={label:$("#cd-label").value.trim()||"Discount", type:$("#cd-type").value, value:val}; }
     const billing={...billSet(), clientDiscounts:all}; a.disabled=true;
-    try{ await S.db.doc("settings/practice").update({billing}); S.settings={...S.settings, billing}; S.discEdit=null; toast(act==="discclear"?"Discount removed":"Discount saved. It's added to each new invoice for this client."); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); return true; }
+    try{ await S.db.doc("settings/practice").update({billing}); S.settings={...S.settings, billing}; S.discEdit=null; toast(act==="discclear"?"Discount removed":"Discount saved. It shows on their Qest4 form price and is added to each new invoice."); syncClientPricing(); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); return true; }
     renderClients(); return true; }
   if(act==="paycancel"){ S.payFor=null; renderClients(); return true; }
   if(act==="paysave"){ const id=S.payFor, v=S.inv[id]; const amt=r2($("#pf-amt").value); if(!(amt>0)){ toast("Enter the amount received"); return true; }
@@ -1591,7 +1643,10 @@ function billingSettingsSection(){
       <label class="field"><span>Zelle (email or phone)</span><input id="bs-zelle" value="${esc(b.zelle||"")}"></label>
       <label class="field"><span>Cash App $cashtag</span><input id="bs-cash" placeholder="$yourname" value="${esc(b.cashapp||"")}"></label></div>
     <label class="field"><span>Payment note (optional)</span><input id="bs-note" placeholder="e.g. Payment is due within 14 days." value="${esc(b.payNote||"")}"></label>
-    <h3 style="margin-top:6px">Price list</h3>
+    <h3 style="margin-top:6px">Qest4 pricing</h3>
+    <p class="small muted">Clients see their own price on the Qest4 form as they choose Zoom and imprint or shipping, with their standing discount if they have one. Choose each client's level on their Billing tab (Current is the default). New scan invoices use these prices.</p>
+    <table><thead><tr><th></th><th>Current</th><th>Founding members</th></tr></thead><tbody>${[["base","Scan + remote balancing treatment"],["zoom","Zoom consult add-on"],["ship","Shipping add-on"],["only","Scan & reports only"]].map(([k,l])=>`<tr><td>${l}</td>${["current","founding"].map(t=>`<td><input type="number" min="0" step="0.01" id="qp-${t}-${k}" value="${esc(qestPricing()[t][k])}" style="width:110px"></td>`).join("")}</tr>`).join("")}</tbody></table>
+    <h3 style="margin-top:6px">Other prices</h3>
     <p class="small muted">Pick these when making an invoice. For a package, enter how many sessions it includes; clients' prepaid sessions are counted for you.</p>
     <div class="stack" style="gap:6px">${items.map((p,k)=>`<div class="row price-row" data-pi="${k}" style="gap:6px;flex-wrap:nowrap">
         <input class="pi-name" placeholder="Name, e.g. Qest4 scan" value="${esc(p.name||"")}" style="flex:2">
@@ -1608,9 +1663,10 @@ async function billingSettingsClick(e){
   const a=e.target.closest("[data-act]"); if(!a) return false;
   if(a.dataset.act==="piadd"){ S.priceDraft=[...readPriceRows(), {name:"", kind:"scan", price:""}]; renderSettings(); const ins=document.querySelectorAll("#bill-set .pi-name"); ins[ins.length-1]?.focus(); return true; }
   if(a.dataset.act==="billsave"){ const items=readPriceRows().filter(p=>p.name);
-    const billing={...billSet(), items, payLink:$("#bs-link").value.trim(), venmo:$("#bs-venmo").value.trim().replace(/^@/,""), zelle:$("#bs-zelle").value.trim(), cashapp:$("#bs-cash").value.trim().replace(/^\$/,""), payNote:$("#bs-note").value.trim()};
+    const qp={}; ["current","founding"].forEach(t=>{ qp[t]={}; ["base","zoom","ship","only"].forEach(k=>{ qp[t][k]=r2($(`#qp-${t}-${k}`)?.value||0); }); });
+    const billing={...billSet(), qestPricing:qp, items, payLink:$("#bs-link").value.trim(), venmo:$("#bs-venmo").value.trim().replace(/^@/,""), zelle:$("#bs-zelle").value.trim(), cashapp:$("#bs-cash").value.trim().replace(/^\$/,""), payNote:$("#bs-note").value.trim()};
     if(billing.payLink && !/^https?:\/\//i.test(billing.payLink)) billing.payLink="https://"+billing.payLink;
-    a.disabled=true; try{ await S.db.doc("settings/practice").update({billing}); S.settings={...S.settings, billing}; S.priceDraft=null; toast("Billing settings saved"); renderSettings(); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); }
+    a.disabled=true; try{ await S.db.doc("settings/practice").update({billing}); S.settings={...S.settings, billing}; S.priceDraft=null; toast("Billing settings saved"); renderSettings(); syncClientPricing(); }catch(e1){ a.disabled=false; toast("That didn't save. Please try again."); }
     return true; }
   return false;
 }
@@ -1775,7 +1831,7 @@ function openClientAt(id, sub){
   S.sub=sub; renderTabs(); render(); window.scrollTo(0,0);
 }
 function renderHome(){
-  loadRecentWork(); autoWelcome();
+  loadRecentWork(); autoWelcome(); if(!S.priceSyncAt || Date.now()-S.priceSyncAt>10*60000){ S.priceSyncAt=Date.now(); syncClientPricing(); }
   const t=today(), wk=new Date(t+"T12:00:00"); wk.setDate(wk.getDate()+7); const wkS=wk.toISOString().slice(0,10);
   const ago=new Date(t+"T12:00:00"); ago.setDate(ago.getDate()-7); const agoS=ago.toISOString().slice(0,10);
   const ids=Object.keys(S.clients||{}), nm=id=>esc(clientName(id));
@@ -1807,6 +1863,8 @@ function renderHome(){
     card("New forms in", forms.length, forms.length?`<div>${forms.slice(0,6).map(id=>row(id,"",`<b>${nm(id)}</b><span class="small muted">${esc(formKind(S.clients[id]))} · ${esc(fmtWhen(lastSubmitted(S.clients[id])))}</span>`,'<span class="chip acc">New</span>')).join("")}</div>`:empty("No new forms since you last looked.")),
     card("Website orders", orders.length, orders.length?`<div>${orders.slice(0,6).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">${esc(fmtDate(v.date))} · ${esc((v.items||[])[0]?.desc||"Order")}</span>`,`<b>${esc(money(invMath(v).total))}</b>`)).join("")}</div>`:empty("No website orders in the last 7 days.")),
     card("To ship", ship.length, ship.length?`<div>${ship.slice(0,6).map(({id,a})=>row(id,"appts",`<b>${nm(id)}</b><span class="small muted">Scan ${esc(dayLbl(a.date))}${S.clients[id].qest?.quartz?" · + quartz crystal":""}</span>`,'<span class="chip acc">To ship</span>')).join("")}</div>`:empty("Nothing waiting to ship this week.")),
+    ...(()=>{ const dr=Object.entries(S.inv||{}).map(([iid,v])=>({iid,...v})).filter(v=>v.status==="draft" && v.auto && S.clients[v.clientId]).sort((a,b)=>(a.serviceDate||a.date||"").localeCompare(b.serviceDate||b.date||""));
+      return dr.length ? [card("Bills to review", dr.length, `<div>${dr.slice(0,8).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">Scan ${esc(fmtDate(v.serviceDate||v.date))} · draft, not sent</span>`,`<b>${esc(money(invMath(v).total))}</b>`)).join("")}</div>`, `<p class="small muted" style="margin:6px 0 0">Open one, check it, then Send and email it.</p>`)] : []; })(),
     card("Billing", overdue.length?`${overdue.length} overdue`:"", `<div class="row" style="gap:20px"><span><span class="small muted">Outstanding</span><br><b style="font-size:22px">${esc(money(owed))}</b></span><span><span class="small muted">Unpaid invoices</span><br><b style="font-size:22px">${open.length}</b></span></div>
       ${overdue.length?`<div>${overdue.slice(0,4).map(v=>row(v.clientId,"billing",`<b>${nm(v.clientId)}</b><span class="small muted">#${esc(v.number)} · due ${esc(fmtDate(v.due))}</span>`,`<b>${esc(money(invMath(v).bal))}</b>`)).join("")}</div>`:""}`, `<button type="button" class="ghost" data-htab="billing">Billing</button>`),
   ];
@@ -1827,7 +1885,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
+  const items=[["autoDraft","Draft invoice when you book a scan","Makes a draft invoice from the client's pricing (Current or Founding), their Zoom and imprint or shipping choice, and their standing discount. Nothing is sent: it waits on your Home page under Bills to review. Skipped if they already paid ahead (website order or Square)."],["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
@@ -2679,7 +2737,8 @@ function bindClients(){
       else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-type").value==="imprint"?"":($("#ap-how")?.value||""), zoomUrl:($("#ap-type").value!=="imprint" && $("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
         if(!/^\d{4}-\d{2}-\d{2}$/.test(a.date)){ toast("Choose a date"); return; } if(a.type==="consult" && !a.time){ toast("Choose a time for the call"); return; }
         const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null;
-        const told = ed.isNew ? await apptBookedMsg(S.sel, a) : false; toast(told?"Appointment saved. They'll be emailed in a minute (book any family members for the same day now and they'll be included).":"Appointment saved"); renderClients(); }
+        const told = ed.isNew ? await apptBookedMsg(S.sel, a) : false;
+        if(ed.isNew && a.type==="scan" && autoOn("autoDraft")) await autoDraftInvoice(S.sel, a); toast(told?"Appointment saved. They'll be emailed in a minute (book any family members for the same day now and they'll be included).":"Appointment saved"); renderClients(); }
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
       else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent, and emailed to them.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
       else if(act==="msgmail"){ msgHeadsUp(S.sel); }
@@ -2896,7 +2955,7 @@ async function mergeClient(fromId, toId){
 /* ---------- intake form (shared) ---------- */
 function intakeForm(vals, pre, readonly, def = INTAKE){
   return `<form class="stack" id="${pre}-form" onsubmit="return false">` + def.map(s => `<fieldset class="formsec"><legend>${esc(s.sec)}</legend>${s.note?(s.gentle?`<div class="notice ok" style="margin-bottom:4px">${esc(s.note)}</div>`:`<p class="small muted" style="margin-top:-6px">${esc(s.note)}</p>`):""}<div class="grid2">` +
-    s.fields.map(f => { const h = fieldHtml(f); if(!f.showIf || f.type==="imprint") return h;
+    s.fields.map(f => { const h = fieldHtml(f) + (def===QEST && f.id==="rxForm" ? `<div class="field" style="grid-column:1/-1" id="${pre}-pricebox">${priceBoxInner(pre)}</div>` : ""); if(!f.showIf || f.type==="imprint") return h;
       const [dep, want] = f.showIf; return h.replace(/^<(\w+)/, `<$1 data-showif="${pre}-${dep}|${esc(String(want))}" ${String(vals[dep])===String(want)?"":"hidden"}`); }).join("") + `</div></fieldset>`).join("") + `</form>`;
   function fieldHtml(f){
       const id = `${pre}-${f.id}`, v = vals[f.id] ?? "", dis = readonly ? "disabled" : "";
