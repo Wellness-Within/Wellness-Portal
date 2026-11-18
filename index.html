@@ -971,12 +971,24 @@ function welcomeMsg(id, email){
   if(email) L.push(emailSign()); else L.push("Warmly,", "Dawn");
   return L.join("\n");
 }
+/* automatic "you're booked" message (emailed) when Dawn adds a new upcoming appointment; one per email per day for families */
+async function apptBookedMsg(id, a){
+  if(!autoOn("apptBooked") || !S.settings.autoEmail || a.type==="imprint" || a.date<today()) return false;
+  const e=(clientEmail(id)||famPeople(id).map(x=>clientEmail(x)).find(Boolean)||"").trim().toLowerCase(); if(!e) return false;
+  const key=e+"|"+a.date+"|"+a.type; S.bookedTold=S.bookedTold||{}; if(S.bookedTold[key] && Date.now()-S.bookedTold[key]<15*60000) return false;
+  let body;
+  if(a.type==="scan") body=scanScheduledMsg(id, a);
+  else { const first=clientFirst(id), when=apptWhen(a,true), zoom=isZoom(a);
+    body=[`Hi ${first && first!=="Unnamed" ? first : "there"},`, "", `You're booked for a ${APPT_TYPES[a.type]||"session"} on ${when}.`, "", zoom?"We'll meet on Zoom. You'll find a Join Zoom button on your Home page in the portal when it's time.":a.how?`We'll connect by ${a.how.toLowerCase()}.`:"", ...(a.note?[a.note,""]:[]), "If you need to change the time, just reply here.", "", "Warmly,", "Dawn"].filter((x,i,arr)=>x!==""||arr[i-1]!=="").join("\n"); }
+  const ok=await sendMsg(id, "dawn", body); if(ok) S.bookedTold[key]=Date.now(); return ok;
+}
 /* built-in message: intake received, scan scheduled (fills from the next scan appointment) */
-function scanScheduledMsg(id){
+function scanScheduledMsg(id, appt){
   const c=S.clients[id]||{}, first=clientFirst(id), hi=`Hi ${first && first!=="Unnamed" ? first : "there"},`;
-  const a=upcomingAppts(c).find(x=>x.type==="scan"), d=a?apptDelivery(a):"", q=c.qest||{};
+  const a=appt||upcomingAppts(c).find(x=>x.type==="scan"), d=a?apptDelivery(a):"", q=c.qest||{};
   const rx=/pellet/i.test(q.rxForm||"")?"pellets":/liquid/i.test(q.rxForm||"")?"liquid drops":"";
-  const L=[hi, "", `Thank you for sending in your form! I've scheduled your Qest4 scan for ${a?apptWhen(a,true):"[date]"}.`, ""];
+  const L=[hi, "", `${Date.now()-Date.parse(c.qestSubmittedAt||0) < 30*864e5 ? "Thank you for sending in your form! " : ""}I've scheduled your Qest4 scan for ${a?apptWhen(a,true):"[date]"}.`, ""];
+  if(a?.note) L.push(a.note, "");
   if(a && isZoom(a)) L.push("We'll have our Zoom consult then too. You'll find a Join Zoom button on your Home page in the portal when it's time.", "");
   if(d==="ship") L.push(`I'll ship your treatment${rx?` (${rx})`:""} to you after your scan, to the address on your form. If anything has changed, just let me know.`, "");
   else if(d==="imprint") L.push(`For your remote imprint, please prepare your ${rx==="pellets"?"jar of blank pellets":rx==="liquid drops"?"2 oz bottle (alcohol and water)":"2 oz bottle or jar of blank pellets"} and send me a picture before your scan day.`, "");
@@ -1797,7 +1809,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
+  const items=[["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
@@ -2646,7 +2658,8 @@ function bindClients(){
       else if(act==="apcancel"){ S.apptEdit=null; renderClients(); }
       else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-type").value==="imprint"?"":($("#ap-how")?.value||""), zoomUrl:($("#ap-type").value!=="imprint" && $("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
         if(!/^\d{4}-\d{2}-\d{2}$/.test(a.date)){ toast("Choose a date"); return; } if(a.type==="consult" && !a.time){ toast("Choose a time for the call"); return; }
-        const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null; toast("Appointment saved"); renderClients(); }
+        const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null;
+        const told = ed.isNew ? await apptBookedMsg(S.sel, a) : false; toast(told?"Appointment saved, and they've been emailed":"Appointment saved"); renderClients(); }
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
       else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent, and emailed to them.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
       else if(act==="msgmail"){ msgHeadsUp(S.sel); }
