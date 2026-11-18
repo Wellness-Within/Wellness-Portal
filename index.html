@@ -1005,6 +1005,10 @@ function scanScheduledMsg(id, appt, group, withNotes){
   if(withNotes) notes.forEach(n=>L.push(n, ""));
   if(a && isZoom(a)) L.push("We'll have our Zoom consult then too. You'll find a Join Zoom button on your Home page in the portal when it's time.", "");
   if(d==="ship") L.push(`I'll ship your treatment${rx?` (${rx})`:""} to you after your scan, to the address on your form. If anything has changed, just let me know.`, "");
+  else if(d==="imprint" && (()=>{ const ppl=(group&&group.length?group.map(g=>S.clients[g.id]||{}):[c]), has=x=>!!(x.qest||{}).imprintPic && Date.now()-Date.parse(x.qestSubmittedAt||x.qestUpdatedAt||0) < 30*864e5, n=ppl.filter(has).length;
+      if(!n) return false;
+      L.push(n===ppl.length ? `Thank you for sending ${ppl.length>1?"pictures of your remote imprint mediums":"the picture of your remote imprint medium"} with your form. Please leave ${ppl.length>1?"them":"it"} right where ${ppl.length>1?"they are":"it is"} until I let you know your remote imprint is done.`
+        : `Thank you for the remote imprint medium picture${n>1?"s":""} you've sent. For anyone who hasn't sent one yet, please prepare your imprint medium and send me a picture before your scan day.`, ""); return true; })());
   else if(d==="imprint") L.push(`For your remote imprint, please prepare your ${rx==="pellets"?"jar of blank pellets":rx==="liquid drops"?"2 oz bottle (alcohol and water)":"2 oz bottle or jar of blank pellets"} and send me a picture before your scan day.`, "");
   L.push("After your scan, your reports and treatment plan will be waiting for you here in the portal, and I'll let you know as soon as they're ready.", "", "If you have any questions before then, just reply here.", "", "Warmly,", "Dawn");
   return L.join("\n");
