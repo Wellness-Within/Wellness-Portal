@@ -1218,6 +1218,21 @@ function priceEstimate(P, zoom, ship){
   if(P.disc) off = P.disc.type==="amt" ? Math.min(sub, r2(P.disc.value)) : r2(sub*P.disc.value/100);
   return {lines, sub, off, total:r2(sub-off)};
 }
+/* Dawn's view: what this client would pay for each choice, with their level and discount (or the discount being typed) */
+function priceGrid(id, discOverride){
+  const P={...pricingFor(id)}; if(discOverride!==undefined) P.disc=discOverride;
+  const q=S.clients[id]?.qest||{}, myZoom=/^yes/i.test(q.zoomThis||""), myShip=q.delivery==="Shipped to me", haveChoice=!!(q.zoomThis||q.delivery);
+  const combos=[[false,false,"Remote imprint"],[false,true,"Shipped"],[true,false,"Remote imprint + Zoom"],[true,true,"Shipped + Zoom"]];
+  const only=P.disc ? Math.max(0, r2(P.only - (P.disc.type==="amt" ? Math.min(P.only, P.disc.value) : P.only*P.disc.value/100))) : P.only;
+  return `<div style="border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin:4px 0">
+    <div class="small" style="margin-bottom:4px"><b>What ${esc(clientFirst(id)||"they")} pays</b> · ${esc(TIER_LABEL[P.tier])}${P.disc?` · ${esc(P.disc.label||"Discount")} ${P.disc.type==="amt"?esc(money(P.disc.value))+" off":esc(P.disc.value)+"% off"}`:" · no discount"}</div>
+    <table style="font-size:14px"><thead><tr><th>Choice</th><th style="text-align:right">Price</th>${P.disc?`<th style="text-align:right">Discount</th>`:""}<th style="text-align:right">They pay</th></tr></thead><tbody>
+    ${combos.map(([z,sh,l])=>{ const e=priceEstimate(P,z,sh), mine=haveChoice && z===myZoom && sh===myShip; return `<tr${mine?' style="background:var(--soft)"':""}><td>${esc(l)}${mine?' <span class="chip acc">their choice</span>':""}</td><td style="text-align:right">${money(e.sub)}</td>${P.disc?`<td style="text-align:right">\u2212${money(e.off)}</td>`:""}<td style="text-align:right"><b>${money(e.total)}</b></td></tr>`; }).join("")}
+    <tr><td class="muted">Scan & reports only</td><td style="text-align:right" class="muted">${money(P.only)}</td>${P.disc?`<td style="text-align:right" class="muted">\u2212${money(r2(P.only-only))}</td>`:""}<td style="text-align:right" class="muted">${money(only)}</td></tr></tbody></table></div>`;
+}
+document.addEventListener("input", e=>{ if(!["cd-val","cd-type","cd-label"].includes(e.target?.id) || !S.prac || !S.sel) return; const g=document.getElementById("price-grid"); if(!g) return;
+  const val=r2(document.getElementById("cd-val")?.value||0); g.innerHTML=priceGrid(S.sel, val>0 ? {label:document.getElementById("cd-label")?.value||"Discount", type:document.getElementById("cd-type")?.value==="amt"?"amt":"pct", value:val} : null); });
+document.addEventListener("change", e=>{ if(e.target?.id==="cd-type") e.target.dispatchEvent(new Event("input",{bubbles:true})); });
 function priceBoxInner(pre){
   const id=S.prac ? S.sel : S.who, P=S.prac ? pricingFor(id) : ((S.myRec||{}).pricing || {tier:"current", ...QP_DEFAULT.current, disc:null});
   const pick=k=>document.querySelector(`input[name="${pre}-${k}"]:checked`)?.value || (S.prac ? (S.clients[id]?.qest||{})[k] : ((S.myRec||{}).qestDraft||(S.myRec||{}).qest||{})[k]) || "";
@@ -1424,6 +1439,7 @@ function billingPane(id){
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
       ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
     <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
+    <div id="price-grid">${priceGrid(id)}</div>
     ${(()=>{ const cd=(billSet().clientDiscounts||{})[id];
       return S.discEdit===id ? `<div class="row" id="disc-form" style="gap:6px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
           <label class="field" style="flex:2"><span>Standing discount name</span><input id="cd-label" placeholder="e.g. Family discount" value="${esc(cd?.label||"")}"></label>
