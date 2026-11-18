@@ -987,14 +987,14 @@ async function sendBooked(key, type, date){
   if(!group.length) return;
   const to=group.find(g=>famRole(g.id).holder)?.id || group[0].id, a=group[0].a;
   let body;
-  if(type==="scan") body=scanScheduledMsg(to, a, group);
+  if(type==="scan") body=scanScheduledMsg(to, a, group, true);
   else { const first=clientFirst(to), when=apptWhen(a,true), zoom=isZoom(a);
     body=[`Hi ${first && first!=="Unnamed" ? first : "there"},`, "", `You're booked for a ${APPT_TYPES[type]||"session"} on ${when}.`, "", zoom?"We'll meet on Zoom. You'll find a Join Zoom button on your Home page in the portal when it's time.":a.how?`We'll connect by ${a.how.toLowerCase()}.`:"", ...(a.note?[a.note,""]:[]), "If you need to change the time, just reply here.", "", "Warmly,", "Dawn"].filter((x,i,arr)=>x!==""||arr[i-1]!=="").join("\n"); }
   if(await sendMsg(to, "dawn", body)) toast(`${clientFirst(to)||"The client"} has been emailed about ${group.length>1?"their appointments":"the appointment"}`);
 }
 window.addEventListener("beforeunload", e=>{ if(Object.keys(S.bookedQ||{}).length){ e.preventDefault(); e.returnValue=""; } });
 /* built-in message: intake received, scan scheduled (fills from the next scan appointment) */
-function scanScheduledMsg(id, appt, group){
+function scanScheduledMsg(id, appt, group, withNotes){
   const c=S.clients[id]||{}, fr=famRole(id), first=(group&&group.length>1&&fr.fam&&!fr.holder&&fr.holderFirst)?fr.holderFirst:clientFirst(id), hi=`Hi ${first && first!=="Unnamed" ? first : "there"},`;
   const a=appt||upcomingAppts(c).find(x=>x.type==="scan"), d=a?apptDelivery(a):"", q=c.qest||{};
   const names=(group||[]).map(g=>clientFirst(g.id)).filter(n=>n&&n!=="Unnamed"), list=x=>x.length<2?x.join(""):x.slice(0,-1).join(", ")+" and "+x[x.length-1];
@@ -1002,7 +1002,7 @@ function scanScheduledMsg(id, appt, group){
   const sentForm=(group&&group.length?group.map(g=>S.clients[g.id]||{}):[c]).some(x=>Date.now()-Date.parse(x.qestSubmittedAt||0) < 30*864e5);
   const rx=/pellet/i.test(q.rxForm||"")?"pellets":/liquid/i.test(q.rxForm||"")?"liquid drops":"";
   const L=[hi, "", `${sentForm ? (names.length>1?"Thank you for sending in your forms! ":"Thank you for sending in your form! ") : ""}${names.length>1 ? `I've scheduled Qest4 scans for ${list(names)} on ${a?apptWhen(a,true):"[date]"}.` : `I've scheduled your Qest4 scan for ${a?apptWhen(a,true):"[date]"}.`}`, ""];
-  notes.forEach(n=>L.push(n, ""));
+  if(withNotes) notes.forEach(n=>L.push(n, ""));
   if(a && isZoom(a)) L.push("We'll have our Zoom consult then too. You'll find a Join Zoom button on your Home page in the portal when it's time.", "");
   if(d==="ship") L.push(`I'll ship your treatment${rx?` (${rx})`:""} to you after your scan, to the address on your form. If anything has changed, just let me know.`, "");
   else if(d==="imprint") L.push(`For your remote imprint, please prepare your ${rx==="pellets"?"jar of blank pellets":rx==="liquid drops"?"2 oz bottle (alcohol and water)":"2 oz bottle or jar of blank pellets"} and send me a picture before your scan day.`, "");
