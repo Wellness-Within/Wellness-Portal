@@ -1203,7 +1203,7 @@ const TIER_LABEL = { current:"Current pricing", founding:"RFH Subscriber pricing
 function qestPricing(){ const q=billSet().qestPricing||{}; return { current:{...QP_DEFAULT.current, ...(q.current||{})}, founding:{...QP_DEFAULT.founding, ...(q.founding||{})} }; }
 /* what one client pays: their level's prices and their standing discount (Dawn's view) */
 function pricingFor(id){ const c=S.clients[id]||{}, tier=c.priceTier==="founding"?"founding":"current", P=qestPricing()[tier], cd=(billSet().clientDiscounts||{})[id];
-  return {tier, base:+P.base||0, zoom:+P.zoom||0, ship:+P.ship||0, only:+P.only||0, disc: cd&&+cd.value ? {label:cd.label||"Discount", type:cd.type==="amt"?"amt":"pct", value:+cd.value} : null}; }
+  return {tier, base:+P.base||0, zoom:c.zoomFree?0:(+P.zoom||0), ...(c.zoomFree?{zoomFree:true}:{}), ship:+P.ship||0, only:+P.only||0, disc: cd&&+cd.value ? {label:cd.label||"Discount", type:cd.type==="amt"?"amt":"pct", value:+cd.value} : null}; }
 /* clients can't read settings, so each record carries its own copy (kept in step by Dawn's portal) */
 async function syncClientPricing(){
   if(!S.prac || !S.clientsLoaded || S.priceSyncBusy) return; S.priceSyncBusy=true;
@@ -1213,7 +1213,7 @@ async function syncClientPricing(){
 }
 function priceEstimate(P, zoom, ship){
   if(!P) return null; const lines=[["Qest4 scan + balancing treatment", P.base]];
-  if(zoom) lines.push(["30-minute Zoom consult", P.zoom]); if(ship) lines.push(["Shipping of your balancing treatment", P.ship]);
+  if(zoom) lines.push([P.zoomFree?"30-minute Zoom consult (included for you)":"30-minute Zoom consult", P.zoomFree?0:P.zoom]); if(ship) lines.push(["Shipping of your balancing treatment", P.ship]);
   const sub=r2(lines.reduce((t,l)=>t+(+l[1]||0),0)); let off=0;
   if(P.disc) off = P.disc.type==="amt" ? Math.min(sub, r2(P.disc.value)) : r2(sub*P.disc.value/100);
   return {lines, sub, off, total:r2(sub-off)};
@@ -1242,7 +1242,9 @@ function priceBoxInner(pre){
     ${e.off?`<tr><td>${esc(P.disc.label||"Your discount")}${P.disc.type==="pct"?` (${esc(P.disc.value)}%)`:""}</td><td style="text-align:right">\u2212${money(e.off)}</td></tr>`:""}</tbody></table>
     <p class="small muted" style="margin:4px 0 0">Updates as you choose Zoom and imprint or shipping. Dawn confirms the final amount on your invoice.</p></div>`;
 }
-document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-tier" || !S.prac || !S.sel) return; const tier=e.target.value; try{ await S.db.doc("clients/"+S.sel).update({priceTier:tier, pricing:{...pricingFor(S.sel), tier, ...(({base,zoom,ship,only})=>({base,zoom,ship,only}))(qestPricing()[tier])}}); toast(`${clientFirst(S.sel)||"Client"}: ${TIER_LABEL[tier]}`); }catch(err){ toast("That didn't save. Please try again."); } });
+document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-zoomfree" || !S.prac || !S.sel) return; const on=e.target.checked, id=S.sel;
+  try{ await S.db.doc("clients/"+id).update({zoomFree:on}); S.clients[id]={...S.clients[id], zoomFree:on}; await S.db.doc("clients/"+id).update({pricing:pricingFor(id)}); toast(on?"Zoom consults are free for this client":"Zoom consults charged as usual"); const g=document.getElementById("price-grid"); if(g) g.innerHTML=priceGrid(id); }catch(err){ toast("That didn't save. Please try again."); } });
+document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-tier" || !S.prac || !S.sel) return; const tier=e.target.value; try{ S.clients[S.sel]={...S.clients[S.sel], priceTier:tier}; await S.db.doc("clients/"+S.sel).update({priceTier:tier, pricing:pricingFor(S.sel)}); const g=document.getElementById("price-grid"); if(g) g.innerHTML=priceGrid(S.sel); toast(`${clientFirst(S.sel)||"Client"}: ${TIER_LABEL[tier]}`); }catch(err){ toast("That didn't save. Please try again."); } });
 document.addEventListener("change", e=>{ const n=e.target?.name||""; const m=/^(.+)-(zoomThis|delivery)$/.exec(n); if(!m) return; const box=document.getElementById(m[1]+"-pricebox"); if(box) box.innerHTML=priceBoxInner(m[1]); });
 function payInfo(){ const b=billSet(); const o={}; ["payLink","venmo","zelle","cashapp","payNote"].forEach(k=>{ if((b[k]||"").trim()) o[k]=b[k].trim(); }); return o; }
 const venmoUrl = h => "https://venmo.com/u/"+encodeURIComponent(String(h).replace(/^@/,""));
@@ -1411,7 +1413,7 @@ function blankInvoice(cid, appt){
     const zoom=(appt.how && /zoom|video|phone/i.test(appt.how)) || (!appt.how && /^yes/i.test(q.zoomThis||""));
     if(dl==="none") v.items.push({kind:"scan", desc:"Qest4 scan & reports only", qty:1, price:P.only});
     else v.items.push({kind:"scan", desc:"Qest4 scan + balancing treatment", qty:1, price:P.base});
-    if(zoom) v.items.push({kind:"consult", desc:"30-minute Zoom consultation", qty:1, price:P.zoom});
+    if(zoom) v.items.push({kind:"consult", desc:P.zoomFree?"30-minute Zoom consultation (included at no charge)":"30-minute Zoom consultation", qty:1, price:P.zoom});
     if(dl==="ship") v.items.push({kind:"shipping", desc:"Shipping of balancing treatment (US postage included)", qty:1, price:P.ship});
     if(P.tier==="founding") v.note=v.note||"Roaring Fork Homeopathy Subscriber pricing";
   }
@@ -1438,7 +1440,7 @@ function billingPane(id){
     <div class="row" style="gap:10px"><div class="grow row" style="gap:16px"><span><span class="small muted">Balance due</span><br><b style="font-size:20px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
       ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
-    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
+    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-zoomfree" ${S.clients[id]?.zoomFree?"checked":""}><span>No charge for Zoom</span></label><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
     <div id="price-grid">${priceGrid(id)}</div>
     ${(()=>{ const cd=(billSet().clientDiscounts||{})[id];
       return S.discEdit===id ? `<div class="row" id="disc-form" style="gap:6px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
