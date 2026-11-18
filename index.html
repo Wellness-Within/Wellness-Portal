@@ -1690,11 +1690,26 @@ async function billingSettingsClick(e){
 }
 function bindBillingSettings(){ const el=$("#bill-set"); if(el) el.onchange=e=>{ const k=e.target.closest(".pi-kind"); if(k){ const s=k.closest("[data-pi]").querySelector(".pi-sess"); if(s) s.hidden=k.value!=="package"; } }; }
 /* client side */
+/* client-facing price chart (their own level and discount, from the copy on their record) */
+function myPricing(){ return (S.myRec||{}).pricing || {tier:"current", ...QP_DEFAULT.current, disc:null}; }
+function clientPriceTable(){
+  const P=myPricing(), combos=[[false,false,"Remote imprint"],[false,true,"Shipped to you"],[true,false,"Remote imprint + Zoom consult"],[true,true,"Shipped to you + Zoom consult"]];
+  const onlyOff=P.disc ? r2(P.disc.type==="amt" ? Math.min(P.only, P.disc.value) : P.only*P.disc.value/100) : 0;
+  return `<div class="stack" style="gap:8px">
+    <div class="row" style="gap:8px;align-items:center"><h3 style="margin:0" class="grow">Your Qest4 prices</h3>${P.tier==="founding"?'<span class="chip">RFH Subscriber discount</span>':""}</div>
+    <table><thead><tr><th>Scan with balancing treatment</th><th style="text-align:right">Price</th>${P.disc?`<th style="text-align:right">${esc(P.disc.label||"Your discount")}</th>`:""}<th style="text-align:right">You pay</th></tr></thead><tbody>
+    ${combos.map(([z,sh,l])=>{ const e=priceEstimate(P,z,sh); return `<tr><td>${esc(l)}</td><td style="text-align:right">${money(e.sub)}</td>${P.disc?`<td style="text-align:right">\u2212${money(e.off)}</td>`:""}<td style="text-align:right"><b>${money(e.total)}</b></td></tr>`; }).join("")}
+    <tr><td>Scan & reports only (no treatment)</td><td style="text-align:right">${money(P.only)}</td>${P.disc?`<td style="text-align:right">\u2212${money(onlyOff)}</td>`:""}<td style="text-align:right"><b>${money(r2(P.only-onlyOff))}</b></td></tr></tbody></table>
+    <p class="small muted" style="margin:0">Zoom consult: ${P.zoomFree?"included for you at no charge":`+${money(P.zoom)}`}. Shipping: +${money(P.ship)} (US postage included). A free quartz crystal imprint is available with any treatment.</p>
+    <div class="row"><button type="button" class="primary" data-dash="form-qest-new">Start my Qest4 Scan Intake</button></div></div>`;
+}
 function clientBillingView(){
   const list=(S.myInv||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const bal=r2(list.filter(invOpen).reduce((t,v)=>t+invMath(v).bal,0)), pp=prepaidLeft(list);
   const firstOpen=list.filter(invOpen).slice(-1)[0];
-  return `<div class="sheet stack"><h2>Billing</h2>
+  return `<div class="sheet stack"><h2>Prices & billing</h2>
+    ${clientPriceTable()}
+    <h3 style="margin:10px 0 0">Your invoices</h3>
     <div class="row" style="gap:24px"><span><span class="small muted">Balance due</span><br><b style="font-size:22px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:22px">${pp.left}</b></span>`:""}</div>
     ${bal>0&&firstOpen?(list.filter(invOpen).length===1?payBlock({...(firstOpen.pay||{}), invId:firstOpen.id}, firstOpen.number, invMath(firstOpen).bal):`<p class="small">Pay each invoice below.</p>`):bal<=0&&list.length?`<p class="small">You're all paid up. Thank you!</p>`:""}
@@ -4607,6 +4622,12 @@ function clientHome(first){
       <div class="grow" style="flex:1 1 260px;display:flex;flex-direction:column"><b style="font-size:16px">${esc(banner[0])}</b><span class="small muted">${esc(banner[1])}</span></div>
       <button type="button" class="primary" data-dash="${qestIn||!homeoIn?"form-qest-new":"form-homeo"}">${esc(banner[2])}</button></div>` : "";
   const cards=[];
+  // get started: their price and a way into the Qest4 form, until this scan's form is in
+  if(!formIn){ const P=myPricing(), low=priceEstimate(P,false,false);
+    cards.push(`<section class="dash-card"><div class="head"><h2>Get started with Qest4</h2>${P.tier==="founding"?'<span class="chip">RFH Subscriber</span>':""}</div>
+      <p class="small" style="margin:0">See your pricing and start your intake for your next scan. Your price is worked out as you choose Zoom and imprint or shipping.</p>
+      <div><span class="small muted">Scans with balancing treatment from</span><br><b style="font-size:24px">${money(low.total)}</b></div>
+      <div class="row" style="gap:8px"><button type="button" class="primary" data-dash="form-qest-new">Start my Qest4 form</button><button type="button" class="ghost" data-cv2="billing">See all prices</button></div></section>`); }
   // upcoming appointments
   const ups=upcomingAppts(r);
   if(ups.length){ const a=ups[0], d=new Date(a.date+"T12:00:00"), dd=dayDiff(a.date, today());
@@ -4673,7 +4694,7 @@ function renderClient(){
   const first = name.split(" ")[0];
   const t = $("#tabs"); t.hidden=false;
   const cBal = (S.myInv||[]).some(invOpen);
-  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"],...(progressEntries(S.myRec, S.myQhist, S.myProg, true).some(x=>Object.values(x.vals||{}).some(v=>v!=null))||S.cview==="progress"?[["progress","My progress"]]:[]),...((S.myInv||[]).length||S.cview==="billing"?[["billing","Billing"]]:[])].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${(k==="messages"&&msgUnreadClient(S.myRec))||(k==="billing"&&cBal)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
+  t.innerHTML = [["home","Home"],["forms","My forms"],["reports","My reports"],["plans","Treatment plans"],["messages","Messages"],...(progressEntries(S.myRec, S.myQhist, S.myProg, true).some(x=>Object.values(x.vals||{}).some(v=>v!=null))||S.cview==="progress"?[["progress","My progress"]]:[]),["billing","Prices & billing"]].map(([k,l])=>`<button type="button" data-cv="${k}" aria-current="${S.cview===k}">${icon(k)}<span>${l}</span>${(k==="messages"&&msgUnreadClient(S.myRec))||(k==="billing"&&cBal)?'<span class="dot" aria-label="new"></span>':""}</button>`).join(""); sideHelp(true);
   t.onclick = e => { const b=e.target.closest("[data-cv]"); if(b){ S.cview=b.dataset.cv; renderClient(); window.scrollTo(0,0); } };
   const homeoIn = S.myRec?.intakeStatus==="submitted", qestIn = S.myRec?.qestStatus==="submitted";
   let body;
