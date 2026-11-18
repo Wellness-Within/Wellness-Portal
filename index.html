@@ -399,7 +399,7 @@ const AREAS = ["Sleep","Energy","Hormones","Skin","Stress","Digestion","Pain","D
 const IMPRINT_REMOTE = "Remote imprint";
 const RX_OTHER = "Other item (remote imprint only)";
 const QEST = [
-  {sec:"Your scan options and price", note:"Start here: choose how you'd like your scan and treatment, and your price is worked out as you go. Then tell Dawn about you below.", fields:[
+  {sec:"Your scan options and price", note:"Start here: choose your scan options and your price updates to match. Then tell Dawn about you below.", fields:[
     {id:"zoomThis",label:"Would you like a Zoom consult with this scan?",type:"choice",options:["Yes, please","Not this time, just the scan"]},
     {id:"delivery",jot:"How would you like to receive your treatment",label:"Remote imprint or shipped?",type:"choice",req:true,options:[IMPRINT_REMOTE,"Shipped to me"]},
     {id:"reportsOnly",jot:"Scan and reports only, no treatment",label:"I'd like the scan and reports only, no treatment",type:"check",wide:true,gate:"reportsOnly"},
@@ -1250,7 +1250,7 @@ function priceBoxInner(pre){
   return `<div class="notice ok" style="margin:0"><div class="row" style="gap:8px"><b class="grow">Your price${P.tier==="founding"?` <span class="chip">RFH Subscriber discount</span>`:""}</b><b style="font-size:18px">${money(e.total)}</b></div>
     <table style="margin-top:6px;font-size:14px"><tbody>${e.lines.map(([l,a])=>`<tr><td>${esc(l)}</td><td style="text-align:right">${money(a)}</td></tr>`).join("")}
     ${e.off?`<tr><td>${esc(P.disc.label||"Your discount")}${P.disc.type==="pct"?` (${esc(P.disc.value)}%)`:""}</td><td style="text-align:right">\u2212${money(e.off)}</td></tr>`:""}</tbody></table>
-    <p class="small muted" style="margin:4px 0 0">Updates as you choose Zoom and imprint or shipping. Dawn confirms the final amount on your invoice.</p></div>`;
+    <p class="small muted" style="margin:4px 0 0">Based on the options you choose. Dawn confirms the final amount on your invoice.</p></div>`;
 }
 document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-onlyok" || !S.prac || !S.sel) return; const on=e.target.checked;
   try{ await S.db.doc("clients/"+S.sel).update({reportsOnlyOk:on}); toast(on?"Their Qest4 form now offers scan & reports only":"Reports only taken off their form"); }catch(err){ toast("That didn't save. Please try again."); } });
@@ -4646,7 +4646,7 @@ function clientHome(first){
   // get started: their price and a way into the Qest4 form, until this scan's form is in
   if(!formIn){ const P=myPricing(), low=priceEstimate(P,false,false);
     cards.push(`<section class="dash-card"><div class="head"><h2>Get started with Qest4</h2>${P.tier==="founding"?'<span class="chip">RFH Subscriber</span>':""}</div>
-      <p class="small" style="margin:0">See your pricing and start your intake for your next scan. Your price is worked out as you choose Zoom and imprint or shipping.</p>
+      <p class="small" style="margin:0">See your pricing and start your intake for your next scan. Your price is based on the options you choose.</p>
       <div><span class="small muted">Scans with balancing treatment from</span><br><b style="font-size:24px">${money(low.total)}</b></div>
       <div class="row" style="gap:8px"><button type="button" class="primary" data-dash="form-qest-new">Start my Qest4 form</button><button type="button" class="ghost" data-cv2="billing">See all prices</button></div></section>`); }
   // upcoming appointments
