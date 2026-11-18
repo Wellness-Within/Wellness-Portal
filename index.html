@@ -1197,9 +1197,9 @@ function prepaidLeft(list){ let bought=0, used=0;
   (list||[]).filter(v=>v.status==="sent").forEach(v=>(v.items||[]).forEach(i=>{ if(i.kind==="package") bought+=(+i.qty||1)*(+i.sessions||0); if(i.credit) used+=(+i.qty||1); }));
   return {bought, used, left:bought-used}; }
 const billSet = () => S.settings.billing || {};
-/* Qest4 pricing: two levels (current website prices, founding members). Base = scan + remote balancing treatment. */
+/* Qest4 pricing: two levels (current website prices, RFH Subscribers; stored as "founding"). Base = scan + remote balancing treatment. */
 const QP_DEFAULT = { current:{base:150, zoom:25, ship:25, only:75}, founding:{base:100, zoom:25, ship:25, only:50} };
-const TIER_LABEL = { current:"Current pricing", founding:"Founding member pricing" };
+const TIER_LABEL = { current:"Current pricing", founding:"RFH Subscriber pricing" };
 function qestPricing(){ const q=billSet().qestPricing||{}; return { current:{...QP_DEFAULT.current, ...(q.current||{})}, founding:{...QP_DEFAULT.founding, ...(q.founding||{})} }; }
 /* what one client pays: their level's prices and their standing discount (Dawn's view) */
 function pricingFor(id){ const c=S.clients[id]||{}, tier=c.priceTier==="founding"?"founding":"current", P=qestPricing()[tier], cd=(billSet().clientDiscounts||{})[id];
@@ -1222,7 +1222,7 @@ function priceBoxInner(pre){
   const id=S.prac ? S.sel : S.who, P=S.prac ? pricingFor(id) : ((S.myRec||{}).pricing || {tier:"current", ...QP_DEFAULT.current, disc:null});
   const pick=k=>document.querySelector(`input[name="${pre}-${k}"]:checked`)?.value || (S.prac ? (S.clients[id]?.qest||{})[k] : ((S.myRec||{}).qestDraft||(S.myRec||{}).qest||{})[k]) || "";
   const e=priceEstimate(P, /^yes/i.test(pick("zoomThis")), pick("delivery")==="Shipped to me"); if(!e) return "";
-  return `<div class="notice ok" style="margin:0"><div class="row" style="gap:8px"><b class="grow">Your price${P.tier==="founding"?` <span class="chip">Founding member</span>`:""}</b><b style="font-size:18px">${money(e.total)}</b></div>
+  return `<div class="notice ok" style="margin:0"><div class="row" style="gap:8px"><b class="grow">Your price${P.tier==="founding"?` <span class="chip">RFH Subscriber discount</span>`:""}</b><b style="font-size:18px">${money(e.total)}</b></div>
     <table style="margin-top:6px;font-size:14px"><tbody>${e.lines.map(([l,a])=>`<tr><td>${esc(l)}</td><td style="text-align:right">${money(a)}</td></tr>`).join("")}
     ${e.off?`<tr><td>${esc(P.disc.label||"Your discount")}${P.disc.type==="pct"?` (${esc(P.disc.value)}%)`:""}</td><td style="text-align:right">\u2212${money(e.off)}</td></tr>`:""}</tbody></table>
     <p class="small muted" style="margin:4px 0 0">Updates as you choose Zoom and imprint or shipping. Dawn confirms the final amount on your invoice.</p></div>`;
@@ -1398,7 +1398,7 @@ function blankInvoice(cid, appt){
     else v.items.push({kind:"scan", desc:"Qest4 scan + balancing treatment", qty:1, price:P.base});
     if(zoom) v.items.push({kind:"consult", desc:"30-minute Zoom consultation", qty:1, price:P.zoom});
     if(dl==="ship") v.items.push({kind:"shipping", desc:"Shipping of balancing treatment (US postage included)", qty:1, price:P.ship});
-    if(P.tier==="founding") v.note=v.note||"Founding member pricing";
+    if(P.tier==="founding") v.note=v.note||"Roaring Fork Homeopathy Subscriber pricing";
   }
   else if(appt){ v.apptId=appt.id; const price=billSet().items||[];
     const kinds=[appt.type]; if(appt.type==="scan" && apptDelivery(appt)==="ship") kinds.push("shipping");
@@ -1645,7 +1645,7 @@ function billingSettingsSection(){
     <label class="field"><span>Payment note (optional)</span><input id="bs-note" placeholder="e.g. Payment is due within 14 days." value="${esc(b.payNote||"")}"></label>
     <h3 style="margin-top:6px">Qest4 pricing</h3>
     <p class="small muted">Clients see their own price on the Qest4 form as they choose Zoom and imprint or shipping, with their standing discount if they have one. Choose each client's level on their Billing tab (Current is the default). New scan invoices use these prices.</p>
-    <table><thead><tr><th></th><th>Current</th><th>Founding members</th></tr></thead><tbody>${[["base","Scan + remote balancing treatment"],["zoom","Zoom consult add-on"],["ship","Shipping add-on"],["only","Scan & reports only"]].map(([k,l])=>`<tr><td>${l}</td>${["current","founding"].map(t=>`<td><input type="number" min="0" step="0.01" id="qp-${t}-${k}" value="${esc(qestPricing()[t][k])}" style="width:110px"></td>`).join("")}</tr>`).join("")}</tbody></table>
+    <table><thead><tr><th></th><th>Current</th><th>RFH Subscribers</th></tr></thead><tbody>${[["base","Scan + remote balancing treatment"],["zoom","Zoom consult add-on"],["ship","Shipping add-on"],["only","Scan & reports only"]].map(([k,l])=>`<tr><td>${l}</td>${["current","founding"].map(t=>`<td><input type="number" min="0" step="0.01" id="qp-${t}-${k}" value="${esc(qestPricing()[t][k])}" style="width:110px"></td>`).join("")}</tr>`).join("")}</tbody></table>
     <h3 style="margin-top:6px">Other prices</h3>
     <p class="small muted">Pick these when making an invoice. For a package, enter how many sessions it includes; clients' prepaid sessions are counted for you.</p>
     <div class="stack" style="gap:6px">${items.map((p,k)=>`<div class="row price-row" data-pi="${k}" style="gap:6px;flex-wrap:nowrap">
@@ -1885,7 +1885,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["autoDraft","Draft invoice when you book a scan","Makes a draft invoice from the client's pricing (Current or Founding), their Zoom and imprint or shipping choice, and their standing discount. Nothing is sent: it waits on your Home page under Bills to review. Skipped if they already paid ahead (website order or Square)."],["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
+  const items=[["autoDraft","Draft invoice when you book a scan","Makes a draft invoice from the client's pricing (Current or RFH Subscriber), their Zoom and imprint or shipping choice, and their standing discount. Nothing is sent: it waits on your Home page under Bills to review. Skipped if they already paid ahead (website order or Square)."],["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
