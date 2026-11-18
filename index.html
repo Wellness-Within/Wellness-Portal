@@ -1198,7 +1198,7 @@ function prepaidLeft(list){ let bought=0, used=0;
   return {bought, used, left:bought-used}; }
 const billSet = () => S.settings.billing || {};
 /* Qest4 pricing: two levels (current website prices, founding members). Base = scan + remote balancing treatment. */
-const QP_DEFAULT = { current:{base:150, zoom:25, ship:25, only:75}, founding:{base:100, zoom:25, ship:25, only:75} };
+const QP_DEFAULT = { current:{base:150, zoom:25, ship:25, only:75}, founding:{base:100, zoom:25, ship:25, only:50} };
 const TIER_LABEL = { current:"Current pricing", founding:"Founding member pricing" };
 function qestPricing(){ const q=billSet().qestPricing||{}; return { current:{...QP_DEFAULT.current, ...(q.current||{})}, founding:{...QP_DEFAULT.founding, ...(q.founding||{})} }; }
 /* what one client pays: their level's prices and their standing discount (Dawn's view) */
