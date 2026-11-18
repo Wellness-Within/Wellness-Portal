@@ -975,20 +975,34 @@ function welcomeMsg(id, email){
 async function apptBookedMsg(id, a){
   if(!autoOn("apptBooked") || !S.settings.autoEmail || a.type==="imprint" || a.date<today()) return false;
   const e=(clientEmail(id)||famPeople(id).map(x=>clientEmail(x)).find(Boolean)||"").trim().toLowerCase(); if(!e) return false;
-  const key=e+"|"+a.date+"|"+a.type; S.bookedTold=S.bookedTold||{}; if(S.bookedTold[key] && Date.now()-S.bookedTold[key]<15*60000) return false;
-  let body;
-  if(a.type==="scan") body=scanScheduledMsg(id, a);
-  else { const first=clientFirst(id), when=apptWhen(a,true), zoom=isZoom(a);
-    body=[`Hi ${first && first!=="Unnamed" ? first : "there"},`, "", `You're booked for a ${APPT_TYPES[a.type]||"session"} on ${when}.`, "", zoom?"We'll meet on Zoom. You'll find a Join Zoom button on your Home page in the portal when it's time.":a.how?`We'll connect by ${a.how.toLowerCase()}.`:"", ...(a.note?[a.note,""]:[]), "If you need to change the time, just reply here.", "", "Warmly,", "Dawn"].filter((x,i,arr)=>x!==""||arr[i-1]!=="").join("\n"); }
-  const ok=await sendMsg(id, "dawn", body); if(ok) S.bookedTold[key]=Date.now(); return ok;
+  // wait a moment so family members booked for the same day go out together in one message naming everyone
+  const key=e+"|"+a.date+"|"+a.type; S.bookedQ=S.bookedQ||{}; const q=S.bookedQ[key]||(S.bookedQ[key]={ids:[]});
+  if(!q.ids.includes(id)) q.ids.push(id); clearTimeout(q.t);
+  q.t=setTimeout(()=>sendBooked(key, a.type, a.date), 45000);
+  return true;
 }
+async function sendBooked(key, type, date){
+  const q=(S.bookedQ||{})[key]; if(!q) return; delete S.bookedQ[key];
+  const group=q.ids.map(id=>({id, a:apptsOf(S.clients[id]).find(x=>x.type===type && x.date===date)})).filter(g=>g.a);
+  if(!group.length) return;
+  const to=group.find(g=>famRole(g.id).holder)?.id || group[0].id, a=group[0].a;
+  let body;
+  if(type==="scan") body=scanScheduledMsg(to, a, group);
+  else { const first=clientFirst(to), when=apptWhen(a,true), zoom=isZoom(a);
+    body=[`Hi ${first && first!=="Unnamed" ? first : "there"},`, "", `You're booked for a ${APPT_TYPES[type]||"session"} on ${when}.`, "", zoom?"We'll meet on Zoom. You'll find a Join Zoom button on your Home page in the portal when it's time.":a.how?`We'll connect by ${a.how.toLowerCase()}.`:"", ...(a.note?[a.note,""]:[]), "If you need to change the time, just reply here.", "", "Warmly,", "Dawn"].filter((x,i,arr)=>x!==""||arr[i-1]!=="").join("\n"); }
+  if(await sendMsg(to, "dawn", body)) toast(`${clientFirst(to)||"The client"} has been emailed about ${group.length>1?"their appointments":"the appointment"}`);
+}
+window.addEventListener("beforeunload", e=>{ if(Object.keys(S.bookedQ||{}).length){ e.preventDefault(); e.returnValue=""; } });
 /* built-in message: intake received, scan scheduled (fills from the next scan appointment) */
-function scanScheduledMsg(id, appt){
-  const c=S.clients[id]||{}, first=clientFirst(id), hi=`Hi ${first && first!=="Unnamed" ? first : "there"},`;
+function scanScheduledMsg(id, appt, group){
+  const c=S.clients[id]||{}, fr=famRole(id), first=(group&&group.length>1&&fr.fam&&!fr.holder&&fr.holderFirst)?fr.holderFirst:clientFirst(id), hi=`Hi ${first && first!=="Unnamed" ? first : "there"},`;
   const a=appt||upcomingAppts(c).find(x=>x.type==="scan"), d=a?apptDelivery(a):"", q=c.qest||{};
+  const names=(group||[]).map(g=>clientFirst(g.id)).filter(n=>n&&n!=="Unnamed"), list=x=>x.length<2?x.join(""):x.slice(0,-1).join(", ")+" and "+x[x.length-1];
+  const notes=[...new Set((group&&group.length?group.map(g=>g.a.note):[a?.note]).filter(Boolean))];
+  const sentForm=(group&&group.length?group.map(g=>S.clients[g.id]||{}):[c]).some(x=>Date.now()-Date.parse(x.qestSubmittedAt||0) < 30*864e5);
   const rx=/pellet/i.test(q.rxForm||"")?"pellets":/liquid/i.test(q.rxForm||"")?"liquid drops":"";
-  const L=[hi, "", `${Date.now()-Date.parse(c.qestSubmittedAt||0) < 30*864e5 ? "Thank you for sending in your form! " : ""}I've scheduled your Qest4 scan for ${a?apptWhen(a,true):"[date]"}.`, ""];
-  if(a?.note) L.push(a.note, "");
+  const L=[hi, "", `${sentForm ? (names.length>1?"Thank you for sending in your forms! ":"Thank you for sending in your form! ") : ""}${names.length>1 ? `I've scheduled Qest4 scans for ${list(names)} on ${a?apptWhen(a,true):"[date]"}.` : `I've scheduled your Qest4 scan for ${a?apptWhen(a,true):"[date]"}.`}`, ""];
+  notes.forEach(n=>L.push(n, ""));
   if(a && isZoom(a)) L.push("We'll have our Zoom consult then too. You'll find a Join Zoom button on your Home page in the portal when it's time.", "");
   if(d==="ship") L.push(`I'll ship your treatment${rx?` (${rx})`:""} to you after your scan, to the address on your form. If anything has changed, just let me know.`, "");
   else if(d==="imprint") L.push(`For your remote imprint, please prepare your ${rx==="pellets"?"jar of blank pellets":rx==="liquid drops"?"2 oz bottle (alcohol and water)":"2 oz bottle or jar of blank pellets"} and send me a picture before your scan day.`, "");
@@ -2659,7 +2673,7 @@ function bindClients(){
       else if(act==="apsave"){ const ed=S.apptEdit; const a={...ed.a, type:$("#ap-type").value, date:$("#ap-date").value, time:$("#ap-time")?.value||"", mins:+($("#ap-mins")?.value||60), how:$("#ap-type").value==="imprint"?"":($("#ap-how")?.value||""), zoomUrl:($("#ap-type").value!=="imprint" && $("#ap-how")?.value==="Zoom" ? (($("#ap-zoom")?.value||"").trim() || S.settings?.zoomUrl || "") : ""), delivery:$("#ap-deliv")?.value||"imprint", shipTo:($("#ap-ship")?.value||"").trim(), note:$("#ap-note").value.trim()}; delete a.imprint;
         if(!/^\d{4}-\d{2}-\d{2}$/.test(a.date)){ toast("Choose a date"); return; } if(a.type==="consult" && !a.time){ toast("Choose a time for the call"); return; }
         const list=apptsOf(S.clients[S.sel]).filter(x=>x.id!==a.id); list.push(a); await saveAppts(S.sel, list); S.apptEdit=null;
-        const told = ed.isNew ? await apptBookedMsg(S.sel, a) : false; toast(told?"Appointment saved, and they've been emailed":"Appointment saved"); renderClients(); }
+        const told = ed.isNew ? await apptBookedMsg(S.sel, a) : false; toast(told?"Appointment saved. They'll be emailed in a minute (book any family members for the same day now and they'll be included).":"Appointment saved"); renderClients(); }
       else if(act==="apdel"){ const id=S.apptEdit.a.id; await saveAppts(S.sel, apptsOf(S.clients[S.sel]).filter(x=>x.id!==id)); S.apptEdit=null; toast("Appointment removed"); renderClients(); }
       else if(act==="msgsend"){ const box=$("#msg-box"), id=S.sel; a.disabled=true; if(await sendMsg(id, "dawn", box.value)){ S.msgDraft={...(S.msgDraft||{}), [id]:""}; box.value=""; box.blur(); toast(S.settings.autoEmail?"Sent, and emailed to them.":"Sent. They'll see it next time they sign in."); render(); } a.disabled=false; }
       else if(act==="msgmail"){ msgHeadsUp(S.sel); }
