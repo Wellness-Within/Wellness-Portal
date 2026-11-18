@@ -898,7 +898,7 @@ function msgUnreadClient(c){ const m=c?.lastMsg; return m && m.from==="dawn" && 
 function msgSort(list){ return list.slice().sort((a,b)=>(a.at||"").localeCompare(b.at||"")); }
 function msgThread(list, me, theirName){
   if(!list.length) return `<div class="empty small">No messages yet.</div>`;
-  return `<div class="msgs" id="msg-list">${msgSort(list).map(m=>`<div class="msg ${m.from===me?"mine":"theirs"}"><div>${esc(m.body).replace(/\n/g,"<br>")}</div><div class="msg-meta">${m.from===me?"You":esc(theirName)} · ${esc(fmtWhen(m.at))}</div></div>`).join("")}</div>`;
+  return `<div class="msgs" id="msg-list">${msgSort(list).map(m=>`<div class="msg ${m.from===me?"mine":"theirs"}"><div>${esc(m.body).replace(/\n/g,"<br>")}</div><div class="msg-meta">${m.from===me?"You":esc(theirName)} · ${esc(fmtWhen(m.at))}${me==="dawn"&&m.from==="dawn"&&S.settings?.autoEmail ? (m.emailedAt ? ` · <span title="Emailed ${esc(fmtWhen(m.emailedAt))}">emailed \u2713</span>` : (Date.now()-Date.parse(m.at||0) > 3*60000 ? ` · <span style="color:var(--warn,#b45309)" title="The portal couldn't email this one. Check their email address in Details.">not emailed</span>` : ` · sending\u2026`)) : ""}</div></div>`).join("")}</div>`;
 }
 function msgScroll(){ const l=$("#msg-list"); if(l) l.scrollTop=l.scrollHeight; }
 async function sendMsg(cid, from, body){
@@ -1117,7 +1117,7 @@ function messagesPane(id){
     <label class="field"><span>Start from a template</span><select id="msg-tpl"><option value="">Blank message</option><option value="_welcome">Welcome: your portal is set up</option><option value="_scan">Scan scheduled (form received)</option>${(S.settings.emailTemplates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name||t.subject||"Untitled")}</option>`).join("")}</select></label>
     <label class="field"><span>Reply to ${esc(clientFirst(id)||clientName(id))}</span><textarea id="msg-box" style="min-height:110px" maxlength="${MSG_MAX}" placeholder="Write a message. ${esc(clientFirst(id)||"They")} sees it in their portal under Messages.">${esc(S.msgDraft?.[id]||"")}</textarea></label>
     <div class="row"><button type="button" class="primary" data-act="msgsend">Send message</button>
-      ${auto?`<span class="small muted">It's also emailed to them, and their email replies come to your inbox.</span>`
+      ${auto?`<span class="small muted">It's also emailed to them${clientEmail(id)?` at <b>${esc(clientEmail(id))}</b>`:` (<b>no email on file</b>, so it won't be)`}, and their email replies come to your inbox.</span>`
         :`<button type="button" data-act="msgmail" title="Opens a short email in your Mail app">Let them know by email</button><span class="small muted grow">Automatic “new message” emails aren't switched on yet.</span>`}</div>
     ${c.lastMsg?.from==="dawn" && c.msgSeenByClient && c.msgSeenByClient>=c.lastMsg.at ? `<p class="small muted">Seen by ${esc(clientFirst(id)||"the client")} ${esc(fmtWhen(c.msgSeenByClient))}.</p>`:""}
   </div>`;
