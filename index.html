@@ -2628,7 +2628,9 @@ function bindClients(){
   const apd = $("#ap-deliv"); if(apd) apd.onchange = apShip;
   const mb = $("#msg-box"); if(mb){ msgScroll(); mb.oninput = () => { S.msgDraft = {...(S.msgDraft||{}), [S.sel]: mb.value}; }; }
   const mt = $("#msg-tpl"); if(mt && mb) mt.onchange = () => { const id=S.sel; let body="";
-    if(mt.value==="_scan") body=scanScheduledMsg(id);
+    if(mt.value==="_scan"){ const a=upcomingAppts(S.clients[id]||{}).find(x=>x.type==="scan");
+      const group=a ? famPeople(id).map(x=>({id:x, a:upcomingAppts(S.clients[x]||{}).find(y=>y.type==="scan" && y.date===a.date)})).filter(g=>g.a) : [];
+      body=scanScheduledMsg(id, a, group.length>1?group:null); }
     else if(mt.value==="_welcome") body=welcomeMsg(id);
     else if(mt.value){ const t=(S.settings.emailTemplates||[]).find(x=>x.id===mt.value); body=t?fillTemplate(t.body, id):""; }
     if(!mt.value) return; mb.value=body.slice(0,MSG_MAX); S.msgDraft={...(S.msgDraft||{}), [id]:mb.value}; mb.focus(); mb.setSelectionRange(0,0); mb.scrollTop=0; };
