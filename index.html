@@ -317,6 +317,7 @@ const PRACTICE = { name:"Dawn Spain, PHom", phone:"252-626-4104", email:"wellnes
 const DEFAULT_INSTRUCTIONS = "Wet dose: put 3 pellets in 2 oz of water in a spray or dropper bottle. One dose = 5 sprays or ½ dropper. Shake or tap the bottle before each dose.";
 
 /* Frequency shorthand used in the protocols, in plain words for clients */
+const capFreq = t => t ? t.charAt(0).toUpperCase()+t.slice(1) : t;
 function plainFreq(f){
   const s = String(f||"").trim(); if(!s) return "";
   const t = s.replace(/\s+/g,"");
@@ -3222,7 +3223,7 @@ async function planPdf(p, clientLabel){
   bottles.forEach((b,i)=>{
     const issue=wrap(b.issue||"Remedies", IW, SANSB, 11);
     const rems=remedyLines(b.remedies).map(r=>wrap(r, IW-12, SANS, 9.5));
-    const pf=plainFreq(b.freq);
+    const pf=capFreq(plainFreq(b.freq));
     const often=b.freq?wrap(pf||b.freq, IW/2-12, SANSB, 9):[], oftenCode=(pf&&b.freq)?wrap(b.freq, IW/2-12, SANS, 8):[];
     const long=b.duration?wrap(b.duration, IW/2-12, SANSB, 9):[];
     const note=b.notes?wrap(b.notes, IW, SANSI, 8.8):[];
@@ -4711,7 +4712,7 @@ function clientHome(first){
     cards.push(`<section class="dash-card"><div class="head"><h2>Your treatment plan</h2><button type="button" class="ghost" data-cv2="plans">View plan</button></div>
       ${meta?`<p class="small muted">${esc(meta)}</p>`:""}
       <div class="stack" style="gap:10px">${items.slice(0,4).map(b=>`<div class="row" style="gap:12px;flex-wrap:nowrap"><span class="num-dot">${esc(b._n)}</span>
-        <div style="display:flex;flex-direction:column;min-width:0"><b>${esc(b._label)}${b.issue?" · "+esc(b.issue):""}</b>${b.freq?`<span class="small muted">${esc(plainFreq(b.freq)||b.freq)}</span>`:""}</div></div>`).join("")}
+        <div style="display:flex;flex-direction:column;min-width:0"><b>${esc(b._label)}${b.issue?" · "+esc(b.issue):""}</b>${b.freq?`<span class="small muted">${esc(capFreq(plainFreq(b.freq))||b.freq)}</span>`:""}</div></div>`).join("")}
         ${items.length>4?`<span class="small muted">and ${items.length-4} more</span>`:""}</div></section>`); }
   // messages
   const ms=msgSort(S.myMsgs||[]), last=ms[ms.length-1];
@@ -4953,7 +4954,7 @@ function doseCalendar(p, who){
     <h1>Dose calendar</h1><div class="muted">${esc2(who||"")}${who?" · ":""}Treatment plan from ${esc2(fmtDate(p.date||today()))} · starting ${esc2(fmtDate(start.toISOString().slice(0,10)))}</div>
     <p class="key">Tick a box ☐ each time you take a dose.${rows.some(x=>!x.r)?" Remedies marked “as needed” have no boxes: take them only when you need them.":""}</p>
     ${weeks.map((wk,i)=>`<table><tr><th>Week ${i+1}</th>${wk.map(x=>`<th>${x.d.toLocaleDateString(undefined,{weekday:"short"})}<br>${x.d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</th>`).join("")}</tr>
-      ${rows.map(({b,r})=>`<tr><td>${esc2(name(b))}<br><span class="muted" style="font-size:11px">${esc2(r?(r.note||plainFreq(b.freq)||b.freq||""):"as needed")}</span></td>${wk.map(x=>`<td>${box(r,x.n,b)}</td>`).join("")}</tr>`).join("")}</table>`).join("")}
+      ${rows.map(({b,r})=>`<tr><td>${esc2(name(b))}<br><span class="muted" style="font-size:11px">${esc2(r?capFreq(r.note||plainFreq(b.freq)||b.freq||""):"as needed")}</span></td>${wk.map(x=>`<td>${box(r,x.n,b)}</td>`).join("")}</tr>`).join("")}</table>`).join("")}
     ${cleanInstr(p.instructions)?`<p class="key"><b>How to take your remedies:</b> ${esc2(cleanInstr(p.instructions))}</p>`:""}
     <p class="muted key">Dawn Spain, PHom · Wellness From Within · ${esc2(PRACTICE.phone)}</p>
     <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
@@ -4967,7 +4968,7 @@ function planCard(p){
       <div class="bottle-head"><span class="bottle-num">${esc(b._label)}</span><h3 class="grow">${esc(b.issue||"")}</h3></div>
       ${b.remedies?`<ul class="rxlist">${remedyLines(b.remedies).map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
       <div class="grid2">
-        ${b.freq?`<div><p class="label">How often</p><p class="freq">${esc(plainFreq(b.freq)||b.freq)}${plainFreq(b.freq)?` <span class="mono muted">${esc(b.freq)}</span>`:""}</p></div>`:""}
+        ${b.freq?`<div><p class="label">How often</p><p class="freq">${esc(capFreq(plainFreq(b.freq))||b.freq)}${plainFreq(b.freq)?` <span class="mono muted">${esc(b.freq)}</span>`:""}</p></div>`:""}
         ${b.duration?`<div><p class="label">How long</p><p>${esc(b.duration)}</p></div>`:""}
       </div>
       ${b.notes?`<p class="small">${esc(b.notes)}</p>`:""}
