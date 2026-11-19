@@ -3419,6 +3419,7 @@ function consultForm(d){
     ${grid(2, sf(d,"cItem","Describe item (crystal, jewelry or other)",{type:"textarea"})+sf(d,"cShip","Shipping address (if shipping)",{type:"textarea"}))}
   </div>`;
 }
+const SEARCH_ROWS=12, REM_ROWS=8;   // on screen; the PDF has room for 8 searches and 5 remedies, extras go into its session notes
 const runBox=(d,k,label="Run")=>`<label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-k="${k}" ${getP(d,k)?"checked":""}><span>${label}</span></label>`;
 function recordForm(d){
   return `<div class="stack scan-form">
@@ -3429,10 +3430,10 @@ function recordForm(d){
     ${sf(d,"special","Special scan circumstances (interruptions, re-runs, client state, equipment)",{type:"textarea",wide:true})}
     ${sh("Strep Tilch")}${grid(3, sf(d,"stPotency","Potency chosen by Qest"))}
     ${sh("Next test needed (QEST-directed)","Check when run.")}
-    ${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr auto 2fr">${sf(d,`next.${i}.test`,"Next test requested")}<label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-k="next.${i}.run" ${getP(d,`next.${i}.run`)?"checked":""}><span>Run</span></label>${sf(d,`next.${i}.notes`,"Notes")}</div>`).join("")}
+    ${[0,1,2].map(i=>`<div class="scan-row" style="--tpl:2fr auto 2fr">${sf(d,`next.${i}.test`,"Next test requested")}<label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-k="next.${i}.run" ${getP(d,`next.${i}.run`)?"checked":""}><span>Run</span></label>${sf(d,`next.${i}.notes`,"Notes")}</div>`).join("")}
     ${sh("Scans I initiated","Check when run.")}${[0,1,2,3].map(i=>`<div class="scan-row" style="--tpl:1fr auto 2fr">${sf(d,`init.${i}.scan`,"Scan")}${runBox(d,`init.${i}.run`)}${sf(d,`init.${i}.reason`,"Reason")}</div>`).join("")}
-    ${sh("Target searches I initiated","Check when run.")}${grid(2, [0,1,2,3,4,5,6,7].map(i=>`<div class="scan-row" style="--tpl:1fr auto">${sf(d,`search.${i}`,"Search keyword")}${runBox(d,`searchRun.${i}`)}</div>`).join(""))}
-    ${sh("Remedies tested against","Check when tested.")}${[0,1,2,3,4].map(i=>`<div class="scan-row" style="--tpl:2fr 1fr auto 2fr">${sf(d,`rem.${i}.name`,"Remedy / product")}${sf(d,`rem.${i}.pot`,"Potency")}${runBox(d,`rem.${i}.run`,"Tested")}${sf(d,`rem.${i}.notes`,"Notes")}</div>`).join("")}
+    ${sh("Target searches I initiated","Check when run.")}${grid(2, [...Array(SEARCH_ROWS).keys()].map(i=>`<div class="scan-row" style="--tpl:1fr auto">${sf(d,`search.${i}`,"Search keyword")}${runBox(d,`searchRun.${i}`)}</div>`).join(""))}
+    ${sh("Remedies tested against","Check when tested.")}${[...Array(REM_ROWS).keys()].map(i=>`<div class="scan-row" style="--tpl:2fr 1fr auto 2fr">${sf(d,`rem.${i}.name`,"Remedy / product")}${sf(d,`rem.${i}.pot`,"Potency")}${runBox(d,`rem.${i}.run`,"Tested")}${sf(d,`rem.${i}.notes`,"Notes")}</div>`).join("")}
     ${sh("Imprint information")}${grid(3, ss(d,"impMethod","Imprint method",IMP_METHODS)+ss(d,"carrier","Carrier",CARRIERS)+sf(d,"impItems","Items imprinted (#)")+sf(d,"impDate","Imprint date",{type:"date"})+ss(d,"impDone","Completed",DONE_OPTS))}
     ${sf(d,"impNotes","Imprint notes",{type:"textarea",wide:true})}
     ${sh("Dosage")}${grid(3, sf(d,"drops","Drops per dose")+sf(d,"perDay","Times per day")+sf(d,"weeks","Duration (weeks)")+sf(d,"startDate","Start date",{type:"date"})+sf(d,"nextScan","Next scan / re-test"))}
@@ -3535,12 +3536,12 @@ function recordFields(d, anon){
   T("Client_name",anon?"":d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Start_time",usTime(d.startTime)); T("Session_#",d.sessionNo); T("Amplification",d.amp);
   STD_SCANS.forEach(([k,l])=>C("std_"+l.replace(/ /g,"_"), getP(d,`std.${k}`)));
   T("Special_scan_circumstances_(interruptions,_re-runs,_client_state,_equipment)",d.special); T("Potency_chosen_by_Qest",d.stPotency);
-  for(let i=0;i<5;i++){ T(`ntn_r${i+1}_Next_Test_requested`,getP(d,`next.${i}.test`)); C(`ntn_r${i+1}_Run`,getP(d,`next.${i}.run`)); T(`ntn_r${i+1}_Notes`,getP(d,`next.${i}.notes`)); }
+  for(let i=0;i<3;i++){ T(`ntn_r${i+1}_Next_Test_requested`,getP(d,`next.${i}.test`)); C(`ntn_r${i+1}_Run`,getP(d,`next.${i}.run`)); T(`ntn_r${i+1}_Notes`,getP(d,`next.${i}.notes`)); }
   for(let i=0;i<4;i++){ T(`init_r${i+1}_Scan`,getP(d,`init.${i}.scan`)); T(`init_r${i+1}_Reason`,getP(d,`init.${i}.reason`)); }
   for(let i=0;i<4;i++){ T(`search_r${i+1}_Search_keyword`,getP(d,`search.${i*2}`)); T(`search_r${i+1}_Search_keyword`,getP(d,`search.${i*2+1}`)); }
   for(let i=0;i<5;i++){ T(`remedy_r${i+1}_Remedy_/_product`,getP(d,`rem.${i}.name`)); T(`remedy_r${i+1}_Potency`,getP(d,`rem.${i}.pot`)); T(`remedy_r${i+1}_Notes`,getP(d,`rem.${i}.notes`)); }
   D("Imprint_method",d.impMethod); D("Carrier",d.carrier); T("Items_imprinted_(#)",d.impItems); T("Imprint_date",usDate(d.impDate)); D("Completed",d.impDone); T("Imprint_notes",d.impNotes);
-  T("Drops_per_dose",d.drops); T("Times_per_day",d.perDay); T("Duration_(weeks)",d.weeks); T("Start_date",usDate(d.startDate)); T("Next_scan_/_re-test",d.nextScan); T("Session_notes_/_follow-up",d.notes);
+  T("Drops_per_dose",d.drops); T("Times_per_day",d.perDay); T("Duration_(weeks)",d.weeks); T("Start_date",usDate(d.startDate)); T("Next_scan_/_re-test",d.nextScan); T("Session_notes_/_follow-up",[d.notes, (()=>{ const xs=(d.search||[]).slice(8).filter(Boolean); return xs.length?"More target searches: "+xs.join(", "):""; })(), (()=>{ const xs=(d.rem||[]).slice(5).filter(r=>r&&r.name).map(r=>[r.name,r.pot].filter(Boolean).join(" ")+(r.notes?` (${r.notes})`:"")); return xs.length?"More remedies tested: "+xs.join("; "):""; })()].filter(Boolean).join("\n"));
   return o;
 }
 function consultFields(d, anon){
@@ -3603,9 +3604,9 @@ function bindScan(){
     if(act==="askdel"){ readScanForm(); S.confirmScanDel=true; renderScan(); return; }
     if(act==="del"){ clearTimeout(SCAN_T); if(sc.data.csv?.path) SB.storage.from(FILE_BUCKET).remove([sc.data.csv.path]).catch(()=>{}); await S.db.doc(`clients/${sc.clientId}/scans/${sc.id}`).delete(); S.scan=null; S.confirmScanDel=false; S.sub="scans"; toast("Scan session deleted"); renderClients(); return; }
     if(act==="fromconsult"){ readScanForm(); const d=sc.data; let n=0;
-      const ks=(d.cSearch||[]).filter(Boolean); d.search=d.search||[]; ks.forEach(k=>{ if(d.search.includes(k)) return; const i=[0,1,2,3,4,5,6,7].find(j=>!d.search[j]); if(i!=null){ d.search[i]=k; n++; } });
+      const ks=(d.cSearch||[]).flatMap(x=>String(x||"").split(/\s*[;\n]\s*/)).filter(Boolean); d.search=d.search||[]; ks.forEach(k=>{ if(d.search.includes(k)) return; const i=[...Array(SEARCH_ROWS).keys()].find(j=>!d.search[j]); if(i!=null){ d.search[i]=k; n++; } });
       const rems=(d.cScanrem||[]).flatMap(r=>String(r?.rems||"").split(/\s*[,;\n]\s*/)).filter(Boolean); d.rem=d.rem||[];
-      rems.forEach(r=>{ if(d.rem.some(x=>x&&x.name===r)) return; const i=[0,1,2,3,4].find(j=>!(d.rem[j]&&d.rem[j].name)); if(i!=null){ d.rem[i]={...(d.rem[i]||{}), name:r}; n++; } });
+      rems.forEach(r=>{ if(d.rem.some(x=>x&&x.name===r)) return; const i=[...Array(REM_ROWS).keys()].find(j=>!(d.rem[j]&&d.rem[j].name)); if(i!=null){ d.rem[i]={...(d.rem[i]||{}), name:r}; n++; } });
       const scans=(d.cScanrem||[]).flatMap(r=>String(r?.scans||"").split(/\s*[,;\n]\s*/)).filter(Boolean); d.init=d.init||[];
       scans.forEach(x=>{ if(d.init.some(y=>y&&y.scan===x)) return; const i=[0,1,2,3].find(j=>!(d.init[j]&&d.init[j].scan)); if(i!=null){ d.init[i]={...(d.init[i]||{}), scan:x, reason:(d.init[i]||{}).reason||"From consult"}; n++; } });
       renderScan(); scanDirty(); toast(n?`Copied ${n} item${n===1?"":"s"} from the consult notes`:"Nothing new to copy"); return; }
