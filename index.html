@@ -2844,7 +2844,7 @@ function bindClients(){
         catch(e1){ console.warn(e1); toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent=lbl; }
       else if(act==="dlphoto"){ const id=S.sel; if(S.photoFor===id && S.photo){ fetch(S.photo).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(id)} - photo.jpg`)); } }
-      else if(act==="dosecal"){ readPlanForm(); doseCalendar(S.editPlan.data, clientName(S.editPlan.clientId)); }
+      else if(act==="dosecal"){ readPlanForm(); doseCalendar(S.editPlan.data, clientName(S.editPlan.clientId), true); }
       else if(act==="previewplan"){ readPlanForm(); const p=S.editPlan.data, nm=clientName(S.editPlan.clientId), lbl=a.textContent; a.disabled=true; a.textContent="Making preview…";
         try{ showPdfPreview(await planPdf(p, nm), `Treatment plan - ${nm} - ${p.date||today()}.pdf`); }catch(e1){ console.warn(e1); toast("Couldn't make the preview. Check your connection and try again."); }
         a.disabled=false; a.textContent=lbl; }
@@ -4948,9 +4948,13 @@ function freqRule(f){ const t=String(f||"").replace(/\s+/g,""); let m;
   const pf=String(f||"").toLowerCase(); if(/twice|2x/.test(pf)) return {every:1,times:2}; if(/three|3x/.test(pf)) return {every:1,times:3}; if(/daily|once a day/.test(pf)) return {every:1,times:1}; if(/other day/.test(pf)) return {every:2,times:1}; if(/week/.test(pf)) return {every:7,times:1};
   return null; }
 function durDays(d){ const s=String(d||"").toLowerCase(); let m; if((m=s.match(/(\d+)\s*week/))) return 7*+m[1]; if((m=s.match(/(\d+)\s*month/))) return 30*+m[1]; if((m=s.match(/(\d+)\s*day/))) return +m[1]; return 0; }
-function doseCalendar(p, who){
-  const items=displayItems(p); if(!items.length) return;
+function doseCalendar(p, who, preview){
+  const items=displayItems(p); if(!items.length){ toast("Add a remedy first"); return; }
+  if(preview){ showHtmlPreview(doseCalendarHtml(p, who, items, false), "Dose calendar"); return; }
   const w=window.open("","_blank"); if(!w){ toast("Allow pop-ups to open the dose calendar"); return; }
+  w.document.write(doseCalendarHtml(p, who, items, true)); w.document.close();
+}
+function doseCalendarHtml(p, who, items, autoPrint){
   const start=new Date(today()+"T12:00:00"); const pd=p.date?new Date(p.date+"T12:00:00"):null; if(pd && (start-pd)/864e5<=10 && pd<=start) start.setTime(pd.getTime());
   const days=Math.min(56, Math.max(28, ...items.map(b=>durDays(b.duration)||28)));
   const rows=items.map(b=>({b, r:freqRule(b.freq)}));
@@ -4958,7 +4962,7 @@ function doseCalendar(p, who){
   const name=b=>`${b._label}${b.issue?" · "+b.issue:""}`;
   const box=(r,n,b)=>{ const lim=durDays(b.duration); if(!r || (lim && n>=lim) || n%r.every) return ""; return "☐ ".repeat(r.times).trim(); };
   const esc2=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Dose calendar</title><style>
+  return (`<!doctype html><html><head><meta charset="utf-8"><title>Dose calendar</title><style>
     body{font:13px/1.4 Georgia,serif;color:#222;margin:28px} h1{font-weight:normal;color:#087C9C;margin:0} .muted{color:#777}
     table{width:100%;border-collapse:collapse;margin:14px 0;page-break-inside:avoid} th,td{border:1px solid #ccc;padding:6px;text-align:center;vertical-align:top} th:first-child,td:first-child{text-align:left;width:30%} td{font-size:16px} th{font-weight:normal;font-size:12px;background:#f3f9fa}
     .key{font-size:12px} @media print{body{margin:12px}}</style></head><body>
@@ -4968,8 +4972,20 @@ function doseCalendar(p, who){
       ${rows.map(({b,r})=>`<tr><td>${esc2(name(b))}<br><span class="muted" style="font-size:11px">${esc2(r?capFreq(r.note||plainFreq(b.freq)||b.freq||""):"as needed")}</span></td>${wk.map(x=>`<td>${box(r,x.n,b)}</td>`).join("")}</tr>`).join("")}</table>`).join("")}
     ${cleanInstr(p.instructions)?`<p class="key"><b>How to take your remedies:</b> ${esc2(cleanInstr(p.instructions))}</p>`:""}
     <p class="muted key">Dawn Spain, PHom · Wellness From Within · ${esc2(PRACTICE.phone)}</p>
-    <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
-  w.document.close();
+    ${autoPrint?`<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script>`:""}</body></html>`);
+}
+/* look at an HTML page (like the dose calendar) inside the portal, with a Print button */
+function showHtmlPreview(html, title){
+  document.getElementById("pdf-preview")?.remove();
+  const d=document.createElement("div"); d.id="pdf-preview";
+  d.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,40,45,.55);display:flex;align-items:center;justify-content:center;padding:16px";
+  d.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(1000px,100%);height:min(94vh,1200px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div class="row" style="gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center"><b class="grow">${esc(title||"Preview")}</b><button type="button" data-pv="print">Print</button><button type="button" class="primary" data-pv="close">Close</button></div>
+    <iframe title="${esc(title||"Preview")}" style="flex:1;border:0;width:100%;background:#fff"></iframe></div>`;
+  const fr=d.querySelector("iframe"); fr.srcdoc=html;
+  const close=()=>{ d.remove(); document.removeEventListener("keydown",esc1); }, esc1=e=>{ if(e.key==="Escape") close(); };
+  d.addEventListener("click",e=>{ const b=e.target.closest("[data-pv]"); if(e.target===d || b?.dataset.pv==="close") close(); else if(b?.dataset.pv==="print") fr.contentWindow?.print(); });
+  document.addEventListener("keydown",esc1); document.body.appendChild(d);
 }
 function planCard(p){
   return `<article class="sheet planview">
