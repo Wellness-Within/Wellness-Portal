@@ -211,6 +211,8 @@ legend{font-family:var(--f-display);font-size:17px;padding:0;margin-bottom:8px}
 .ptext.rx{font-family:var(--f-mono);font-size:13.5px}
 mark{background:var(--amber-soft);color:inherit;border-radius:3px;padding:0 1px}
 .target{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:8px;background:var(--soft);font-size:13.5px}
+.target.live{position:sticky;top:8px;z-index:20;border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.08);font-size:14px}
+.target.live select{font-weight:600;border-color:var(--accent)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .notice{padding:12px 14px;border-radius:8px;background:var(--amber-soft);color:var(--ink);font-size:14px}
 .notice.ok{background:var(--ok-soft)}
@@ -2269,8 +2271,8 @@ function targetBanner(){
   const P=S.editPlan.data, nf=S.editPlan.newForm||"wet";
   const opts=FORM_ORDER.map(f=>`<option value="new:${f}" ${(t==null||!bs[t])&&nf===f?"selected":""}>${f==="wet"?"A new wet dose bottle":f==="tt1"?"A new TT-1 basket":"Pellets (one line per remedy)"}</option>`).join("")
     +bs.map((b,i)=>itemForm(P,b)==="pellets"?"":`<option value="${i}" ${t===i?"selected":""}>${itemLabelAt(P,i)}${b.issue?": "+esc(b.issue):""}</option>`).join("");
-  return `<div class="target"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")}
-    <label style="display:inline-flex;align-items:center;gap:6px;margin-left:6px">→ <select id="plan-target" aria-label="Add protocols to" style="width:auto;padding:3px 8px">${opts}</select></label></span>
+  return `<div class="target live"><span class="grow">Adding to <b>${esc(clientName(S.editPlan.clientId))}</b> · ${esc(S.editPlan.data.title||"Untitled plan")}
+    <label style="display:inline-flex;align-items:center;gap:6px;margin-left:6px"><b>Put “Add to plan” into:</b> <select id="plan-target" aria-label="Add protocols to" style="width:auto;padding:4px 8px">${opts}</select></label></span>
     <button type="button" class="ghost" data-act="goplan">Back to plan</button></div>`;
 }
 function addBottle(issue, remedies){
