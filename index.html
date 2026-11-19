@@ -1578,7 +1578,7 @@ async function saveInvoice(mode){
   if(!v.number) v.number=await nextInvNumber();
   if(mode!=="draft" && v.status!=="sent"){ v.status="sent"; v.sentAt=new Date().toISOString();
     // a draft sent later: date it today, due DUE_DAYS from now (unless you set a later due date)
-    if(v.auto || (v.date||"")<today()){ v.date=today(); const dd=new Date(today()+"T12:00:00"); dd.setDate(dd.getDate()+DUE_DAYS); const ds=dd.toISOString().slice(0,10); if(!v.due || v.due<ds) v.due=ds; } }
+    if(v.auto || (v.date||"")<today()){ v.date=today(); const dd=new Date(today()+"T12:00:00"); dd.setDate(dd.getDate()+DUE_DAYS); const ds=dd.toISOString().slice(0,10); if(v.auto || !v.due || v.due<ds) v.due=ds; } }
   if(v.status==="sent") v.pay=payInfo();
   v.updatedAt=new Date().toISOString(); if(!v.createdAt) v.createdAt=v.updatedAt;
   const {id:_x, ...data}=v;
