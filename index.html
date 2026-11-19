@@ -333,7 +333,7 @@ function plainFreq(f){
   if(/^SOS$/i.test(t)) return "as needed";
   return "";
 }
-const FREQS = ["1D","2D","3D","4D","EOD","e3D","1W","e10D","e14D","e1H","e2H","e3H","SOS"];
+const FREQS = ["1D","2D","3D","4D","EOD","E3D","1W","E10D","E14D","E1H","E2H","E3H","SOS"];
 
 /* ---------- intake form definition ---------- */
 const INTAKE = [
@@ -3650,7 +3650,7 @@ function libIntro(){
   </div>`;
 }
 function legend(){
-  return `<div class="legend"><span><code>+</code> together</span><span><code>#</code> alternate</span><span><code>/</code> also, taken separately</span><span><code>2D</code> twice a day</span><span><code>EOD</code> every other day</span><span><code>e3H</code> every 3 hours</span><span><code>1W</code> once a week</span><span><code>SOS</code> as needed</span><span><code>MT</code> mother tincture</span><span><code>1000C</code> = 1M</span></div>`;
+  return `<div class="legend"><span><code>+</code> together</span><span><code>#</code> alternate</span><span><code>/</code> also, taken separately</span><span><code>2D</code> twice a day</span><span><code>EOD</code> every other day</span><span><code>E3H</code> every 3 hours</span><span><code>1W</code> once a week</span><span><code>SOS</code> as needed</span><span><code>MT</code> mother tincture</span><span><code>1000C</code> = 1M</span></div>`;
 }
 function protoDetail(e, terms){
   const blocks = (e.blocks||[]).map(b => b.k==="o"
