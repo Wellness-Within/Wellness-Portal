@@ -3181,16 +3181,16 @@ async function planPdf(p, clientLabel){
   let y=0;
   const header=first=>{
     if(first){
-      doc.setFillColor(...aqua); doc.rect(0,0,W,104,"F");
-      doc.setFillColor(...teal); doc.rect(0,104,W,3,"F");
-      font(SERIF,25,hdr); doc.text("Wellness From Within", M, 50);
-      font(SERIFI,12.5,hdr2); doc.text(pdfSafe(PRACTICE.name), M, 72);
-      font(SANSB,8.5,hdr2); doc.setCharSpace(1.6); doc.text("TREATMENT PLAN", W-M, 40, {align:"right"}); doc.setCharSpace(0);
-      font(SANSB,13,hdr); doc.text(pdfSafe(clientLabel||""), W-M, 59, {align:"right"});
-      font(SANS,10,hdr2); doc.text(pdfSafe(fmtDate(p.date)||""), W-M, 75, {align:"right"});
-      y=140;
+      doc.setFillColor(...aqua); doc.rect(0,0,W,84,"F");
+      doc.setFillColor(...teal); doc.rect(0,84,W,3,"F");
+      font(SERIF,21,hdr); doc.text("Wellness From Within", M, 42);
+      font(SERIFI,11,hdr2); doc.text(pdfSafe(PRACTICE.name), M, 60);
+      font(SANSB,8.5,hdr2); doc.setCharSpace(1.6); doc.text("TREATMENT PLAN", W-M, 32, {align:"right"}); doc.setCharSpace(0);
+      font(SANSB,11.5,hdr); doc.text(pdfSafe(clientLabel||""), W-M, 48, {align:"right"});
+      font(SANS,9,hdr2); doc.text(pdfSafe(fmtDate(p.date)||""), W-M, 62, {align:"right"});
+      y=112;
       const t=(p.title||"").trim();
-      if(t && !/^(remedy|treatment) plan$/i.test(t)){ const ls=wrap(t,CW,SERIF,17); font(SERIF,17,deep); ls.forEach(l=>{ doc.text(l,M,y); y+=21; }); y+=6; }
+      if(t && !/^(remedy|treatment) plan$/i.test(t)){ const ls=wrap(t,CW,SERIF,14); font(SERIF,14,deep); ls.forEach(l=>{ doc.text(l,M,y); y+=17; }); y+=4; }
     } else {
       doc.setFillColor(...aqua); doc.rect(0,0,W,6,"F");
       font(SERIF,11,teal); doc.text("Wellness From Within", M, 34);
@@ -3202,54 +3202,54 @@ async function planPdf(p, clientLabel){
   header(true);
   if((p.narrative||"").trim()){
     p.narrative.trim().split(/\n+/).map(t=>t.trim()).filter(Boolean).forEach(par=>{
-      wrap(par, CW, SANS, 11).forEach(l=>{ room(16); font(SANS,11,ink); doc.text(l,M,y); y+=15.5; }); y+=7; });
-    y+=10;
+      wrap(par, CW, SANS, 9.5).forEach(l=>{ room(13); font(SANS,9.5,ink); doc.text(l,M,y); y+=13; }); y+=5; });
+    y+=6;
   }
   const bottles=displayItems(p).filter(b=>b.issue||b.remedies||b.freq||b.duration||b.notes);
   const mixed=new Set(bottles.map(b=>b._form)).size>1;
-  const PAD=18, BADGE=26, IX=M+PAD+BADGE+14, IW=W-M-PAD-IX;
+  const PAD=11, BADGE=20, IX=M+PAD+BADGE+10, IW=W-M-PAD-IX;
   bottles.forEach((b,i)=>{
-    const issue=wrap(b.issue||"Remedies", IW, SANSB, 13.5);
-    const rems=remedyLines(b.remedies).map(r=>wrap(r, IW-14, SANS, 11));
+    const issue=wrap(b.issue||"Remedies", IW, SANSB, 11);
+    const rems=remedyLines(b.remedies).map(r=>wrap(r, IW-12, SANS, 9.5));
     const pf=plainFreq(b.freq);
-    const often=b.freq?wrap(pf||b.freq, IW/2-12, SANSB, 10.5):[], oftenCode=(pf&&b.freq)?wrap(b.freq, IW/2-12, SANS, 9):[];
-    const long=b.duration?wrap(b.duration, IW/2-12, SANSB, 10.5):[];
-    const note=b.notes?wrap(b.notes, IW, SANSI, 10):[];
-    const hRem=rems.reduce((s,ls)=>s+ls.length*14.5+3,0);
-    const hSched=(often.length||long.length)?(14+12+Math.max(often.length*13+oftenCode.length*11, long.length*13)+4):0;
-    const h=PAD+11+issue.length*17+6+hRem+hSched+(note.length?note.length*13+8:0)+PAD-6;
-    if(mixed && (i===0 || bottles[i-1]._form!==b._form)){ room(h+14+30); font(SERIF,14,deep); doc.text(FORMS[b._form].many, M, y+14); y+=28; }
-    room(h+14);
+    const often=b.freq?wrap(pf||b.freq, IW/2-12, SANSB, 9):[], oftenCode=(pf&&b.freq)?wrap(b.freq, IW/2-12, SANS, 8):[];
+    const long=b.duration?wrap(b.duration, IW/2-12, SANSB, 9):[];
+    const note=b.notes?wrap(b.notes, IW, SANSI, 8.8):[];
+    const hRem=rems.reduce((s,ls)=>s+ls.length*12+2,0);
+    const hSched=(often.length||long.length)?(2+11+11+Math.max(often.length*11+oftenCode.length*9.5, long.length*11)):0;
+    const h=PAD+6+12+issue.length*13.5+2+hRem+hSched+(note.length?4+note.length*11:0)+PAD-10;
+    if(mixed && (i===0 || bottles[i-1]._form!==b._form)){ room(h+10+24); font(SERIF,12,deep); doc.text(FORMS[b._form].many, M, y+12); y+=22; }
+    room(h+9);
     const top=y;
     doc.setFillColor(...card); doc.setDrawColor(...line); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
     doc.setFillColor(...teal); doc.circle(M+PAD+BADGE/2, top+PAD+BADGE/2, BADGE/2, "F");
-    font(SANSB,12,[255,255,255]); doc.text(String(b._n), M+PAD+BADGE/2, top+PAD+BADGE/2+4.3, {align:"center"});
-    let cy=top+PAD+8;
-    font(SANSB,7.5,gold); doc.setCharSpace(1.4); doc.text(b._label.toUpperCase()+(b._tag?"  ·  "+b._tag.toUpperCase():""), IX, cy); doc.setCharSpace(0); cy+=15;
-    font(SANSB,13.5,deep); issue.forEach(l=>{ doc.text(l,IX,cy); cy+=17; }); cy+=4;
-    rems.forEach(ls=>{ doc.setFillColor(...teal); doc.circle(IX+3, cy-3.6, 1.9, "F"); font(SANS,11,ink); ls.forEach(l=>{ doc.text(l,IX+14,cy); cy+=14.5; }); cy+=3; });
+    font(SANSB,10,[255,255,255]); doc.text(String(b._n), M+PAD+BADGE/2, top+PAD+BADGE/2+3.6, {align:"center"});
+    let cy=top+PAD+6;
+    font(SANSB,6.8,gold); doc.setCharSpace(1.2); doc.text(b._label.toUpperCase()+(b._tag?"  ·  "+b._tag.toUpperCase():""), IX, cy); doc.setCharSpace(0); cy+=12;
+    font(SANSB,11,deep); issue.forEach(l=>{ doc.text(l,IX,cy); cy+=13.5; }); cy+=2;
+    rems.forEach(ls=>{ doc.setFillColor(...teal); doc.circle(IX+3, cy-3.1, 1.6, "F"); font(SANS,9.5,ink); ls.forEach(l=>{ doc.text(l,IX+12,cy); cy+=12; }); cy+=2; });
     if(hSched){
-      cy+=4; doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(IX,cy,W-M-PAD,cy); cy+=16;
+      cy+=2; doc.setDrawColor(...line); doc.setLineWidth(0.75); doc.line(IX,cy,W-M-PAD,cy); cy+=11;
       const col2=IX+IW/2+6;
-      font(SANSB,7.5,muted); doc.setCharSpace(1.2);
+      font(SANSB,6.5,muted); doc.setCharSpace(1);
       if(often.length) doc.text("HOW OFTEN", IX, cy); if(long.length) doc.text("HOW LONG", often.length?col2:IX, cy); doc.setCharSpace(0);
-      let a=cy+14, c=cy+14;
-      font(SANSB,10.5,ink); often.forEach(l=>{ doc.text(l,IX,a); a+=13; });
-      font(SANS,9,muted); oftenCode.forEach(l=>{ doc.text(l,IX,a); a+=11; });
-      font(SANSB,10.5,ink); long.forEach(l=>{ doc.text(l,often.length?col2:IX,c); c+=13; });
+      let a=cy+11, c=cy+11;
+      font(SANSB,9,ink); often.forEach(l=>{ doc.text(l,IX,a); a+=11; });
+      font(SANS,8,muted); oftenCode.forEach(l=>{ doc.text(l,IX,a); a+=9.5; });
+      font(SANSB,9,ink); long.forEach(l=>{ doc.text(l,often.length?col2:IX,c); c+=11; });
       cy=Math.max(a,c);
     }
-    if(note.length){ cy+=6; font(SANSI,10,muted); note.forEach(l=>{ doc.text(l,IX,cy); cy+=13; }); }
-    y=top+h+14;
+    if(note.length){ cy+=4; font(SANSI,8.8,muted); note.forEach(l=>{ doc.text(l,IX,cy); cy+=11; }); }
+    y=top+h+9;
   });
   const textBox=(title, txt)=>{
-    const paras=txt.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>wrap(s, CW-36, SANS, 10.5));
-    const h=18+16+paras.reduce((s,ls)=>s+ls.length*14+5,0)+12;
-    room(h+10); y+=4; const top=y;
+    const paras=txt.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>wrap(s, CW-28, SANS, 9.3));
+    const h=12+13+paras.reduce((s,ls)=>s+ls.length*12+4,0)+8;
+    room(h+8); y+=3; const top=y;
     doc.setFillColor(...cream); doc.setDrawColor(...line); doc.setLineWidth(0.9); doc.roundedRect(M,top,CW,h,7,7,"FD");
-    let cy=top+26; font(SERIF,13,deep); doc.text(title, M+18, cy); cy+=18;
-    font(SANS,10.5,ink); paras.forEach(ls=>{ ls.forEach(l=>{ doc.text(l,M+18,cy); cy+=14; }); cy+=5; });
-    y=top+h+10;
+    let cy=top+19; font(SERIF,11.5,deep); doc.text(title, M+14, cy); cy+=14;
+    font(SANS,9.3,ink); paras.forEach(ls=>{ ls.forEach(l=>{ doc.text(l,M+14,cy); cy+=12; }); cy+=4; });
+    y=top+h+8;
   };
   if((p.extra||"").trim()) textBox("Also recommended", p.extra.trim());
   const instr=cleanInstr(p.instructions);
