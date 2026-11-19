@@ -3535,6 +3535,9 @@ async function scanFollowThrough(sc){
   const patch={}, list=apptsOf(c), dd=x=>Math.abs((Date.parse(x+"T12:00:00")-Date.parse(d.scanDate+"T12:00:00"))/864e5);
   let a=list.find(x=>x.id===d.apptId) || list.filter(x=>x.type==="scan" && !x.done && dd(x.date)<=14).sort((x,y)=>dd(x.date)-dd(y.date))[0];
   if(a && !a.done && d.scanDate<=today()){ a.done=true; if(a.date!==d.scanDate){ a.bookedFor=a.date; a.date=d.scanDate; } d.apptId=a.id; await saveAppts(id, list); }
+  // no bill yet for this scan (booked before automatic drafts, or by hand): make the draft now, for review
+  if(a && !d.billChecked && S.invLoaded && autoOn("autoDraft")){ d.billChecked=true; S.db.doc(`clients/${id}/scans/${sc.id}`).update({billChecked:true}).catch(()=>{}); }
+  if(a && d.billChecked===true && !d.billMade && S.invLoaded && autoOn("autoDraft") && !Object.values(S.inv||{}).some(v=>v.apptId===a.id && v.status!=="void")){ d.billMade=true; S.db.doc(`clients/${id}/scans/${sc.id}`).update({billMade:true}).catch(()=>{}); await autoDraftInvoice(id, a); if(Object.values(S.inv||{}).some(v=>v.apptId===a.id && v.auto)) toast("A draft bill for this scan is waiting under Bills to review"); }
   const w=parseFloat(d.weeks), st=d.startDate||d.scanDate;
   if(w>0 && st){ const end=new Date(st+"T12:00:00"); end.setDate(end.getDate()+Math.round(w*7)); const e=end.toISOString().slice(0,10);
     if(e>today() && e!==c.nextVisit && (!c.nextVisit || c.nextVisit<e || c.nextVisitFrom===sc.id)){ patch.nextVisit=e; patch.nextVisitFrom=sc.id; } }
