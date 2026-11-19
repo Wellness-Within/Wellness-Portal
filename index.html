@@ -877,6 +877,10 @@ const zoomUrlOf = a => isZoom(a) ? (a.zoomUrl || (S.prac ? (S.settings?.zoomUrl|
 const zoomLink = (a, cls) => { const u=zoomUrlOf(a); return u ? `<a class="btn ${cls||"small"}" href="${esc(u)}" target="_blank" rel="noopener" data-zoomlink>Join Zoom</a>` : ""; };
 const apptDelivery = a => a.type!=="scan" ? "" : (a.delivery || (a.imprint===false ? "none" : "imprint"));
 function apptLabel(a){ const d=apptDelivery(a); return (APPT_TYPES[a.type]||"Appointment") + (a.type==="scan"&&a.how ? ` + ${a.how==="Phone"?"phone":"Zoom"} consult` : "") + (d==="imprint" ? " + imprint" : d==="ship" ? " + shipped treatment" : ""); }
+/* a tracking link for USPS (default), UPS or FedEx numbers */
+function trackUrl(t){ t=String(t||"").replace(/\s+/g,""); if(/^1Z/i.test(t)) return "https://www.ups.com/track?tracknum="+encodeURIComponent(t);
+  if(/^\d{12}$|^\d{15}$/.test(t)) return "https://www.fedex.com/fedextrack/?trknbr="+encodeURIComponent(t);
+  return "https://tools.usps.com/go/TrackConfirmAction?tLabels="+encodeURIComponent(t); }
 function clientShipAddress(c){ const q=c?.qest||{};
   const lines = q.shipDifferent ? [q.shipStreet, [q.shipCity, [q.shipState, q.shipZip].filter(Boolean).join(" ")].filter(Boolean).join(", ")]
                                 : [q.street, [q.city, [q.state, q.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")];
@@ -1083,7 +1087,9 @@ function apptsPane(id){
   if(ed && ed.isNew && ed.a.type==="scan" && !ed.a.delivery) ed.a.delivery = (c.qest||{}).reportsOnly ? "none" : wantsShipped(c) ? "ship" : "imprint";
   const row=a=>`<div class="dash-row" style="align-items:flex-start"><div style="display:flex;flex-direction:column;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small muted">${esc(apptWhen(a))}${a.how?` · ${esc(a.how)}`:""}${a.note?` · ${esc(a.note)}`:""}</span>
       ${apptDelivery(a)==="ship"?`<span class="small" style="white-space:pre-line;margin-top:4px"><b>Ship to:</b> ${esc(a.shipTo||clientShipAddress(c)||"No address on file yet")}</span>
-        ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>`:""}`:""}</div>
+        ${a.shippedAt?`<span class="chip ok" style="align-self:flex-start;margin-top:4px">Shipped ${esc(fmtDate(a.shippedAt))}</span>
+          <div class="row" style="gap:6px;margin-top:6px;flex-wrap:nowrap">${a.tracking?`<span class="small">Tracking: <a href="${esc(trackUrl(a.tracking))}" target="_blank" rel="noopener">${esc(a.tracking)}</a></span>`:""}
+            <input id="trk-${esc(a.id)}" placeholder="${a.tracking?"Change tracking #":"Tracking #"}" style="max-width:220px;padding:4px 8px" aria-label="Tracking number"><button type="button" class="small" data-apptrack="${esc(a.id)}">${a.tracking?"Update":"Add tracking #"}</button></div>`:""}`:""}</div>
     <div class="row" style="gap:4px;flex-wrap:nowrap">${apptDelivery(a)==="ship"?(a.shippedAt?`<button type="button" class="ghost small" data-apptship="${esc(a.id)}" data-undo="1">Undo shipped</button>`:`<button type="button" class="small primary" data-apptship="${esc(a.id)}">Mark shipped</button>`):""}
       ${a.type==="consult"&&a.date<=today()?`<button type="button" class="small primary" data-hcstart="${esc(a.id)}">Start consult</button>`:""}
       ${a.type==="scan"&&!a.time?`<button type="button" class="ghost small" data-dropsdue="${esc(a.id)}" title="Turn this into the drops-finish date instead of a booked scan">Just the drops date</button>`:""}
@@ -1119,7 +1125,7 @@ function apptsPane(id){
 async function saveAppts(id, list){
   const clean=list.map(a=>{ const o={id:a.id==="nv"?genId().slice(0,10):a.id, type:a.type, date:a.date, time:a.time||"", note:a.note||""};
     if(a.type==="consult"||a.type==="qfu"){ o.mins=a.mins||60; o.how=a.how||""; }
-    if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; } if(a.how) o.how=a.how; }
+    if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; if(a.tracking) o.tracking=a.tracking; } if(a.how) o.how=a.how; }
     if(o.how && /zoom|video/i.test(o.how) && a.zoomUrl) o.zoomUrl=a.zoomUrl;
     return o; });
   const sts=(S.clients[id]||{}).scanToSchedule, done=sts && clean.some(a=>a.type==="scan" && a.date>=(sts.orderedAt||""));
@@ -1941,7 +1947,7 @@ function renderHome(){
 
 const autoOn = k => ((S.settings||{}).autoMail||{})[k] !== false;
 function autoMailSection(){
-  const items=[["autoDraft","Draft invoice when you book a scan","Makes a draft invoice from the client's pricing (Current or RFH Subscriber), their Zoom and imprint or shipping choice, and their standing discount. Nothing is sent: it waits on your Home page under Bills to review. Skipped if they already paid ahead (website order or Square)."],["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
+  const items=[["shipTrack","Tracking number","When you add a tracking number to a shipped treatment, the client gets a message (emailed) with the number and a tracking link."],["autoDraft","Draft invoice when you book a scan","Makes a draft invoice from the client's pricing (Current or RFH Subscriber), their Zoom and imprint or shipping choice, and their standing discount. Nothing is sent: it waits on your Home page under Bills to review. Skipped if they already paid ahead (website order or Square)."],["apptBooked","Appointment booked","When you add a new upcoming scan, consult or follow-up, the client gets a message (emailed) with the date and details, including your note. For a scan it's the \u201cScan scheduled\u201d message."],["portalWelcome","Portal welcome for new clients","When a new client is added (a Square booking, or someone you add with an email), they get the Welcome message with sign-in steps about 10 minutes later. Website orders already get their own welcome."],["reminders","Scan reminders","A week before the next scan, and the day the drops finish (sent each morning)."],["reports","Reports ready","When you share a report with a client."],["plans","Treatment plan ready","When you share a treatment plan."],["welcome","Website order welcome","Next steps and the Qest4 Scan Intake link, right after a website scan order."],["receipts","Square payment receipts","A thank-you receipt as soon as a client pays an invoice online through Square."]];
   return `<div class="formsec stack" id="auto-set"><h3>Automatic emails</h3>
     <p class="small muted">Sent from portal@dawnspain.com with your signature; replies come to your iCloud. Each one is noted in the client's email history.</p>
     ${items.map(([k,l,h])=>`<label class="check"><input type="checkbox" data-automail="${k}" ${autoOn(k)?"checked":""}><span><b>${l}</b> <span class="small muted">${h}</span></span></label>`).join("")}</div>`;
@@ -2783,6 +2789,11 @@ function bindClients(){
     const fa = e.target.closest("[data-faskdel]"); if(fa){ S.confirmFileDel=fa.dataset.faskdel; renderClients(); return; }
     const fd = e.target.closest("[data-fdel]"); if(fd){ const f=S.files.find(x=>x.id===fd.dataset.fdel); if(f){ await SB.storage.from(FILE_BUCKET).remove([f.path]); await S.db.doc(`clients/${S.sel}/files/${f.id}`).delete(); S.confirmFileDel=null; toast("File deleted"); } return; }
     const ae = e.target.closest("[data-apptedit]"); if(ae){ const a=apptsOf(S.clients[S.sel]).find(x=>x.id===ae.dataset.apptedit); if(a){ S.apptEdit={cid:S.sel, isNew:false, a:{...a}}; renderClients(); } return; }
+    const at = e.target.closest("[data-apptrack]"); if(at){ const id=S.sel, list=apptsOf(S.clients[id]); const a=list.find(x=>x.id===at.dataset.apptrack); const v=($("#trk-"+CSS.escape(at.dataset.apptrack))?.value||"").trim().replace(/\s+/g,"");
+      if(!a) return; if(!v){ toast("Type the tracking number first"); return; } const first=!a.tracking; a.tracking=v; at.disabled=true; await saveAppts(id, list);
+      if(autoOn("shipTrack") && S.settings.autoEmail && clientEmail(id)){ const fn=clientFirst(id);
+        await sendMsg(id, "dawn", [`Hi ${fn && fn!=="Unnamed" ? fn : "there"},`, "", first?"Your balancing treatment is on its way!":"Here's the updated tracking number for your balancing treatment.", "", `Tracking number: ${v}`, `Track it here: ${trackUrl(v)}`, "", "Let me know when it arrives, or if you have any questions.", "", "Warmly,", "Dawn"].join("\n"));
+        toast("Tracking saved, and they've been emailed it"); } else toast("Tracking number saved"); return; }
     const as = e.target.closest("[data-apptship]"); if(as){ const list=apptsOf(S.clients[S.sel]); const a=list.find(x=>x.id===as.dataset.apptship); if(a){ if(as.dataset.undo) delete a.shippedAt; else a.shippedAt=today(); await saveAppts(S.sel, list); toast(as.dataset.undo?"Marked not shipped":"Marked as shipped"); } return; }
     const ai = e.target.closest("[data-apptics]"); if(ai){ const a=apptsOf(S.clients[S.sel]).find(x=>x.id===ai.dataset.apptics); if(a) apptIcs(a, clientName(S.sel)); return; }
     const sb = e.target.closest("[data-sub]"); if(sb){ readPlanForm(); S.sub=sb.dataset.sub; renderClients(); return; }
@@ -4722,7 +4733,7 @@ function clientHome(first){
       ${isZoom(a)?`<span class="small muted">On Zoom</span>${zoomLink(a,"primary small")?`<span style="margin-top:6px">${zoomLink(a,"primary small")}</span>`:""}`:a.how?`<span class="small muted">By ${esc(a.how.toLowerCase())}</span>`:""}
       <span class="small muted">${dd>0?`In ${dd} day${dd===1?"":"s"}`:"Today"}${a.type==="scan"&&formIn?" · Your Qest4 Scan Intake is in. Thank you!":""}</span>
       ${a.note?`<span class="small">${esc(a.note)}</span>`:""}
-      ${apptDelivery(a)==="ship"?(a.shippedAt?`<span class="small"><b>Your treatment was shipped ${esc(fmtDate(a.shippedAt))}.</b></span>`:`<span class="small" style="white-space:pre-line">Your treatment will be shipped to:\n${esc(a.shipTo||clientShipAddress(r))}</span><span class="small muted">Address changed? Let Dawn know in Messages.</span>`):""}</div></div>
+      ${apptDelivery(a)==="ship"?(a.shippedAt?`<span class="small"><b>Your treatment was shipped ${esc(fmtDate(a.shippedAt))}.</b>${a.tracking?` Tracking: <a href="${esc(trackUrl(a.tracking))}" target="_blank" rel="noopener">${esc(a.tracking)}</a>`:""}</span>`:`<span class="small" style="white-space:pre-line">Your treatment will be shipped to:\n${esc(a.shipTo||clientShipAddress(r))}</span><span class="small muted">Address changed? Let Dawn know in Messages.</span>`):""}</div></div>
       ${ups.length>1?`<div>${ups.slice(1,4).map(x=>`<div class="dash-row"><span class="small"><b>${esc(apptLabel(x))}</b> · ${esc(apptWhen(x,true))}</span></div>`).join("")}</div>`:""}
       ${rs?`<div class="stack" style="gap:8px" id="resched-form"><label class="field"><span>What date or time would work better?</span><textarea id="resched-note" style="min-height:70px" placeholder="e.g. Any day the week of Dec 8"></textarea></label>
           <div class="row"><button type="button" class="primary" data-act="reschedsend">Send to Dawn</button><button type="button" data-act="reschedcancel">Cancel</button></div></div>`
