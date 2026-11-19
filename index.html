@@ -321,7 +321,7 @@ const capFreq = t => t ? t.charAt(0).toUpperCase()+t.slice(1) : t;
 function plainFreq(f){
   const s = String(f||"").trim(); if(!s) return "";
   const t = s.replace(/\s+/g,"");
-  const words = {1:"once",2:"twice",3:"3 times",4:"4 times",5:"5 times",6:"6 times"};
+  const words = {1:"once",2:"twice",3:"three times",4:"four times",5:"five times",6:"six times"};
   let m;
   if((m=t.match(/^(\d)D$/i))) return (words[m[1]]||m[1]+" times")+" a day";
   if(/^eOD$/i.test(t)) return "every other day";
