@@ -2674,7 +2674,7 @@ function planEditor(ep){
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
     <label class="field"><span>Other recommendations</span><textarea id="pl-extra" style="min-height:80px" placeholder="Type anything here: a remedy, supplement, essence or product that isn't in the list. The client sees it exactly as you write it.">${esc(p.extra||"")}</textarea></label>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px" placeholder="How to take the remedies in this plan">${esc(p.instructions)}</textarea></label>
-    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${planTplSaveBox()}${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="previewplan">Preview</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${planTplSaveBox()}${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
   </div>`;
@@ -2843,6 +2843,9 @@ function bindClients(){
         catch(e1){ console.warn(e1); toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent=lbl; }
       else if(act==="dlphoto"){ const id=S.sel; if(S.photoFor===id && S.photo){ fetch(S.photo).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(id)} - photo.jpg`)); } }
+      else if(act==="previewplan"){ readPlanForm(); const p=S.editPlan.data, nm=clientName(S.editPlan.clientId), lbl=a.textContent; a.disabled=true; a.textContent="Making preview…";
+        try{ showPdfPreview(await planPdf(p, nm), `Treatment plan - ${nm} - ${p.date||today()}.pdf`); }catch(e1){ console.warn(e1); toast("Couldn't make the preview. Check your connection and try again."); }
+        a.disabled=false; a.textContent=lbl; }
       else if(act==="pdfplan"){ readPlanForm(); const p=S.editPlan.data; const nm=clientName(S.editPlan.clientId); a.disabled=true; a.textContent="Making PDF…";
         try{ const blob=await planPdf(p, nm); const dl=null; const fname=`Treatment plan - ${nm} - ${p.date||today()}.pdf`.replace(/[\/:*?"<>|]/g,"");
           if(dl){ try{ await dl.save({filename:fname, data:blob}); }catch(e2){ if(e2?.code!=="cancelled" && e2?.code!=="declined") toast("The PDF wasn't saved."); } }
@@ -3273,6 +3276,19 @@ async function planPdf(p, clientLabel){
   return doc.output("blob");
 }
 
+/* look at a PDF right in the portal (no download) */
+function showPdfPreview(blob, fname){
+  document.getElementById("pdf-preview")?.remove();
+  const u=URL.createObjectURL(blob), d=document.createElement("div"); d.id="pdf-preview";
+  d.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,40,45,.55);display:flex;align-items:center;justify-content:center;padding:16px";
+  d.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(900px,100%);height:min(94vh,1200px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div class="row" style="gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center"><b class="grow">Preview</b><button type="button" data-pv="dl">Download PDF</button><button type="button" class="primary" data-pv="close">Close</button></div>
+    <iframe src="${u}#view=FitH" title="Treatment plan preview" style="flex:1;border:0;width:100%"></iframe></div>`;
+  const close=()=>{ d.remove(); setTimeout(()=>URL.revokeObjectURL(u),1000); document.removeEventListener("keydown",esc1); };
+  const esc1=e=>{ if(e.key==="Escape") close(); };
+  d.addEventListener("click",e=>{ const b=e.target.closest("[data-pv]"); if(e.target===d || b?.dataset.pv==="close") close(); else if(b?.dataset.pv==="dl") saveBlob(blob, fname); });
+  document.addEventListener("keydown",esc1); document.body.appendChild(d);
+}
 function saveBlob(blob, fname){ const u=URL.createObjectURL(blob); const l=document.createElement("a"); l.href=u; l.download=String(fname).replace(/[\/:*?"<>|]/g,""); document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
 function fmtAnswer(f, v){
   if(v==null || v==="" || (Array.isArray(v)&&!v.length)) return "";
