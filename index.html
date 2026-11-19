@@ -3141,7 +3141,15 @@ function loadJsPDF(){ if(window.jspdf) return Promise.resolve(window.jspdf); if(
 function pdfSafe(t){ return String(t||"").replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,"-").replace(/\u2026/g,"...").replace(/\u00bd/g,"1/2").replace(/[^\x00-\xFF]/g,""); }
 const COMBINE_RX=/\s*Remedies that share the same frequency are combined into one bottle per issue\.?/gi;
 function cleanInstr(t){ return String(t||"").replace(COMBINE_RX,"").trim(); }
-function remedyLines(t){ return String(t||"").split(/\s*(?:\n|;|\s\/\s)\s*/).map(s=>s.trim()).filter(Boolean); }
+function remedyLines(t){
+  // one line per remedy: split on new lines, ";" and " / ", but never inside (brackets), so notes like "(included above; do not add again)" stay whole
+  const src=String(t||""), out=[]; let cur="", depth=0;
+  for(let i=0;i<src.length;i++){ const ch=src[i];
+    if(ch==="("||ch==="[") depth++; else if((ch===")"||ch==="]") && depth>0) depth--;
+    if(ch==="\n" || (depth===0 && (ch===";" || (ch==="/" && /\s/.test(src[i-1]||"") && /\s/.test(src[i+1]||""))))){ out.push(cur); cur=""; if(ch==="\n") depth=0; continue; }
+    cur+=ch; }
+  out.push(cur); return out.map(s=>s.trim()).filter(Boolean);
+}
 /* Each item in a plan has its own type: a wet dose bottle, a TT-1 basket or a pellet remedy.
    Older plans set one type for the whole plan (p.form); items without their own type use it. */
 const FORMS = {wet:{one:"Bottle", many:"Wet dose bottles", tag:""}, tt1:{one:"Basket", many:"TT-1 baskets", tag:"TT-1"}, pellets:{one:"Remedy", many:"Pellets", tag:"Pellets"}};
