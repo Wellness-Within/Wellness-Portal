@@ -3407,7 +3407,8 @@ function scanHeader(d){
 }
 function consultForm(d){
   return `<div class="stack scan-form">
-    <div><p class="label">Practitioner only</p><h2>Pre-Scan Consult Notes</h2><p class="small muted">Use while talking with the client before the scan.</p></div>
+    <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">Practitioner only</p><h2>Pre-Scan Consult Notes</h2><p class="small muted">Use while talking with the client before the scan.</p></div>
+      <button type="button" class="ghost" data-sact="fromqest" title="Fill in what the client already told you on their Qest4 form">Copy from Qest4 form</button></div>
     ${sh("Session")}${scanHeader(d)}
     ${sh("Consult notes")}${sf(d,"cNotes","Notes",{type:"textarea",wide:true})}
     ${sh("Target searches")}${grid(2, [0,1,2,3,4,5,6,7].map(i=>sf(d,`cSearch.${i}`,"Search keyword")).join(""))}
@@ -3422,7 +3423,7 @@ const runBox=(d,k,label="Run")=>`<label class="check" style="align-self:end;padd
 function recordForm(d){
   return `<div class="stack scan-form">
     <div class="row" style="align-items:flex-start"><div class="grow"><p class="label">Practitioner only</p><h2>Scan Session Record</h2><p class="small muted">Quick notes while scanning. Findings come from the scan export.</p></div>
-      <button type="button" class="ghost" data-sact="fromconsult" title="Copy target searches and remedies from the consult notes">Copy from consult notes</button></div>
+      <button type="button" class="ghost" data-sact="fromconsult" title="Copy target searches, scans requested and remedies from the consult notes">Copy from consult notes</button></div>
     ${sh("Session")}${scanHeader(d)}${grid(3, sf(d,"startTime","Start time",{type:"time"})+sf(d,"amp","Amplification"))}
     ${sh("Standard session scans performed")}<div class="scan-checks">${STD_SCANS.map(([k,l])=>sc(d,`std.${k}`,l)).join("")}</div>
     ${sf(d,"special","Special scan circumstances (interruptions, re-runs, client state, equipment)",{type:"textarea",wide:true})}
@@ -3605,7 +3606,22 @@ function bindScan(){
       const ks=(d.cSearch||[]).filter(Boolean); d.search=d.search||[]; ks.forEach(k=>{ if(d.search.includes(k)) return; const i=[0,1,2,3,4,5,6,7].find(j=>!d.search[j]); if(i!=null){ d.search[i]=k; n++; } });
       const rems=(d.cScanrem||[]).flatMap(r=>String(r?.rems||"").split(/\s*[,;\n]\s*/)).filter(Boolean); d.rem=d.rem||[];
       rems.forEach(r=>{ if(d.rem.some(x=>x&&x.name===r)) return; const i=[0,1,2,3,4].find(j=>!(d.rem[j]&&d.rem[j].name)); if(i!=null){ d.rem[i]={...(d.rem[i]||{}), name:r}; n++; } });
+      const scans=(d.cScanrem||[]).flatMap(r=>String(r?.scans||"").split(/\s*[,;\n]\s*/)).filter(Boolean); d.init=d.init||[];
+      scans.forEach(x=>{ if(d.init.some(y=>y&&y.scan===x)) return; const i=[0,1,2,3].find(j=>!(d.init[j]&&d.init[j].scan)); if(i!=null){ d.init[i]={...(d.init[i]||{}), scan:x, reason:(d.init[i]||{}).reason||"From consult"}; n++; } });
       renderScan(); scanDirty(); toast(n?`Copied ${n} item${n===1?"":"s"} from the consult notes`:"Nothing new to copy"); return; }
+    if(act==="fromqest"){ readScanForm(); const d=sc.data, c=S.clients[sc.clientId]||{}, q=c.qest||{}; let n=0;
+      const put=(k,v)=>{ if(!v) return; const cur=getP(d,k); if(cur) return; setP(d,k,v); n++; };
+      put("clientName", q.fullName||c.name);
+      // what they want help with + areas + anything else → consult notes (added once, at the end)
+      const lines=[["Help with", [q.help1,q.help2,q.help3].filter(Boolean).join("; ")],["Areas", [].concat(q.areas||[]).filter(Boolean).join(", ")+(q.areasOther?`; ${q.areasOther}`:"")],
+        ["Ratings", [["wellbeing","Wellbeing"],["energy","Energy"],["sleep","Sleep"],["mood","Mood"],["stress","Stress"]].filter(([k])=>q[k]).map(([k,l])=>`${l} ${q[k]}`).join(", ")],
+        ["Since last scan", q.sinceLast],["Also", q.anythingElse]].filter(([,v])=>String(v||"").trim()).map(([l,v])=>`${l}: ${v}`);
+      if(lines.length && !String(d.cNotes||"").includes("From their Qest4 form")){ d.cNotes=[String(d.cNotes||"").trim(), "From their Qest4 form:\n"+lines.join("\n")].filter(Boolean).join("\n\n"); n++; }
+      const rx=q.rxForm||""; if(/pellet/i.test(rx)) put("cInto.pellets",true); else if(/liquid/i.test(rx)) put("cInto.drops",true); else if(rx) put("cInto.other",true);
+      if(q.quartz) put("cInto.crystal",true);
+      if(q.delivery==="Shipped to me"){ put("cDel.shipping",true); put("cShip", clientShipAddress(c)); } else if(q.delivery) put("cDel.remote",true);
+      put("cItem", [q.rxOther, q.quartz?"Quartz crystal":""].filter(Boolean).join("; "));
+      renderScan(); scanDirty(); toast(n?`Filled ${n} item${n===1?"":"s"} from their Qest4 form`:(Object.keys(q).length?"Nothing new to copy":"They haven't filled in the Qest4 form")); return; }
     if(act==="dlphoto"){ const ph=S.photoFor===sc.clientId?S.photo:""; if(ph) fetch(ph).then(r=>r.blob()).then(b=>saveBlob(b, `${(sc.data.caseId||"No Case ID").replace(/[\/:*?"<>|]/g,"")} - photo.jpg`)); return; }
     if(act==="openclaude"){ window.open((S.settings.qcisUrl||"").trim() || "https://claude.ai/new", "_blank"); return; }
     if(act==="qcis"){
