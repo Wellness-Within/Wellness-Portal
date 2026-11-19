@@ -2663,7 +2663,7 @@ function planEditor(ep){
     <label class="field"><span>Narrative <span class="muted" style="font-weight:400">(shows at the top of the plan)</span></span><textarea id="pl-narr" style="min-height:110px" placeholder="Write to the client about this plan: what you saw, what you're working on, what to expect. Leave blank to skip.">${esc(p.narrative||"")}</textarea></label>
     ${p.previousId ? `<div class="notice ok small">Updated from the plan of ${esc(fmtDate(p.previousDate)||"an earlier date")}. That plan is kept as it was. ${p.status==="shared"?"":"When you share this one, the client sees it as their current plan and the earlier one moves to <b>Previous plans</b>."}</div>` : ""}
     ${p.replacedBy ? `<div class="notice small">This is a previous plan. A newer plan has replaced it; the client sees it under <b>Previous plans</b>.</div>` : ""}
-    <div class="row" style="gap:8px;align-items:center"><p class="small muted grow" style="margin:0">Mix and match: each item can be a wet dose bottle, a TT-1 basket or pellets. Change an item's type with the menu next to its name. Use \u2191 \u2193 to reorder.</p>${p.bottles.length>1?`<button type="button" data-act="sortbottles" title="Most often first (e.g. 3D, 2D, 1D, every other day, weekly), as-needed (SOS) last">Sort by schedule</button>`:""}</div>
+    <div class="row" style="gap:8px;align-items:center"><p class="small muted grow" style="margin:0">Mix and match: each item can be a wet dose bottle, a TT-1 basket or pellets. Change an item's type with the menu next to its name. Use \u2191 \u2193 to reorder.</p>${p.bottles.some(b=>b.no)?`<button type="button" class="ghost" data-act="renumber" title="Bottle numbers stay fixed once a plan is shared, so they match the client's labelled bottles. This numbers them 1, 2, 3… in the order shown.">Renumber in this order</button>`:""}${p.bottles.length>1?`<button type="button" data-act="sortbottles" title="Most often first (e.g. 3D, 2D, 1D, every other day, weekly), as-needed (SOS) last">Sort by schedule</button>`:""}</div>
     ${items || `<div class="empty small">Nothing added yet. Add a bottle, basket or pellet remedy below, or use “Add to plan” on any protocol line in the library.</div>`}
     <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" data-act="addbottle" data-form="wet">+ Wet dose bottle</button><button type="button" data-act="addbottle" data-form="tt1">+ TT-1 basket</button><button type="button" class="ghost" data-act="tolibrary">Add from protocol library</button></div>
     <div class="row" style="gap:6px;flex-wrap:wrap">
@@ -2874,6 +2874,7 @@ function bindClients(){
       else if(act==="newplan"){ S.editPlan={clientId:S.sel,id:null,data:{title:"Treatment plan",date:today(),status:"draft",form:"wet",instructions:cleanInstr(S.settings.instructions)||DEFAULT_INSTRUCTIONS,bottles:[]},dirty:true}; renderClients(); }
       else if(act==="closeplan"){ if(S.editPlan?.dirty && !S.confirmClose){ S.confirmClose=true; toast("Unsaved changes. Tap again to close without saving."); return; } S.confirmClose=false; S.editPlan=null; renderClients(); }
       else if(act==="addbottle"){ readPlanForm(); S.editPlan.data.bottles.push({form:a.dataset.form||"wet",issue:"",remedies:"",freq:"",duration:"",notes:""}); S.editPlan.dirty=true; renderClients(); }
+      else if(act==="renumber"){ readPlanForm(); S.editPlan.data.bottles.forEach(b=>{ delete b.no; }); S.editPlan.dirty=true; renderClients(); toast("Renumbered in this order. Save the plan to keep it, and let the client know their bottle numbers changed."); }
       else if(act==="mvbottle"||act==="sortbottles"){ readPlanForm(); const ep=S.editPlan, bs=ep.data.bottles, tgt=ep.target!=null?bs[ep.target]:null;
         if(act==="mvbottle"){ const i=+a.dataset.i, j=i+(+a.dataset.d); if(j<0||j>=bs.length) return; [bs[i],bs[j]]=[bs[j],bs[i]]; }
         else bs.splice(0, bs.length, ...bs.map((b,i)=>({b,i,r:freqRate(b.freq)})).sort((x,y)=>(y.r-x.r)||(x.i-y.i)).map(x=>x.b));
@@ -2911,7 +2912,8 @@ function bindClients(){
           if(notes){ const nd=await S.db.doc("notes/"+id).get(); const old=nd.exists?(nd.data().text||""):"";
             const text=[old.replace(/\s+$/,""), `Follow-up ${fmtDate(key)}:\n${notes}`].filter(Boolean).join("\n\n");
             await S.db.doc("notes/"+id).set({text, updatedAt:now}); if(S.notesFor===id) S.notes=text; } S.fuEdit=null; toast("Follow-up saved"); renderClients(); }catch(err){ console.warn(err); a.disabled=false; toast("That didn't save. Try again."); } }
-      else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; ep.data.bottles.forEach(b=>{ b.form=itemForm(ep.data,b); }); const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id;
+      else if(act==="saveplan"){ readPlanForm(); a.disabled=true; const ep=S.editPlan; ep.data.bottles.forEach(b=>{ b.form=itemForm(ep.data,b); });
+        if(ep.data.status==="shared"){ const nums=typeNumbers(ep.data); ep.data.bottles.forEach((b,i)=>{ if(!b.no) b.no=nums[i]; }); } const col=S.db.collection(`clients/${ep.clientId}/plans`); const ref = ep.id ? col.doc(ep.id) : col.doc(); await ref.set({...ep.data, updatedAt:new Date().toISOString()}); ep.id=ref.id;
         if(ep.data.previousId && ep.data.status==="shared"){ const prev=S.plans.find(x=>x.id===ep.data.previousId); if(prev && prev.replacedBy!==ref.id) await S.db.doc(`clients/${ep.clientId}/plans/${ep.data.previousId}`).update({replacedBy:ref.id, replacedAt:new Date().toISOString()}).catch(e=>console.warn(e)); }
  ep.dirty=false; S.confirmClose=false; toast(ep.data.status==="shared"?"Plan saved and shared":"Plan saved as draft"); renderClients(); }
       else if(act==="notifyfiles"){ notifyMail(a.dataset.id,"files"); }
@@ -3163,7 +3165,15 @@ const itemForm = (p, b) => FORMS[b?.form] ? b.form : FORMS[p?.form] ? p.form : "
 const isPellets = p => (p?.bottles||[]).length>0 && (p.bottles).every(b=>itemForm(p,b)==="pellets") || (!(p?.bottles||[]).length && p?.form==="pellets");
 const isTT1 = p => (p?.bottles||[]).length>0 && (p.bottles).every(b=>itemForm(p,b)==="tt1") || (!(p?.bottles||[]).length && p?.form==="tt1");
 const unitWord = p => isTT1(p) ? "Basket" : "Bottle";
-function numberInType(p, i){ const bs=p.bottles||[], f=itemForm(p,bs[i]); return bs.slice(0,i+1).filter(b=>itemForm(p,b)===f).length; }
+/* Bottle numbers: once a plan has been shared, each item keeps its number (b.no) so it matches the client's
+   labelled bottles even if the order changes. Items without a number take the next free one. */
+function typeNumbers(p){
+  const bs=p.bottles||[], used={}, next={}, out=[];
+  bs.forEach(b=>{ const f=itemForm(p,b); if(b.no){ (used[f]=used[f]||new Set()).add(+b.no); } });
+  bs.forEach(b=>{ const f=itemForm(p,b); if(b.no) { out.push(+b.no); return; } const u=used[f]||(used[f]=new Set()); let n=next[f]||1; while(u.has(n)) n++; u.add(n); next[f]=n+1; out.push(n); });
+  return out;
+}
+function numberInType(p, i){ return typeNumbers(p)[i]; }
 function itemLabelAt(p, i){ return `${FORMS[itemForm(p,(p.bottles||[])[i])].one} ${numberInType(p,i)}`; }
 function itemCount(p){
   const c={wet:0,tt1:0,pellets:0}; (p.bottles||[]).forEach(b=>c[itemForm(p,b)]++);
@@ -3173,9 +3183,9 @@ function itemCount(p){
 /* What the client sees, grouped by type (bottles, then TT-1 baskets, then pellets), each numbered within its group.
    For pellets the remedy is the heading and "For …" moves to the note. */
 function displayItems(p){
-  // keeps the order Dawn set in the plan (moved or sorted); each type is numbered on its own
-  const bs=p.bottles||[], cnt={};
-  return bs.map(b=>{ const f=itemForm(p,b); cnt[f]=(cnt[f]||0)+1; const k=cnt[f];
+  // keeps the order Dawn set in the plan (moved or sorted); each item shows its own number (fixed once shared)
+  const bs=p.bottles||[], nums=typeNumbers(p);
+  return bs.map((b,i)=>{ const f=itemForm(p,b), k=nums[i];
     const base={_form:f, _label:`${FORMS[f].one} ${k}`, _n:k, _tag:FORMS[f].tag};
     return f==="pellets"
       ? {...base, issue: remedyLines(b.remedies).join(", "), remedies:"", freq:b.freq, duration:b.duration, notes:[b.issue?"For "+b.issue:"", b.notes||""].filter(Boolean).join(". ")}
