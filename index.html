@@ -1392,6 +1392,7 @@ function rcptMailParts(cid, v, p){
   return { subject:`Receipt for invoice #${v.number}`, html, text };
 }
 /* preview, then send through the portal (or fall back to the mail app) */
+const DUE_DAYS = 3;   // invoices are due 3 days after they're sent
 function mailPreview(to, subject, html, text){
   return new Promise(res=>{
     const ov=document.createElement("div");
@@ -1435,7 +1436,7 @@ function clientBalance(cid){ return r2(invsOf(cid).filter(invOpen).reduce((t,v)=
 function famPeople(cid){ const base=cid.split("~")[0], to=(clientEmail(cid)||"").trim().toLowerCase();
   return [...new Set(Object.keys(S.clients).filter(x=>!isFamilyShell(x) && (x===base||x.startsWith(base+"~")||(to && (clientEmail(x)||"").trim().toLowerCase()===to))).map(x=>clientName(x)).filter(Boolean))]; }
 function blankInvoice(cid, appt){
-  const d=today(), due=new Date(d+"T12:00:00"); due.setDate(due.getDate()+14);
+  const d=today(), due=new Date(d+"T12:00:00"); due.setDate(due.getDate()+DUE_DAYS);
   const cd=(billSet().clientDiscounts||{})[cid];
   const v={clientId:cid, date:d, due:due.toISOString().slice(0,10), items:[], discount:cd&&+cd.value?{label:cd.label||"Discount", type:cd.type||"pct", value:+cd.value}:{label:"", type:"pct", value:""}, status:"draft", payments:[], note:""};
   if(appt && appt.type==="scan"){ v.apptId=appt.id; const P=pricingFor(cid), dl=apptDelivery(appt), q=S.clients[cid]?.qest||{};
@@ -1575,7 +1576,9 @@ async function saveInvoice(mode){
   v.items=v.items.filter(i=>i.desc || +i.price || i.credit); if(!v.items.length){ toast("Add at least one item"); return; }
   if(v.items.some(i=>i.kind==="package" && !(i.sessions>0))){ toast("Enter how many sessions the package includes"); return; }
   if(!v.number) v.number=await nextInvNumber();
-  if(mode!=="draft" && v.status!=="sent"){ v.status="sent"; v.sentAt=new Date().toISOString(); }
+  if(mode!=="draft" && v.status!=="sent"){ v.status="sent"; v.sentAt=new Date().toISOString();
+    // a draft sent later: date it today, due DUE_DAYS from now (unless you set a later due date)
+    if(v.auto || (v.date||"")<today()){ v.date=today(); const dd=new Date(today()+"T12:00:00"); dd.setDate(dd.getDate()+DUE_DAYS); const ds=dd.toISOString().slice(0,10); if(!v.due || v.due<ds) v.due=ds; } }
   if(v.status==="sent") v.pay=payInfo();
   v.updatedAt=new Date().toISOString(); if(!v.createdAt) v.createdAt=v.updatedAt;
   const {id:_x, ...data}=v;
