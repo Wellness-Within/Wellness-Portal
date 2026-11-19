@@ -854,8 +854,8 @@ function apptsOf(c){
   if(Array.isArray(c?.appointments)) return c.appointments.slice().sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
   return [];
 }
-const upcomingAppts = c => apptsOf(c).filter(a => a.date >= today());
-function nextScanDate(list){ return (list||[]).filter(a=>a.type==="scan" && a.date>=today()).map(a=>a.date).sort()[0] || ""; }
+const upcomingAppts = c => apptsOf(c).filter(a => a.date >= today() && !a.done);
+function nextScanDate(list){ return (list||[]).filter(a=>a.type==="scan" && a.date>=today() && !a.done).map(a=>a.date).sort()[0] || ""; }
 // minutes that New York is behind UTC on a given day (handles daylight saving)
 function tzOffsetMin(dateStr, timeStr){
   const guess = new Date(`${dateStr}T${timeStr||"12:00"}:00Z`);
@@ -1082,7 +1082,7 @@ function renderInbox(){
   $("#app").onclick = e => { const b=e.target.closest("[data-inbox]"); if(!b) return; S.tab="clients"; store("wfw.tab",S.tab); S.sel=b.dataset.inbox; S.sub="messages"; S.compose=null; renderTabs(); render(); window.scrollTo(0,0); };
 }
 function apptsPane(id){
-  const c=S.clients[id]||{}, list=apptsOf(c), up=list.filter(a=>a.date>=today()), past=list.filter(a=>a.date<today()).reverse();
+  const c=S.clients[id]||{}, list=apptsOf(c), up=list.filter(a=>a.date>=today() && !a.done), past=list.filter(a=>a.date<today() || a.done).reverse();
   const ed=S.apptEdit && S.apptEdit.cid===id ? S.apptEdit : null;
   if(ed && ed.isNew && ed.a.type==="scan" && !ed.a.delivery) ed.a.delivery = (c.qest||{}).reportsOnly ? "none" : wantsShipped(c) ? "ship" : "imprint";
   const row=a=>`<div class="dash-row" style="align-items:flex-start"><div style="display:flex;flex-direction:column;min-width:0"><b>${esc(apptLabel(a))}</b><span class="small muted">${esc(apptWhen(a))}${a.how?` · ${esc(a.how)}`:""}${a.note?` · ${esc(a.note)}`:""}</span>
@@ -1125,6 +1125,7 @@ function apptsPane(id){
 async function saveAppts(id, list){
   const clean=list.map(a=>{ const o={id:a.id==="nv"?genId().slice(0,10):a.id, type:a.type, date:a.date, time:a.time||"", note:a.note||""};
     if(a.type==="consult"||a.type==="qfu"){ o.mins=a.mins||60; o.how=a.how||""; }
+    if(a.done) o.done=true; if(a.bookedFor) o.bookedFor=a.bookedFor;
     if(a.type==="scan"){ o.delivery=apptDelivery(a); if(o.delivery==="ship"){ o.shipTo=a.shipTo||""; if(a.shippedAt) o.shippedAt=a.shippedAt; if(a.tracking) o.tracking=a.tracking; } if(a.how) o.how=a.how; }
     if(o.how && /zoom|video/i.test(o.how) && a.zoomUrl) o.zoomUrl=a.zoomUrl;
     return o; });
@@ -3458,7 +3459,7 @@ function scansPane(id){
   return `<div class="stack">
     <div class="row"><p class="grow small muted">Only you see scan sessions. Open one for a split screen: the client's Qest4 form or your pre-scan consult notes on one side, the Scan Session Record on the other. Everything saves as you type.</p>
       <button type="button" class="primary" data-act="newscan">New scan session</button></div>
-    ${!S.scansLoaded&&S.scansFor===id?`<div class="empty">Loading…</div>`:list.length?list.map(s=>`<button type="button" class="item" data-scan="${esc(s.id)}" style="border:1px solid var(--line);border-radius:8px"><b>Session ${esc(s.sessionNo||"")} · ${esc(fmtDate(s.scanDate)||"No date")}</b><span class="meta">${s.csv?'<span class="chip ok">Scan file added</span>':'<span class="chip">No scan file yet</span>'}${s.cNotes?'<span class="chip acc">Consult notes</span>':""}</span></button>`).join(""):`<div class="empty small">No scan sessions yet.</div>`}
+    ${!S.scansLoaded&&S.scansFor===id?`<div class="empty">Loading…</div>`:list.length?list.map(s=>`<button type="button" class="item" data-scan="${esc(s.id)}" style="border:1px solid var(--line);border-radius:8px"><b>Session ${esc(s.sessionNo||"")} · ${esc(fmtDate(s.scanDate)||"No date")}</b><span class="meta">${s.csv?'<span class="chip ok">Scan file added</span>':((S.filesFor===id?S.files:[]).some(f=>(f.uploadedAt||"").slice(0,10)>=(s.scanDate||"9999"))?'<span class="chip ok">Reports uploaded</span>':'<span class="chip">No scan file yet</span>')}${s.cNotes?'<span class="chip acc">Consult notes</span>':""}</span></button>`).join(""):`<div class="empty small">No scan sessions yet.</div>`}
   </div>`;
 }
 async function newScan(id){
@@ -3527,12 +3528,25 @@ function scanDirty(){
   const st=$("#scan-st"); if(st) st.textContent="Saving…"; if(S.scan) S.scan.status="Saving…";
   clearTimeout(SCAN_T); SCAN_T=setTimeout(saveScan, 1200);
 }
+/* a finished scan session: mark its booked scan as done (even if done a few days early or late)
+   and set "Next scan due (drops finish)" from the record's start date + weeks */
+async function scanFollowThrough(sc){
+  const d=sc.data, id=sc.clientId, c=S.clients[id]; if(!c || !d.scanDate) return;
+  const patch={}, list=apptsOf(c), dd=x=>Math.abs((Date.parse(x+"T12:00:00")-Date.parse(d.scanDate+"T12:00:00"))/864e5);
+  let a=list.find(x=>x.id===d.apptId) || list.filter(x=>x.type==="scan" && !x.done && dd(x.date)<=14).sort((x,y)=>dd(x.date)-dd(y.date))[0];
+  if(a && !a.done && d.scanDate<=today()){ a.done=true; if(a.date!==d.scanDate){ a.bookedFor=a.date; a.date=d.scanDate; } d.apptId=a.id; await saveAppts(id, list); }
+  const w=parseFloat(d.weeks), st=d.startDate||d.scanDate;
+  if(w>0 && st){ const end=new Date(st+"T12:00:00"); end.setDate(end.getDate()+Math.round(w*7)); const e=end.toISOString().slice(0,10);
+    if(e>today() && e!==c.nextVisit && (!c.nextVisit || c.nextVisit<e || c.nextVisitFrom===sc.id)){ patch.nextVisit=e; patch.nextVisitFrom=sc.id; } }
+  if(Object.keys(patch).length){ await S.db.doc("clients/"+id).update(patch); if(!S.scanEndToast || S.scanEndToast!==patch.nextVisit){ S.scanEndToast=patch.nextVisit; toast(`Next scan due (drops finish) set to ${fmtDate(patch.nextVisit)}`); } }
+}
 async function saveScan(){
   const sc=S.scan; if(!sc) return; clearTimeout(SCAN_T); readScanForm();
   sc.data.updatedAt=new Date().toISOString();
   try{
     await S.db.doc(`clients/${sc.clientId}/scans/${sc.id}`).set(sc.data);
     if(sc.data.caseId && sc.data.caseId!==(S.clients[sc.clientId]||{}).caseId) S.db.doc("clients/"+sc.clientId).update({caseId:sc.data.caseId}).catch(()=>{});
+    scanFollowThrough(sc).catch(e=>console.warn(e));
     sc.status="Saved "+new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
   }catch(e){ console.warn(e); sc.status="Not saved. Check your connection."; }
   const st=$("#scan-st"); if(st && S.scan===sc) st.textContent=sc.status;
