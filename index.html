@@ -2675,7 +2675,7 @@ function planEditor(ep){
     <datalist id="freqs">${FREQS.map(f=>`<option value="${f}">${esc(plainFreq(f))}</option>`).join("")}</datalist>
     <label class="field"><span>Other recommendations</span><textarea id="pl-extra" style="min-height:80px" placeholder="Type anything here: a remedy, supplement, essence or product that isn't in the list. The client sees it exactly as you write it.">${esc(p.extra||"")}</textarea></label>
     <label class="field"><span>Instructions for the client</span><textarea id="pl-instr" style="min-height:96px" placeholder="How to take the remedies in this plan">${esc(p.instructions)}</textarea></label>
-    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="previewplan">Preview</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${planTplSaveBox()}${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
+    <div class="row"><button type="button" class="primary" data-act="saveplan">Save plan</button><button type="button" data-act="previewplan">Preview</button><button type="button" data-act="dosecal" title="The same printable dose calendar your client sees">Dose calendar</button><button type="button" data-act="pdfplan">Download PDF</button><button type="button" data-act="copyplan">Copy as text</button>${planTplSaveBox()}${ep.id ? `<button type="button" data-act="updateplan" title="Start a new plan from this one. This plan stays as it is.">Update plan (new copy)</button>` : ""}${ep.id && p.status==="shared" && !ep.dirty && clientEmail(ep.clientId) ? `<button type="button" data-act="notifyplan" title="Opens an email to the client in your Mail app">Let client know</button>` : ""}
       <span class="grow"></span>${ep.id ? (S.confirmPlanDel ? `<button type="button" class="danger" data-act="delplan">Confirm delete</button>` : `<button type="button" class="ghost danger" data-act="askdelplan">Delete plan</button>`) : ""}</div>
     <div id="copyArea"></div>
   </div>`;
@@ -2844,6 +2844,7 @@ function bindClients(){
         catch(e1){ console.warn(e1); toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent=lbl; }
       else if(act==="dlphoto"){ const id=S.sel; if(S.photoFor===id && S.photo){ fetch(S.photo).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(id)} - photo.jpg`)); } }
+      else if(act==="dosecal"){ readPlanForm(); doseCalendar(S.editPlan.data, clientName(S.editPlan.clientId)); }
       else if(act==="previewplan"){ readPlanForm(); const p=S.editPlan.data, nm=clientName(S.editPlan.clientId), lbl=a.textContent; a.disabled=true; a.textContent="Making preview…";
         try{ showPdfPreview(await planPdf(p, nm), `Treatment plan - ${nm} - ${p.date||today()}.pdf`); }catch(e1){ console.warn(e1); toast("Couldn't make the preview. Check your connection and try again."); }
         a.disabled=false; a.textContent=lbl; }
