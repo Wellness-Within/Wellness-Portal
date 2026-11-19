@@ -3533,7 +3533,9 @@ function scanDirty(){
 async function scanFollowThrough(sc){
   const d=sc.data, id=sc.clientId, c=S.clients[id]; if(!c || !d.scanDate) return;
   const patch={}, list=apptsOf(c), dd=x=>Math.abs((Date.parse(x+"T12:00:00")-Date.parse(d.scanDate+"T12:00:00"))/864e5);
-  let a=list.find(x=>x.id===d.apptId) || list.filter(x=>x.type==="scan" && !x.done && dd(x.date)<=14).sort((x,y)=>dd(x.date)-dd(y.date))[0];
+  let a=list.find(x=>x.id===d.apptId) || list.filter(x=>x.type==="scan" && !x.done && dd(x.date)<=14).sort((x,y)=>dd(x.date)-dd(y.date))[0]
+       || list.filter(x=>x.type==="scan" && x.done && dd(x.date)<=1).sort((x,y)=>dd(x.date)-dd(y.date))[0];   // already closed out by an earlier save
+  if(a && d.apptId!==a.id){ d.apptId=a.id; S.db.doc(`clients/${id}/scans/${sc.id}`).update({apptId:a.id}).catch(()=>{}); }
   if(a && !a.done && d.scanDate<=today()){ a.done=true; if(a.date!==d.scanDate){ a.bookedFor=a.date; a.date=d.scanDate; } d.apptId=a.id; await saveAppts(id, list); }
   // no bill yet for this scan (booked before automatic drafts, or by hand): make the draft now, for review
   if(a && !d.billChecked && S.invLoaded && autoOn("autoDraft")){ d.billChecked=true; S.db.doc(`clients/${id}/scans/${sc.id}`).update({billChecked:true}).catch(()=>{}); }
