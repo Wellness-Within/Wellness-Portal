@@ -2855,7 +2855,8 @@ function bindClients(){
         else if(k==="qesthist"){ const x=(S.qhistFor===id?S.qhist:[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=QEST; vals=x.form||{}; kind="Qest4 Scan Intake"; date=x.submittedAt; }
         else { const x=(c.followupHistory||[]).find(h=>(h.submittedAt||"")===a.dataset.i)||{}; def=fuDef(x); vals=x.form||{}; kind=fuName(x); date=x.submittedAt; }
         const lbl=a.textContent; a.disabled=true; a.textContent="Making PDF…";
-        try{ saveBlob(await formPdf(def, vals, {kind, who:nm, date, photo}), `${kind} - ${nm}${date?" - "+String(date).slice(0,10):""}.pdf`); }
+        const imprint = k==="qest" && vals.delivery===IMPRINT_REMOTE && S.imprintFor===id ? S.imprint : "";
+        try{ saveBlob(await formPdf(def, vals, {kind, who:nm, date, photo, imprint}), `${kind} - ${nm}${date?" - "+String(date).slice(0,10):""}.pdf`); }
         catch(e1){ console.warn(e1); toast("Couldn't make the PDF. Check your connection and try again."); }
         a.disabled=false; a.textContent=lbl; }
       else if(act==="dlphoto"){ const id=S.sel; if(S.photoFor===id && S.photo){ fetch(S.photo).then(r=>r.blob()).then(b=>saveBlob(b, `${clientName(id)} - photo.jpg`)); } }
@@ -3325,7 +3326,7 @@ function fmtAnswer(f, v){
   if((f.type==="date"||f.type==="dob") && /^\d{4}-\d{2}-\d{2}$/.test(v)) return fmtDate(v);
   return String(v);
 }
-async function formPdf(def, vals, {kind, who, date, photo}){
+async function formPdf(def, vals, {kind, who, date, photo, imprint}){
   const {jsPDF}=await loadJsPDF(); const doc=new jsPDF({unit:"pt",format:"letter"});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=50, CW=W-2*M, FOOT=64;
   const aqua=[117,227,235], teal=[11,120,145], deep=[19,66,74], ink=[33,47,51], muted=[98,118,123], line=[203,231,234], hdr=[15,51,58], hdr2=[22,86,96];
@@ -3359,6 +3360,14 @@ async function formPdf(def, vals, {kind, who, date, photo}){
     doc.setDrawColor(...aqua); doc.setLineWidth(1.4); doc.line(x,y,x+w,y); y+=16;
     const LW=Math.round(w*0.36), VX=x+LW+12, VW=w-LW-12;
     s.rows.forEach(({f,a})=>{
+      if(f.type==="imprint" && imprint){   // the client's picture of their imprint medium, printed on the form
+        let iw=Math.min(220, w), ih=iw; try{ const pr=doc.getImageProperties(imprint); ih=Math.min(260, iw*pr.height/pr.width); iw=ih*pr.width/pr.height; }catch(e){}
+        const lab=wrap(f.label, w, SANSB, 8.8); room(lab.length*11.5+8+ih+20);
+        font(SANSB,8.8,muted); lab.forEach((l,i)=>doc.text(l, x, y+i*11.5)); y+=lab.length*11.5+6;
+        try{ doc.addImage(imprint, /^data:image\/png/i.test(imprint)?"PNG":"JPEG", x, y, iw, ih); doc.setDrawColor(...line); doc.setLineWidth(0.8); doc.roundedRect(x-1,y-1,iw+2,ih+2,3,3,"S"); }catch(e){ font(SANS,10.5,ink); doc.text(pdfSafe(a), x, y+10); }
+        font(SANS,8.5,muted); doc.text(pdfSafe(a), x, y+ih+12);
+        y+=ih+18; doc.setDrawColor(...line); doc.setLineWidth(0.5); doc.line(x,y,x+w,y); y+=12; return;
+      }
       const stacked = f.type==="textarea" || f.type==="check" || f.type==="multi" || f.label.length>70;
       const lab=wrap(f.label, stacked?w:LW, SANSB, 8.8);
       const val=wrap(a, stacked?w:VW, SANS, 10.5);
@@ -3608,7 +3617,7 @@ const QEST_ANON = [{sec:"About the client", fields:[{id:"age",label:"Age",type:"
 async function scanCsvBlob(){ const d=S.scan.data; if(!d.csv) return null; const { data, error } = await SB.storage.from(FILE_BUCKET).download(d.csv.path); if(error) throw error; return data; }
 function qestPdfForScan(anon){ const id=S.scan.clientId, c=S.clients[id]||{};
   if(anon){ const q=c.qest||{}; return formPdf(QEST_ANON, {...q, age:ageFrom(q.dob)}, {kind:"Qest4 Scan Intake", who:S.scan.data.caseId||"Case ID not entered", date:c.qestSubmittedAt||q.sigDate, photo:""}); }
-  return formPdf(QEST, c.qest||{}, {kind:"Qest4 Scan Intake", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:""}); }
+  return formPdf(QEST, c.qest||{}, {kind:"Qest4 Scan Intake", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:"", imprint:(c.qest||{}).delivery===IMPRINT_REMOTE && S.imprintFor===id ? S.imprint : ""}); }
 function hasConsult(d){ return !!(d.cNotes || (d.cSearch||[]).some(Boolean) || (d.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) || d.cItem || d.cShip || Object.values(d.cInto||{}).some(Boolean) || Object.values(d.cDel||{}).some(Boolean)); }
 
 async function uploadScanCsv(file){
