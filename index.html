@@ -3581,7 +3581,8 @@ function recordFields(d, anon){
   T("Client_name",anon?"":d.clientName); T("QCIS_Case_ID",d.caseId); T("Scan_date",usDate(d.scanDate)); T("Start_time",usTime(d.startTime)); T("Session_#",d.sessionNo); T("Amplification",d.amp);
   STD_SCANS.forEach(([k,l])=>C("std_"+l.replace(/ /g,"_"), getP(d,`std.${k}`)));
   T("Special_scan_circumstances_(interruptions,_re-runs,_client_state,_equipment)",d.special); T("Potency_chosen_by_Qest",d.stPotency);
-  for(let i=0;i<3;i++){ T(`ntn_r${i+1}_Next_Test_requested`,getP(d,`next.${i}.test`)); C(`ntn_r${i+1}_Run`,getP(d,`next.${i}.run`)); T(`ntn_r${i+1}_Notes`,getP(d,`next.${i}.notes`)); }
+  // The PDF still has 5 next-test rows; fill 3 and leave 2 blank so every later field keeps its number.
+  for(let i=0;i<5;i++){ const k=i<3; T(`ntn_r${i+1}_Next_Test_requested`,k?getP(d,`next.${i}.test`):""); C(`ntn_r${i+1}_Run`,k?getP(d,`next.${i}.run`):false); T(`ntn_r${i+1}_Notes`,k?getP(d,`next.${i}.notes`):""); }
   for(let i=0;i<4;i++){ T(`init_r${i+1}_Scan`,getP(d,`init.${i}.scan`)); T(`init_r${i+1}_Reason`,getP(d,`init.${i}.reason`)); }
   for(let i=0;i<4;i++){ T(`search_r${i+1}_Search_keyword`,getP(d,`search.${i*2}`)); T(`search_r${i+1}_Search_keyword`,getP(d,`search.${i*2+1}`)); }
   for(let i=0;i<5;i++){ T(`remedy_r${i+1}_Remedy_/_product`,getP(d,`rem.${i}.name`)); T(`remedy_r${i+1}_Potency`,getP(d,`rem.${i}.pot`)); T(`remedy_r${i+1}_Notes`,getP(d,`rem.${i}.notes`)); }
@@ -3616,10 +3617,13 @@ async function fillForm(url, fields){
 const recordPdf = anon => fillForm("forms/scan-session-record.pdf", recordFields(S.scan.data, anon));
 const consultPdf = anon => fillForm("forms/pre-scan-consult-notes.pdf", consultFields(S.scan.data, anon).filter((x,i,arr)=>!(anon && x[0]==="Shipping_address_(if_shipping)_28" && arr.findIndex(y=>y[0]===x[0])!==i)));
 function ageFrom(dob){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dob||""); if(!m) return ""; const t=new Date(); let a=t.getFullYear()-m[1]; if(t.getMonth()+1<+m[2]||(t.getMonth()+1===+m[2]&&t.getDate()<+m[3])) a--; return a>0&&a<120?String(a):""; }
-const QEST_ANON = [{sec:"About the client", fields:[{id:"age",label:"Age",type:"text"},{id:"firstScan",label:"First scan with Dawn?",type:"text"}]}, ...QEST.slice(1).map(sec=>({...sec, fields:sec.fields.filter(f=>!["signature","sigDate"].includes(f.id))}))];
+// Everything on the Qest4 form goes to QCIS except who and where the client is.
+const QEST_PRIVATE = ["fullName","dob","email","phone","street","city","state","zip","shipDifferent","shipStreet","shipCity","shipState","shipZip","signature","sigDate"];
+const QEST_ANON = QEST.map(sec=>{ const fields=sec.fields.filter(f=>!QEST_PRIVATE.includes(f.id));
+  return sec.fields.some(f=>f.id==="fullName") ? {...sec, sec:"About the client", fields:[{id:"age",label:"Age",type:"text"}, ...fields]} : {...sec, fields}; }).filter(sec=>sec.fields.length);
 async function scanCsvBlob(){ const d=S.scan.data; if(!d.csv) return null; const { data, error } = await SB.storage.from(FILE_BUCKET).download(d.csv.path); if(error) throw error; return data; }
 function qestPdfForScan(anon){ const id=S.scan.clientId, c=S.clients[id]||{};
-  if(anon){ const q=c.qest||{}; return formPdf(QEST_ANON, {...q, age:ageFrom(q.dob)}, {kind:"Qest4 Scan Intake", who:S.scan.data.caseId||"Case ID not entered", date:c.qestSubmittedAt||q.sigDate, photo:""}); }
+  if(anon){ const q=c.qest||{}; return formPdf(QEST_ANON, {...q, age:ageFrom(q.dob)}, {kind:"Qest4 Scan Intake", who:S.scan.data.caseId||"Case ID not entered", date:c.qestSubmittedAt||q.sigDate, photo:"", imprint:q.delivery===IMPRINT_REMOTE && S.imprintFor===id ? S.imprint : ""}); }
   return formPdf(QEST, c.qest||{}, {kind:"Qest4 Scan Intake", who:clientName(id), date:c.qestSubmittedAt||c.qest?.sigDate, photo:S.photoFor===id?S.photo:"", imprint:(c.qest||{}).delivery===IMPRINT_REMOTE && S.imprintFor===id ? S.imprint : ""}); }
 function hasConsult(d){ return !!(d.cNotes || (d.cSearch||[]).some(Boolean) || (d.cScanrem||[]).some(r=>r&&(r.scans||r.rems)) || d.cItem || d.cShip || Object.values(d.cInto||{}).some(Boolean) || Object.values(d.cDel||{}).some(Boolean)); }
 
