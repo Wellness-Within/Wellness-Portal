@@ -3383,6 +3383,9 @@ async function formPdf(def, vals, {kind, who, date, photo, imprint}){
   };
   let rest=sections;
   if(photo){
+    // the client photo sits beside "About you"; anything before it (scan options) prints first, full width, in form order
+    const ai=sections.findIndex(x=>/^About you/i.test(x.sec));
+    if(ai>0){ sections.slice(0,ai).forEach(x=>drawSection(x, M, CW)); sections.splice(0,ai); room(220); }
     const PW=150; let ph=PW;
     try{ const pr=doc.getImageProperties(photo); ph=Math.min(200, PW*pr.height/pr.width); }catch(e){}
     const top=y;
