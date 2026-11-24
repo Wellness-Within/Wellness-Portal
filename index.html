@@ -3582,6 +3582,15 @@ async function scanFollowThrough(sc){
   const patch={}, list=apptsOf(c), dd=x=>Math.abs((Date.parse(x+"T12:00:00")-Date.parse(d.scanDate+"T12:00:00"))/864e5);
   let a=list.find(x=>x.id===d.apptId) || list.filter(x=>x.type==="scan" && !x.done && dd(x.date)<=14).sort((x,y)=>dd(x.date)-dd(y.date))[0]
        || list.filter(x=>x.type==="scan" && x.done && dd(x.date)<=1).sort((x,y)=>dd(x.date)-dd(y.date))[0];   // already closed out by an earlier save
+  // scanned without a booked appointment: record the scan as a (done) appointment for that day, so the
+  // client's history, the next-scan date and the draft bill all work the same as for a booked scan
+  if(!a && d.scanDate<=today() && !d.apptId && !sc._apptMaking){
+    sc._apptMaking=true; const q=c.qest||{};
+    a={id:genId().slice(0,10), type:"scan", date:d.scanDate, done:true, delivery: q.delivery==="Shipped to me"?"ship":"imprint", note:"Added from the Scan Session Record (no booked appointment)"};
+    list.push(a); d.apptId=a.id;
+    await S.db.doc(`clients/${id}/scans/${sc.id}`).update({apptId:a.id}).catch(()=>{});
+    await saveAppts(id, list);
+  }
   if(a && d.apptId!==a.id){ d.apptId=a.id; S.db.doc(`clients/${id}/scans/${sc.id}`).update({apptId:a.id}).catch(()=>{}); }
   if(a && !a.done && d.scanDate<=today()){ a.done=true; if(a.date!==d.scanDate){ a.bookedFor=a.date; a.date=d.scanDate; } d.apptId=a.id; await saveAppts(id, list); }
   // no bill yet for this scan (booked before automatic drafts, or by hand): make the draft now, for review
