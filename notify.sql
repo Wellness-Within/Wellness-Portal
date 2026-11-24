@@ -29,7 +29,7 @@ begin
                  'title',   'New ' || which,
                  'message', who || ' sent their ' || which || '. Open your portal to read it.',
                  'click',   'https://portal.dawnspain.com',
-                 'email',   'wellnessfromwithin@icloud.com'),
+                 'priority', 4),  -- high priority: time-sensitive on iPhone, gets through Focus
     headers := '{"Content-Type": "application/json"}'::jsonb
   );
   return new;

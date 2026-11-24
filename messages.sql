@@ -57,7 +57,7 @@ begin
                        'title',   'New portal message',
                        'message', coalesce(who, 'A client') || ' sent you a message. Open your portal to read it.',
                        'click',   'https://portal.dawnspain.com',
-                       'email',   'wellnessfromwithin@icloud.com'),
+                       'priority', 4),  -- high priority: time-sensitive on iPhone
           headers := '{"Content-Type": "application/json"}'::jsonb
         );
       end if;

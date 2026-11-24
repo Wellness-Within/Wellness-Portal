@@ -68,7 +68,7 @@ begin
     url     := 'https://ntfy.sh',
     body    := jsonb_build_object('topic', topic, 'title', 'New website order',
                  'message', coalesce(who, 'A client') || ' ordered on your website (' || coalesce(new.data ->> 'number', '') || '). It is in your portal under Billing.',
-                 'click', 'https://portal.dawnspain.com', 'email', 'wellnessfromwithin@icloud.com'),
+                 'click', 'https://portal.dawnspain.com', 'priority', 4),  -- high priority
     headers := '{"Content-Type": "application/json"}'::jsonb);
   return new;
 exception when others then return new;
