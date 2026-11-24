@@ -530,21 +530,53 @@ const genId = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "").s
 function sbErr(error){ const e = new Error(error?.message || "database error"); e.code = /row-level security|permission|violates/i.test(error?.message || "") ? "invalid_argument" : (error?.code || "error"); return e; }
 function docSnap(path, row){ return { id: idOf(path), exists: !!row, data: () => row ? row.data : undefined }; }
 
-/* live listeners: one realtime channel, refetch whatever a change touches */
-const LIVE = { docs: new Map(), cols: new Map(), channel: null, timer: null, dirty: new Set() };
+/* live listeners: one realtime channel, refetch whatever a change touches.
+   The channel can drop without notice (computer asleep, Wi-Fi change, Supabase hiccup), and a page left
+   open would then keep showing old data, e.g. no "new message" alert. So the page also catches up:
+   it reconnects a dropped channel, refetches everything when the tab comes back into view or the
+   connection returns, and checks again every few minutes while it's visible. Listeners are only called
+   when something actually changed, so open forms aren't disturbed. */
+const LIVE = { docs: new Map(), cols: new Map(), channel: null, timer: null, dirty: new Set(), sig: new Map(), dropped: false, retry: null, lastAll: 0 };
 function liveStart(){
   if(LIVE.channel) return;
   LIVE.channel = SB.channel("docs-live").on("postgres_changes", { event: "*", schema: "public", table: "docs" }, ev => {
     const p = (ev.new && ev.new.path) || (ev.old && ev.old.path); if(!p) return;
     LIVE.dirty.add(p); clearTimeout(LIVE.timer); LIVE.timer = setTimeout(liveFlush, 120);
-  }).subscribe();
+  }).subscribe(status => {
+    if(status === "SUBSCRIBED"){ if(LIVE.dropped){ LIVE.dropped = false; liveRefreshAll(true); } return; }
+    if(status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED"){
+      LIVE.dropped = true;
+      if(LIVE.retry) return;
+      LIVE.retry = setTimeout(() => {
+        LIVE.retry = null; const ch = LIVE.channel; LIVE.channel = null;
+        try{ if(ch) SB.removeChannel(ch); }catch(e){}
+        if(LIVE.docs.size || LIVE.cols.size) liveStart();
+      }, 5000);
+    }
+  });
+  if(!LIVE.watching){
+    LIVE.watching = true;
+    document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") liveRefreshAll(); });
+    window.addEventListener("focus", () => liveRefreshAll());
+    window.addEventListener("online", () => liveRefreshAll(true));
+    setInterval(() => { if(document.visibilityState === "visible") liveRefreshAll(true); }, 4 * 60000);
+  }
+}
+function snapSig(s){ try{ return s.docs ? JSON.stringify(s.docs.map(d => [d.id, d.data()])) : JSON.stringify([s.exists, s.data()]); }catch(e){ return Math.random().toString(); } }
+function liveDeliver(map, key, s){ const sig = snapSig(s); if(LIVE.sig.get(key) === sig) return; LIVE.sig.set(key, sig); map.get(key)?.forEach(l => l.cb(s)); }
+function liveRefreshAll(force){
+  if(!force && Date.now() - LIVE.lastAll < 20000) return;
+  LIVE.lastAll = Date.now();
+  if(!LIVE.channel && (LIVE.docs.size || LIVE.cols.size)) liveStart();
+  [...LIVE.docs.keys()].filter(p => LIVE.docs.get(p)?.size).forEach(p => fetchDoc(p).then(s => liveDeliver(LIVE.docs, p, s)).catch(e => console.warn(e)));
+  [...LIVE.cols.keys()].filter(c => LIVE.cols.get(c)?.size).forEach(c => fetchCol(c).then(s => liveDeliver(LIVE.cols, c, s)).catch(e => console.warn(e)));
 }
 function liveFlush(){
   const paths = [...LIVE.dirty]; LIVE.dirty.clear();
   const docs = new Set(), cols = new Set();
   paths.forEach(p => { if(LIVE.docs.has(p)) docs.add(p); const par = parentOf(p); if(LIVE.cols.has(par)) cols.add(par); });
-  docs.forEach(p => fetchDoc(p).then(s => LIVE.docs.get(p)?.forEach(l => l.cb(s))).catch(e => LIVE.docs.get(p)?.forEach(l => l.err && l.err(e))));
-  cols.forEach(c => fetchCol(c).then(s => LIVE.cols.get(c)?.forEach(l => l.cb(s))).catch(e => LIVE.cols.get(c)?.forEach(l => l.err && l.err(e))));
+  docs.forEach(p => fetchDoc(p).then(s => liveDeliver(LIVE.docs, p, s)).catch(e => LIVE.docs.get(p)?.forEach(l => l.err && l.err(e))));
+  cols.forEach(c => fetchCol(c).then(s => liveDeliver(LIVE.cols, c, s)).catch(e => LIVE.cols.get(c)?.forEach(l => l.err && l.err(e))));
 }
 async function fetchDoc(path){
   const { data, error } = await SB.from("docs").select("data").eq("path", path).maybeSingle();
@@ -558,7 +590,7 @@ async function fetchCol(col){
 }
 function listen(map, key, fetcher, cb, err){
   liveStart(); const l = { cb, err }; if(!map.has(key)) map.set(key, new Set()); map.get(key).add(l);
-  fetcher(key).then(cb).catch(e => err && err(e));
+  fetcher(key).then(s => { LIVE.sig.set(key, snapSig(s)); cb(s); }).catch(e => err && err(e));
   return () => map.get(key)?.delete(l);
 }
 function makeDoc(path){
