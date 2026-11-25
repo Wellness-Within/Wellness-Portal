@@ -283,6 +283,21 @@ details.poly summary{cursor:pointer;font-weight:600}
 #signout{font-size:13px;padding:4px 10px;white-space:nowrap}
 .signin{max-width:520px;margin:0 auto}
 .rxlist{list-style:none;margin:6px 0 10px;padding:0}.rxlist li{position:relative;padding:3px 0 3px 18px;font-size:1.02rem}.rxlist li::before{content:"";position:absolute;left:4px;top:.75em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+/* Reports */
+.rpt-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.rpt-kpi{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.rpt-kpi b{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.rpt-scroll{overflow-x:auto}.rpt-chart svg{width:100%;min-width:560px;height:auto;display:block}
+.rpt-seg button{flex:1 1 70px}
+.rpt-bar{fill:#CFE7E4}.rpt-bar-on{fill:#7DBFBA}.rpt-base{stroke:var(--line)}
+.rpt-val{font:600 11px var(--f-body);fill:var(--ink)}.rpt-axis{font:11px var(--f-body);fill:var(--muted)}.rpt-faint{opacity:.8}
+.rpt-meter{display:inline-block;width:60px;height:6px;border-radius:3px;background:var(--sunk);vertical-align:middle;margin-right:4px;overflow:hidden}.rpt-meter span{display:block;height:100%;background:#9ED0CB;border-radius:3px}
+.rpt-h4{font:600 13px var(--f-body);color:var(--muted);margin:6px 0 0}
+@media (max-width:600px){.rpt-meter{display:none}.rpt-kpi{padding:10px 12px}.rpt-kpi b{font-size:19px}}
+.rpt-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .rpt-bar{fill:#24474B}:root:not([data-theme="light"]) .rpt-bar-on,:root:not([data-theme="light"]) .rpt-meter span{fill:#6FBDB7;background:#6FBDB7}}
+:root[data-theme="dark"] .rpt-bar{fill:#24474B}:root[data-theme="dark"] .rpt-bar-on,:root[data-theme="dark"] .rpt-meter span{fill:#6FBDB7;background:#6FBDB7}
+@media print{header.top,.no-print,.toast{display:none!important}body.side main.wrap{margin:0!important;padding:0!important;max-width:none!important}.sheet{box-shadow:none!important;border:0!important}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
@@ -686,11 +701,12 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); renderTabs(); if(S.tab==="home") renderHome(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
+    resolveNames(); renderTabs(); if(S.tab==="home") renderHome(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="reports" && S.invLoaded && !document.activeElement?.closest?.("#rpt-fee, #rpt-from, #rpt-to")) renderReports(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
   }, e => console.warn(e));
   S.db.collection("invoices").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.inv = m; S.invLoaded = true;
     if(S.tab==="billing") renderBilling();
+    if(S.tab==="reports" && !document.activeElement?.closest?.("#rpt-fee, #rpt-from, #rpt-to")) renderReports();
     if(S.tab==="home") renderHome();
     if(S.tab==="clients" && S.sel && S.sub==="billing" && !document.activeElement?.closest?.("#inv-form, #pay-form")) renderClients();
   }, e => { console.warn(e); S.invLoaded = true; });
@@ -2047,6 +2063,187 @@ document.addEventListener("click", async e=>{
     const sq=Object.fromEntries(Object.entries({firstVisit:x.firstVisit, lastVisit:x.lastVisit, visits:x.visits, memo:x.memo}).filter(([,v])=>v));
     try{ await S.db.doc("clients/"+rid("c-")).set({name:x.name||x.email, ...(x.email?{email:x.email}:{}), ...(x.phone?{phone:x.phone}:{}), intake, square:sq, importedAt:now, createdAt:(x.created?x.created+"T12:00:00.000Z":now)}); }catch(err){ console.warn(err); toast(`Stopped at ${x.name||x.email}. Try again; already-added clients will be skipped.`); b.disabled=false; return; } }
   S.sqImport=null; toast(`Added ${nw.length} client${nw.length===1?"":"s"} from Square`); renderSettings(); });
+/* ---------- Reports: income, services, clients served, Roaring Fork payout, payment methods, treatment mix, follow-ups ---------- */
+const ymd = d => new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+const dOf = s => new Date(s+"T12:00:00");
+const moLabel = (m, long) => dOf(m+"-15").toLocaleDateString(undefined, long ? {month:"long",year:"numeric"} : {month:"short"});
+function repPeriod(st){
+  const mode=st.mode||"month", a=dOf(st.anchor||today());
+  if(mode==="custom"){ const from=st.from||today().slice(0,8)+"01", to=st.to||today(); return {mode, from, to:to<from?from:to, label:`${fmtDate(from)} – ${fmtDate(to<from?from:to)}`}; }
+  const y=a.getFullYear(), m=a.getMonth();
+  const sm = mode==="year" ? 0 : mode==="quarter" ? Math.floor(m/3)*3 : m, len = mode==="year" ? 12 : mode==="quarter" ? 3 : 1;
+  const from=ymd(new Date(y, sm, 1, 12)), to=ymd(new Date(y, sm+len, 0, 12));
+  const label = mode==="year" ? String(y) : mode==="quarter" ? `Q${sm/3+1} ${y} (${moLabel(from.slice(0,7))}–${moLabel(to.slice(0,7))})` : moLabel(from.slice(0,7), true);
+  return {mode, from, to, label};
+}
+function repShift(st, dir){
+  const mode=st.mode||"month";
+  if(mode==="custom"){ const p=repPeriod(st), days=Math.round((dOf(p.to)-dOf(p.from))/864e5)+1; const f=dOf(p.from), t=dOf(p.to); f.setDate(f.getDate()+dir*days); t.setDate(t.getDate()+dir*days); return {...st, from:ymd(f), to:ymd(t)}; }
+  const a=dOf(st.anchor||today()); a.setDate(1); a.setMonth(a.getMonth()+dir*(mode==="year"?12:mode==="quarter"?3:1)); return {...st, anchor:ymd(a)};
+}
+const svcDate = v => v.serviceDate || v.date || "";
+const inRange = (d, p) => !!d && d>=p.from && d<=p.to;
+function repCat(i){
+  const d=String(i.desc||"");
+  if(i.kind==="scan") return /reports? only/i.test(d) ? "Scan & reports only" : "Qest4 scan + treatment";
+  if(i.kind==="consult") return /zoom/i.test(d) ? "Zoom consult" : /homeo/i.test(d) ? "Homeopathy consult" : "Consult";
+  if(/homeo/i.test(d)) return "Homeopathy";
+  return BILL_KINDS[i.kind] || "Other";
+}
+/* every billed line, spread over the invoice's real total so invoice discounts are shared out fairly */
+function repLines(list){
+  const out=[];
+  list.forEach(v=>{ const m=invMath(v), items=(v.items||[]).filter(i=>i.kind!=="discount"), gross=items.reduce((t,i)=>t+Math.max(0,lineAmt(i)),0), f=gross>0 ? m.total/gross : 0;
+    items.forEach(i=>out.push({v, i, person:(i.for||clientName(v.clientId)).trim(), cat:repCat(i), amt:r2(Math.max(0,lineAmt(i))*f), qty:+i.qty||1})); });
+  return out;
+}
+const personKey = s => String(s||"").trim().toLowerCase();
+function repData(p){
+  const sent=Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filter(v=>v.status==="sent");
+  const inv=sent.filter(v=>inRange(svcDate(v), p)), lines=repLines(inv);
+  const billed=r2(inv.reduce((t,v)=>t+invMath(v).total,0)), owed=r2(inv.reduce((t,v)=>t+Math.max(0,invMath(v).bal),0));
+  const pays=[]; sent.forEach(v=>(v.payments||[]).forEach(x=>{ if(inRange(x.date,p)) pays.push({...x, v}); }));
+  const received=r2(pays.reduce((t,x)=>t+(+x.amount||0),0));
+  const methods={}; pays.forEach(x=>{ const k=x.method||"Not recorded"; methods[k]=r2((methods[k]||0)+(+x.amount||0)); });
+  // first time each person was ever billed (for new vs returning)
+  const first={}; repLines(sent).forEach(l=>{ const k=personKey(l.person), d=svcDate(l.v); if(l.amt>0 && (!first[k] || d<first[k])) first[k]=d; });
+  const people=new Map();
+  lines.forEach(l=>{ const k=personKey(l.person); const x=people.get(k)||{name:l.person, clientId:l.v.clientId, services:new Set(), amt:0, dates:new Set()};
+    x.services.add(l.cat); x.amt=r2(x.amt+l.amt); x.dates.add(svcDate(l.v)); people.set(k,x); });
+  const billedPeople=[...people.values()].filter(x=>x.amt>0); billedPeople.forEach(x=>x.isNew=inRange(first[personKey(x.name)],p));
+  const services={}; lines.forEach(l=>{ const s=services[l.cat]||(services[l.cat]={cat:l.cat, qty:0, amt:0}); s.qty+=l.qty; s.amt=r2(s.amt+l.amt); });
+  const discounts=r2(inv.reduce((t,v)=>{ const m=invMath(v), items=(v.items||[]).filter(i=>i.kind!=="discount"); return t+Math.max(0, items.reduce((s,i)=>s+Math.max(0,lineAmt(i)),0)-m.total); },0));
+  const tiers={current:{n:0,amt:0}, founding:{n:0,amt:0}}; inv.forEach(v=>{ const t=S.clients[v.clientId]?.priceTier==="founding"?"founding":"current"; if(invMath(v).total>0){ tiers[t].n++; tiers[t].amt=r2(tiers[t].amt+invMath(v).total); } });
+  // scans done in the period (past appointments) and how the treatment went out
+  const scans=[]; Object.entries(S.clients||{}).forEach(([id,c])=>{ if(isFamilyShell(id)) return; apptsOf(c).forEach(a=>{ if(a.type==="scan" && inRange(a.date,p) && a.date<=today()) scans.push({id, c, a}); }); });
+  const billedByMonth={}; lines.forEach(l=>{ if(l.amt>0){ const mo=svcDate(l.v).slice(0,7); (billedByMonth[mo]=billedByMonth[mo]||new Set()).add(personKey(l.person)); } });
+  const unbilled=scans.filter(s=>!(billedByMonth[s.a.date.slice(0,7)]||new Set()).has(personKey(clientName(s.id))));
+  return {inv, lines, billed, owed, received, pays, methods, people:billedPeople, services, discounts, tiers, scans, unbilled, billedByMonth};
+}
+const pctChange = (now, before) => !before ? null : Math.round((now-before)/before*100);
+function deltaChip(now, before, word){ const c=pctChange(now, before); if(c===null) return ""; return `<span class="small muted">${c>0?"▲":c<0?"▼":""} ${Math.abs(c)}% vs ${esc(word)}</span>`; }
+function kpi(label, value, extra){ return `<div class="rpt-kpi"><span class="small muted">${esc(label)}</span><b>${value}</b>${extra||""}</div>`; }
+function kMoney(n){ return n>=1000 ? "$"+(Math.round(n/100)/10)+"k" : "$"+Math.round(n); }
+/* bar chart: money received each month for the 12 months ending with this period; this period's months are darker */
+function repChart(p){
+  const end=dOf(p.to); const months=[]; for(let k=11;k>=0;k--){ const d=new Date(end.getFullYear(), end.getMonth()-k, 15, 12); months.push(ymd(d).slice(0,7)); }
+  const recv={}, ppl={}; Object.values(S.inv||{}).filter(v=>v.status==="sent").forEach(v=>{ (v.payments||[]).forEach(x=>{ const m=(x.date||"").slice(0,7); if(months.includes(m)) recv[m]=(recv[m]||0)+(+x.amount||0); });
+    repLines([v]).forEach(l=>{ const m=svcDate(v).slice(0,7); if(l.amt>0 && months.includes(m)) (ppl[m]=ppl[m]||new Set()).add(personKey(l.person)); }); });
+  const max=Math.max(1, ...months.map(m=>recv[m]||0)), W=720, H=210, top=24, bot=40, bw=W/12;
+  const bars=months.map((m,k)=>{ const v=recv[m]||0, h=Math.round((H-top-bot)*v/max), x=k*bw+bw*0.18, w=bw*0.64, y=H-bot-h, on=m>=p.from.slice(0,7) && m<=p.to.slice(0,7), n=(ppl[m]||new Set()).size;
+    return `<g><title>${esc(moLabel(m,true))}: ${esc(money(v))} received, ${n} client${n===1?"":"s"} billed</title><rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, v?2:0)}" rx="4" class="${on?"rpt-bar-on":"rpt-bar"}"/>${v?`<text x="${x+w/2}" y="${y-6}" text-anchor="middle" class="rpt-val">${esc(kMoney(v))}</text>`:""}<text x="${x+w/2}" y="${H-bot+16}" text-anchor="middle" class="rpt-axis">${esc(moLabel(m))}</text><text x="${x+w/2}" y="${H-bot+31}" text-anchor="middle" class="rpt-axis rpt-faint">${n?n+" cl.":""}</text></g>`; }).join("");
+  return `<figure class="rpt-chart" style="margin:0"><div class="rpt-scroll"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Money received each month for the last 12 months"><line x1="0" x2="${W}" y1="${H-bot}" y2="${H-bot}" class="rpt-base"/>${bars}</svg></div>
+    <figcaption class="small muted">Money received each month (last 12 months). Under each month: clients billed. Darker bars are in ${esc(p.label)}.</figcaption></figure>`;
+}
+function repFollowups(){
+  const t=today(), soon=(()=>{ const d=dOf(t); d.setDate(d.getDate()+7); return ymd(d); })();
+  const ids=Object.keys(S.clients||{}).filter(id=>!isFamilyShell(id));
+  const drops=ids.map(id=>({id, c:S.clients[id]})).filter(({c})=>/^\d{4}-\d{2}-\d{2}$/.test(c.nextVisit||"") && c.nextVisit<=soon && !upcomingAppts(c).some(a=>a.type==="scan") && !scanFormIn(c) && !needsScan(c))
+    .sort((a,b)=>b.c.nextVisit.localeCompare(a.c.nextVisit));
+  const dropIds=new Set(drops.map(x=>x.id));
+  const quiet=ids.filter(id=>!dropIds.has(id) && CLIENT_FILTERS.quiet[1](S.clients[id], id)).map(id=>({id, ls:clientLastSeen(S.clients[id])})).sort((a,b)=>b.ls.localeCompare(a.ls));
+  const row=(id, txt)=>`<button type="button" class="item" data-rptopen="${esc(id)}"><div class="row" style="gap:10px;flex-wrap:nowrap"><b class="grow" style="min-width:0">${esc(clientName(id))}</b><span class="small muted">${txt}</span></div></button>`;
+  return `<div class="formsec stack" id="rpt-follow"><h3>Follow-up list</h3>
+    <p class="small muted">Not tied to the dates above: this is who to reach out to now.</p>
+    <h4 class="rpt-h4">Drops finished, no new pre-scan form yet (${drops.length})</h4>
+    ${drops.length?`<div class="list-pane">${drops.map(({id,c})=>{ const n=Math.round((dOf(t)-dOf(c.nextVisit))/864e5); return row(id, n>0?`drops finished ${esc(fmtDate(c.nextVisit))} · ${n} day${n===1?"":"s"} ago`:n===0?"drops finish today":`drops finish ${esc(fmtDate(c.nextVisit))}`); }).join("")}</div>`:`<div class="empty small">Everyone with finished drops has a form in or a scan booked.</div>`}
+    <h4 class="rpt-h4">Not seen in 3+ months (${quiet.length})</h4>
+    ${quiet.length?`<div class="list-pane">${quiet.map(x=>row(x.id, x.ls?`last seen ${esc(fmtDate(x.ls))}`:"")).join("")}</div>`:`<div class="empty small">No one.</div>`}</div>`;
+}
+function renderReports(){
+  const st=S.rep||(S.rep=recall("wfw.rep",null)||{mode:"month", anchor:today()});
+  const p=repPeriod(st), prev=repPeriod(repShift(st,-1)), word={month:"last month", quarter:"last quarter", year:"last year", custom:"the period before"}[p.mode];
+  if(!S.invLoaded || !S.clientsLoaded){ $("#app").innerHTML=`<div class="sheet stack"><h1>Reports</h1><div class="empty">Loading…</div></div>`; return; }
+  const D=repData(p), P=repData(prev), fee=+(billSet().rfhFee||0);
+  const newN=D.people.filter(x=>x.isNew).length;
+  const svc=Object.values(D.services).sort((a,b)=>b.amt-a.amt), svcTot=r2(svc.reduce((t,s)=>t+s.amt,0));
+  const months=[]; { const d=dOf(p.from.slice(0,7)+"-15"); while(ymd(d).slice(0,7)<=p.to.slice(0,7)){ months.push(ymd(d).slice(0,7)); d.setMonth(d.getMonth()+1); } }
+  const rfhRows=months.map(m=>({m, n:(D.billedByMonth[m]||new Set()).size})), rfhTot=rfhRows.reduce((t,r)=>t+r.n,0);
+  const meth=Object.entries(D.methods).sort((a,b)=>b[1]-a[1]);
+  const deliv={imprint:0, ship:0, none:0}, rx={}; let zoomN=0, quartzN=0;
+  D.scans.forEach(({c,a})=>{ deliv[apptDelivery(a)]=(deliv[apptDelivery(a)]||0)+1; if(a.how) zoomN++; const f=(c.qest||{}).rxForm; const k=f===RX_OTHER?"Other item":f||"Not on form"; rx[k]=(rx[k]||0)+1; if((c.qest||{}).quartz) quartzN++; });
+  const share=(n,t)=>t?Math.round(n/t*100)+"%":"";
+  const meter=(n,t)=>`<span class="rpt-meter" aria-hidden="true"><span style="width:${t?Math.round(n/t*100):0}%"></span></span>`;
+  $("#app").innerHTML=`<div class="sheet stack" style="max-width:900px" id="rpt">
+    <div class="row"><h1 class="grow">Reports</h1><button type="button" class="ghost small no-print" data-rpt="print">Print</button></div>
+    <div class="seg rpt-seg no-print" role="tablist">${[["month","Month"],["quarter","Quarter"],["year","Year"],["custom","Pick dates"]].map(([k,l])=>`<button type="button" data-rptmode="${k}" aria-current="${p.mode===k}">${l}</button>`).join("")}</div>
+    <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+      <button type="button" class="ghost small no-print" data-rpt="prev" aria-label="Earlier">←</button>
+      ${p.mode==="custom"?`<label class="field" style="margin:0"><span>From</span><input type="date" id="rpt-from" value="${esc(p.from)}"></label><label class="field" style="margin:0"><span>To</span><input type="date" id="rpt-to" value="${esc(p.to)}"></label>`:`<h2 style="margin:0">${esc(p.label)}</h2>`}
+      <button type="button" class="ghost small no-print" data-rpt="next" aria-label="Later">→</button>
+      ${p.mode!=="custom"&&!inRange(today(),p)?`<button type="button" class="ghost small no-print" data-rpt="now">Back to now</button>`:""}</div>
+
+    <div class="rpt-kpis">
+      ${kpi("Received", money(D.received), deltaChip(D.received, P.received, word))}
+      ${kpi("Billed", money(D.billed), deltaChip(D.billed, P.billed, word))}
+      ${kpi("Still owed", money(D.owed), `<span class="small muted">on these invoices</span>`)}
+      ${kpi("Clients serviced", String(D.people.length), deltaChip(D.people.length, P.people.length, word))}
+      ${kpi("New / returning", `${newN} / ${D.people.length-newN}`, `<span class="small muted">first time billed vs. back again</span>`)}
+      ${kpi("Scans done", String(D.scans.length), deltaChip(D.scans.length, P.scans.length, word))}
+    </div>
+    ${repChart(p)}
+
+    <div class="formsec stack"><h3>Income by service</h3>
+      ${svc.length?`<table class="inv-tab"><thead><tr><th>Service</th><th class="num">How many</th><th class="num">Amount</th><th class="num">Share</th></tr></thead><tbody>
+        ${svc.map(s=>`<tr><td>${esc(s.cat)}</td><td class="num">${s.qty}</td><td class="num">${esc(money(s.amt))}</td><td class="num">${meter(s.amt,svcTot)} ${share(s.amt,svcTot)}</td></tr>`).join("")}</tbody>
+        <tfoot><tr><td><b>Total billed</b></td><td></td><td class="num"><b>${esc(money(svcTot))}</b></td><td></td></tr>${D.discounts?`<tr><td class="small muted" colspan="4">Discounts given in this period: ${esc(money(D.discounts))} (already taken off the amounts above)</td></tr>`:""}</tfoot></table>`:`<div class="empty small">No invoices in ${esc(p.label)}.</div>`}
+      ${D.tiers.current.n+D.tiers.founding.n?`<h4 class="rpt-h4">By pricing level</h4><table class="inv-tab"><tbody>
+        <tr><td>Current pricing</td><td class="num">${D.tiers.current.n} invoice${D.tiers.current.n===1?"":"s"}</td><td class="num">${esc(money(D.tiers.current.amt))}</td></tr>
+        <tr><td>RFH Subscriber pricing</td><td class="num">${D.tiers.founding.n} invoice${D.tiers.founding.n===1?"":"s"}</td><td class="num">${esc(money(D.tiers.founding.amt))}</td></tr></tbody></table>
+        <p class="small muted">Uses each client's pricing level as it's set now.</p>`:""}</div>
+
+    <div class="formsec stack"><h3>Clients serviced</h3>
+      ${D.people.length?`<table class="inv-tab"><thead><tr><th>#</th><th>Client</th><th>Services</th><th class="num">Billed</th></tr></thead><tbody>
+        ${D.people.sort((a,b)=>a.name.localeCompare(b.name)).map((x,k)=>`<tr><td class="small muted">${k+1}</td><td>${esc(x.name)}${x.isNew?` <span class="chip acc">new</span>`:""}</td><td class="small">${esc([...x.services].join(", "))}</td><td class="num">${esc(money(x.amt))}</td></tr>`).join("")}</tbody></table>`:`<div class="empty small">No one billed in ${esc(p.label)}.</div>`}
+      <p class="small muted">Each person on a family invoice counts separately. Counts invoices you've sent (not drafts or voided), by service date.</p></div>
+
+    <div class="formsec stack"><h3>Roaring Fork payout</h3>
+      <div class="row no-print" style="gap:8px;align-items:center"><label class="small" for="rpt-fee">Amount you pay RFH per client</label><input id="rpt-fee" type="number" min="0" step="0.01" style="width:110px" value="${fee||""}" placeholder="0.00"><button type="button" class="small" data-rpt="savefee">Save</button></div>
+      <table class="inv-tab"><thead><tr><th>Month</th><th class="num">Billed clients</th>${fee?`<th class="num">To pay RFH</th>`:""}</tr></thead><tbody>
+        ${rfhRows.map(r=>`<tr><td>${esc(moLabel(r.m,true))}</td><td class="num">${r.n}</td>${fee?`<td class="num">${esc(money(r.n*fee))}</td>`:""}</tr>`).join("")}</tbody>
+        ${rfhRows.length>1?`<tfoot><tr><td><b>Total</b></td><td class="num"><b>${rfhTot}</b></td>${fee?`<td class="num"><b>${esc(money(rfhTot*fee))}</b></td>`:""}</tr></tfoot>`:""}</table>
+      ${D.unbilled.length?`<p class="small"><b>Not counted (scan with no invoice that month, such as free family scans):</b> ${esc(D.unbilled.map(s=>`${clientName(s.id)} (${fmtDate(s.a.date)})`).join(", "))}</p>`:""}
+      <p class="small muted">Each person billed in a month counts once, even with more than one invoice that month. For the full list of names, use Billing → By month.</p></div>
+
+    <div class="formsec stack"><h3>How you got paid</h3>
+      ${meth.length?`<table class="inv-tab"><tbody>${meth.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${esc(money(v))}</td><td class="num">${meter(v,D.received)} ${share(v,D.received)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty small">No payments recorded in ${esc(p.label)}.</div>`}
+      <p class="small muted">Online payment includes Square and website orders.</p></div>
+
+    <div class="formsec stack"><h3>Treatment mix</h3>
+      ${D.scans.length?`<div class="rpt-two"><table class="inv-tab"><thead><tr><th>Delivery</th><th class="num">Scans</th></tr></thead><tbody>
+          <tr><td>Remote imprint</td><td class="num">${deliv.imprint||0} <span class="muted">${share(deliv.imprint||0,D.scans.length)}</span></td></tr>
+          <tr><td>Shipped</td><td class="num">${deliv.ship||0} <span class="muted">${share(deliv.ship||0,D.scans.length)}</span></td></tr>
+          ${deliv.none?`<tr><td>No treatment (reports only)</td><td class="num">${deliv.none} <span class="muted">${share(deliv.none,D.scans.length)}</span></td></tr>`:""}
+          <tr><td>With a consult call</td><td class="num">${zoomN} <span class="muted">${share(zoomN,D.scans.length)}</span></td></tr>
+          ${quartzN?`<tr><td>Free quartz crystal</td><td class="num">${quartzN}</td></tr>`:""}</tbody></table>
+        <table class="inv-tab"><thead><tr><th>Form</th><th class="num">Scans</th></tr></thead><tbody>${Object.entries(rx).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<tr><td>${esc(k)}</td><td class="num">${n} <span class="muted">${share(n,D.scans.length)}</span></td></tr>`).join("")}</tbody></table></div>
+        <p class="small muted">From scan appointments dated in this period. Pellets, liquid or other item comes from each client's latest Qest4 form.</p>`:`<div class="empty small">No scans dated in ${esc(p.label)}.</div>`}</div>
+
+    <div class="formsec stack no-print"><h3>Download for taxes or your bookkeeper</h3>
+      <p class="small muted">Spreadsheets (CSV) for ${esc(p.label)}. They open in Excel, Numbers or Google Sheets.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" data-rpt="csvpays">Payments received</button><button type="button" data-rpt="csvlines">Invoice lines by service</button><button type="button" data-rpt="csvmonths">Month-by-month summary</button></div></div>
+
+    ${repFollowups()}
+  </div>`;
+  $("#app").onclick=e=>{
+    const md=e.target.closest("[data-rptmode]"); if(md){ const m=md.dataset.rptmode, cur=repPeriod(st); S.rep = m==="custom" ? {...st, mode:m, from:cur.from, to:cur.to} : {...st, mode:m, anchor: st.mode==="custom" && st.from && !(today()>=st.from && today()<=(st.to||today())) ? st.from : (st.anchor||today())}; store("wfw.rep",S.rep); renderReports(); return; }
+    const o=e.target.closest("[data-rptopen]"); if(o){ S.tab="clients"; store("wfw.tab",S.tab); S.sel=o.dataset.rptopen; S.sub="appts"; renderTabs(); render(); window.scrollTo(0,0); return; }
+    const b=e.target.closest("[data-rpt]"); if(!b) return; const act=b.dataset.rpt;
+    if(act==="prev"||act==="next"){ S.rep=repShift(st, act==="prev"?-1:1); store("wfw.rep",S.rep); renderReports(); return; }
+    if(act==="now"){ S.rep={...st, anchor:today()}; store("wfw.rep",S.rep); renderReports(); return; }
+    if(act==="print"){ window.print(); return; }
+    if(act==="savefee"){ const v=r2($("#rpt-fee").value||0), billing={...billSet(), rfhFee:v}; b.disabled=true;
+      S.db.doc("settings/practice").update({billing}).then(()=>{ S.settings={...S.settings, billing}; toast(v?`Saved: ${money(v)} per client`:"Cleared"); renderReports(); }).catch(()=>{ b.disabled=false; toast("That didn't save. Please try again."); }); return; }
+    const tag=p.label.replace(/[^\w\- ]+/g,"").replace(/\s+/g," ").trim();
+    if(act==="csvpays"){ const out=[["Date","Client","Invoice","Method","Amount","Note"]]; D.pays.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(x=>out.push([x.date, clientName(x.v.clientId), x.v.number||"", x.method||"", r2(x.amount).toFixed(2), x.note||""])); out.push([]); out.push(["Total","","","",D.received.toFixed(2),""]); downloadCsv(`Payments ${tag}.csv`, out); return; }
+    if(act==="csvlines"){ const out=[["Service date","Invoice","Billed to","Person served","Service","Description","Qty","Amount (after discounts)","Invoice status"]]; D.lines.slice().sort((a,b)=>svcDate(a.v).localeCompare(svcDate(b.v))).forEach(l=>out.push([svcDate(l.v), l.v.number||"", clientName(l.v.clientId), l.person, l.cat, l.i.desc||"", l.qty, l.amt.toFixed(2), invStatus(l.v)[0]])); out.push([]); out.push(["Total","","","","","","",D.billed.toFixed(2),""]); downloadCsv(`Invoice lines ${tag}.csv`, out); return; }
+    if(act==="csvmonths"){ const out=[["Month","Received","Billed","Still owed","Clients billed","New clients","Scans done", ...(fee?["To pay RFH"]:[])]];
+      months.forEach(m=>{ const q={from:m+"-01", to:ymd(new Date(+m.slice(0,4), +m.slice(5,7), 0, 12))}, x=repData(q); out.push([moLabel(m,true), x.received.toFixed(2), x.billed.toFixed(2), x.owed.toFixed(2), x.people.length, x.people.filter(y=>y.isNew).length, x.scans.length, ...(fee?[(x.people.length*fee).toFixed(2)]:[])]); });
+      downloadCsv(`Summary ${tag}.csv`, out); return; }
+  };
+  const ch=document.querySelector(".rpt-scroll"); if(ch) ch.scrollLeft=ch.scrollWidth;
+  $("#app").onchange=e=>{ if(e.target.id==="rpt-from"||e.target.id==="rpt-to"){ S.rep={...st, mode:"custom", from:$("#rpt-from").value||st.from, to:$("#rpt-to").value||st.to}; store("wfw.rep",S.rep); renderReports(); } };
+}
 /* ---------- monthly summary + CSV ---------- */
 function monthlySummary(){
   const rows={}; const mk=m=>rows[m]=rows[m]||{m, income:0, scans:0, consults:0, newClients:0};
@@ -2296,7 +2493,7 @@ function isFamilyShell(id){
 }
 function renderTabs(){
   const t = $("#tabs"); t.hidden = false;
-  const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
+  const tabs = [["home","Home"],["clients","Clients"],["schedule","Schedule"],["inbox","Messages"],["billing","Billing"],["reports","Reports"],["repertory","Repertory"],["mm","Materia medica"],["notes","Notes"],["library","Protocols"],["combos","Combinations"],["settings","Settings"]];
   const unread = Object.values(S.clients||{}).filter(msgUnreadDawn).length, asks = Object.values(S.clients||{}).filter(c=>c.reschedReq).length;
   t.innerHTML = tabs.map(([k,l]) => `<button type="button" data-tab="${k}" aria-current="${S.tab===k}">${icon(k==="inbox"?"messages":k==="schedule"?"calendar":k)}<span>${l}</span>${k==="inbox"&&unread?`<span class="count" aria-label="${unread} unread">${unread}</span>`:""}${k==="schedule"&&asks?`<span class="count" aria-label="${asks} date change requests">${asks}</span>`:""}</button>`).join(""); sideHelp(false);
   t.onclick = e => { const b=e.target.closest("[data-tab]"); if(!b) return; S.tab=b.dataset.tab; store("wfw.tab",S.tab); renderTabs(); render(); window.scrollTo(0,0); };
@@ -2304,7 +2501,7 @@ function renderTabs(){
 function render(){
   if(!S.prac) return renderClient();
   store("wfw.editPlan", S.editPlan||undefined);
-  (({clients:renderClients, home:renderHome, schedule:renderSchedule, inbox:renderInbox, billing:renderBilling, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
+  (({clients:renderClients, home:renderHome, schedule:renderSchedule, inbox:renderInbox, billing:renderBilling, reports:renderReports, repertory:renderRepertory, mm:renderMM, notes:renderNotes, library:renderLibrary, combos:renderCombos, settings:renderSettings})[S.tab] || renderClients)();
 }
 
 /* ---------- working-plan banner (shared by library & combos) ---------- */
