@@ -1312,6 +1312,8 @@ function priceBoxInner(pre){
 }
 document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-onlyok" || !S.prac || !S.sel) return; const on=e.target.checked;
   try{ await S.db.doc("clients/"+S.sel).update({reportsOnlyOk:on}); toast(on?"Their Qest4 form now offers scan & reports only":"Reports only taken off their form"); }catch(err){ toast("That didn't save. Please try again."); } });
+document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-norfh" || !S.prac || !S.sel) return; const on=e.target.checked, id=S.sel;
+  try{ await S.db.doc("clients/"+id).update({noRfh:on}); S.clients[id]={...S.clients[id], noRfh:on}; toast(on?"Won't be counted for Roaring Fork":"Counted for Roaring Fork again"); }catch(err){ e.target.checked=!on; toast("That didn't save. Please try again."); } });
 document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-zoomfree" || !S.prac || !S.sel) return; const on=e.target.checked, id=S.sel;
   try{ await S.db.doc("clients/"+id).update({zoomFree:on}); S.clients[id]={...S.clients[id], zoomFree:on}; await S.db.doc("clients/"+id).update({pricing:pricingFor(id)}); toast(on?"Zoom consults are free for this client":"Zoom consults charged as usual"); const g=document.getElementById("price-grid"); if(g) g.innerHTML=priceGrid(id); }catch(err){ toast("That didn't save. Please try again."); } });
 document.addEventListener("change", async e=>{ if(e.target?.id!=="cl-tier" || !S.prac || !S.sel) return; const tier=e.target.value; try{ S.clients[S.sel]={...S.clients[S.sel], priceTier:tier}; await S.db.doc("clients/"+S.sel).update({priceTier:tier, pricing:pricingFor(S.sel)}); const g=document.getElementById("price-grid"); if(g) g.innerHTML=priceGrid(S.sel); toast(`${clientFirst(S.sel)||"Client"}: ${TIER_LABEL[tier]}`); }catch(err){ toast("That didn't save. Please try again."); } });
@@ -1519,7 +1521,7 @@ function billingPane(id){
     <div class="row" style="gap:10px"><div class="grow row" style="gap:16px"><span><span class="small muted">Balance due</span><br><b style="font-size:20px">${money(bal)}</b></span>
       ${pp.bought?`<span><span class="small muted">Prepaid sessions left</span><br><b style="font-size:20px">${pp.left}</b> <span class="small muted">of ${pp.bought}</span></span>`:""}</div>
       ${ed?"":`<button type="button" class="primary" data-act="invnew">New invoice</button>`}</div>
-    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-onlyok" ${S.clients[id]?.reportsOnlyOk?"checked":""}><span>Offer reports only on their form</span></label><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-zoomfree" ${S.clients[id]?.zoomFree?"checked":""}><span>No charge for Zoom</span></label><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
+    <div class="row" style="gap:8px;align-items:center"><span class="small"><b>Pricing:</b></span><select id="cl-tier" style="width:auto">${Object.entries(TIER_LABEL).map(([k,l])=>`<option value="${k}" ${(S.clients[id]?.priceTier==="founding"?"founding":"current")===k?"selected":""}>${l}</option>`).join("")}</select><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-onlyok" ${S.clients[id]?.reportsOnlyOk?"checked":""}><span>Offer reports only on their form</span></label><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-zoomfree" ${S.clients[id]?.zoomFree?"checked":""}><span>No charge for Zoom</span></label><label class="check small" style="margin-left:8px"><input type="checkbox" id="cl-norfh" ${S.clients[id]?.noRfh?"checked":""}><span>Family: don't count for Roaring Fork</span></label><span class="small muted">Sets the prices on their Qest4 form and new invoices.</span></div>
     <div id="price-grid">${priceGrid(id)}</div>
     ${(()=>{ const cd=(billSet().clientDiscounts||{})[id];
       return S.discEdit===id ? `<div class="row" id="disc-form" style="gap:6px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)">
@@ -1719,7 +1721,7 @@ function monthBills(all){
     <div class="row" style="gap:24px"><span><span class="small muted">Clients served</span><br><b style="font-size:22px">${people.size}</b></span><span><span class="small muted">Invoices</span><br><b style="font-size:22px">${rows.length}</b></span><span><span class="small muted">Billed</span><br><b style="font-size:22px">${money(tot)}</b></span><span><span class="small muted">Paid so far</span><br><b style="font-size:22px">${money(paid)}</b></span></div>
     ${!rows.length?`<div class="empty small">No invoices dated in ${esc(label)}.</div>`:`
     <h3 style="margin:6px 0 0">Clients served in ${esc(label)}</h3>
-    <table><thead><tr><th>#</th><th>Client</th><th>Services</th></tr></thead><tbody>${[...people.values()].sort((a,b)=>a.name.localeCompare(b.name)).map((p,i)=>`<tr><td class="small muted">${i+1}</td><td>${esc(p.name)}</td><td class="small">${esc(p.services.join(", "))}</td></tr>`).join("")}</tbody></table>
+    <table><thead><tr><th>#</th><th>Client</th><th>Services</th></tr></thead><tbody>${[...people.values()].sort((a,b)=>a.name.localeCompare(b.name)).map((p,i)=>`<tr><td class="small muted">${i+1}</td><td>${esc(p.name)}${noRfh(p.name)?` <span class="chip">family, not RFH</span>`:""}</td><td class="small">${esc(p.services.join(", "))}</td></tr>`).join("")}</tbody></table>
     <h3 style="margin:10px 0 0">Invoices</h3>
     <table><thead><tr><th>Date</th><th>Invoice</th><th>Client</th><th>Services</th><th style="text-align:right">Total</th><th>Status</th></tr></thead><tbody>${rows.map(v=>{ const m=invMath(v), [st,cls]=invStatus(v); return `<tr><td class="small" style="white-space:nowrap">${esc(fmtDate(v.serviceDate||v.date))}</td><td class="small">#${esc(v.number||"—")}</td><td>${esc(clientName(v.clientId))}</td><td class="small">${esc((v.items||[]).filter(i=>i.kind!=="discount").map(i=>(i.desc||BILL_KINDS[i.kind]||"Item")+(i.for?` (${i.for})`:"")).join(", "))}</td><td style="text-align:right">${esc(money(m.total))}</td><td><span class="chip ${cls}">${st}</span></td></tr>`; }).join("")}</tbody></table>`}
     <p class="small muted">Counts invoices you've sent (not drafts or voided), by service date, or invoice date if no service date. Each person on a family invoice counts separately.</p></div>`;
@@ -2098,6 +2100,9 @@ function repLines(list){
   return out;
 }
 const personKey = s => String(s||"").trim().toLowerCase();
+/* the client record for a person named on an invoice line (family invoices name each person) */
+function personId(name, fallback){ const k=personKey(name); return Object.keys(S.clients||{}).find(id=>!isFamilyShell(id) && personKey(clientName(id))===k) || fallback; }
+const noRfh = (name, fallback) => !!S.clients[personId(name, fallback)]?.noRfh;
 function repData(p){
   const sent=Object.entries(S.inv||{}).map(([id,v])=>({id,...v})).filter(v=>v.status==="sent");
   const inv=sent.filter(v=>inRange(svcDate(v), p)), lines=repLines(inv);
@@ -2116,9 +2121,9 @@ function repData(p){
   const tiers={current:{n:0,amt:0}, founding:{n:0,amt:0}}; inv.forEach(v=>{ const t=S.clients[v.clientId]?.priceTier==="founding"?"founding":"current"; if(invMath(v).total>0){ tiers[t].n++; tiers[t].amt=r2(tiers[t].amt+invMath(v).total); } });
   // scans done in the period (past appointments) and how the treatment went out
   const scans=[]; Object.entries(S.clients||{}).forEach(([id,c])=>{ if(isFamilyShell(id)) return; apptsOf(c).forEach(a=>{ if(a.type==="scan" && inRange(a.date,p) && a.date<=today()) scans.push({id, c, a}); }); });
-  const billedByMonth={}; lines.forEach(l=>{ if(l.amt>0){ const mo=svcDate(l.v).slice(0,7); (billedByMonth[mo]=billedByMonth[mo]||new Set()).add(personKey(l.person)); } });
-  const unbilled=scans.filter(s=>!(billedByMonth[s.a.date.slice(0,7)]||new Set()).has(personKey(clientName(s.id))));
-  return {inv, lines, billed, owed, received, pays, methods, people:billedPeople, services, discounts, tiers, scans, unbilled, billedByMonth};
+  const rfhSkip=new Set(); const billedByMonth={}; lines.forEach(l=>{ if(l.amt>0 && noRfh(l.person, l.v.clientId)){ rfhSkip.add(l.person); return; } if(l.amt>0){ const mo=svcDate(l.v).slice(0,7); (billedByMonth[mo]=billedByMonth[mo]||new Set()).add(personKey(l.person)); } });
+  const unbilled=scans.filter(s=>!S.clients[s.id]?.noRfh && !(billedByMonth[s.a.date.slice(0,7)]||new Set()).has(personKey(clientName(s.id))));
+  return {inv, lines, billed, owed, received, pays, methods, people:billedPeople, services, discounts, tiers, scans, unbilled, billedByMonth, rfhSkip:[...rfhSkip].sort()};
 }
 const pctChange = (now, before) => !before ? null : Math.round((now-before)/before*100);
 function deltaChip(now, before, word){ const c=pctChange(now, before); if(c===null) return ""; return `<span class="small muted">${c>0?"▲":c<0?"▼":""} ${Math.abs(c)}% vs ${esc(word)}</span>`; }
@@ -2194,7 +2199,7 @@ function renderReports(){
 
     <div class="formsec stack"><h3>Clients serviced</h3>
       ${D.people.length?`<table class="inv-tab"><thead><tr><th>#</th><th>Client</th><th>Services</th><th class="num">Billed</th></tr></thead><tbody>
-        ${D.people.sort((a,b)=>a.name.localeCompare(b.name)).map((x,k)=>`<tr><td class="small muted">${k+1}</td><td>${esc(x.name)}${x.isNew?` <span class="chip acc">new</span>`:""}</td><td class="small">${esc([...x.services].join(", "))}</td><td class="num">${esc(money(x.amt))}</td></tr>`).join("")}</tbody></table>`:`<div class="empty small">No one billed in ${esc(p.label)}.</div>`}
+        ${D.people.sort((a,b)=>a.name.localeCompare(b.name)).map((x,k)=>`<tr><td class="small muted">${k+1}</td><td>${esc(x.name)}${x.isNew?` <span class="chip acc">new</span>`:""}${noRfh(x.name, x.clientId)?` <span class="chip">family, not RFH</span>`:""}</td><td class="small">${esc([...x.services].join(", "))}</td><td class="num">${esc(money(x.amt))}</td></tr>`).join("")}</tbody></table>`:`<div class="empty small">No one billed in ${esc(p.label)}.</div>`}
       <p class="small muted">Each person on a family invoice counts separately. Counts invoices you've sent (not drafts or voided), by service date.</p></div>
 
     <div class="formsec stack"><h3>Roaring Fork payout</h3>
@@ -2202,8 +2207,9 @@ function renderReports(){
       <table class="inv-tab"><thead><tr><th>Month</th><th class="num">Billed clients</th>${fee?`<th class="num">To pay RFH</th>`:""}</tr></thead><tbody>
         ${rfhRows.map(r=>`<tr><td>${esc(moLabel(r.m,true))}</td><td class="num">${r.n}</td>${fee?`<td class="num">${esc(money(r.n*fee))}</td>`:""}</tr>`).join("")}</tbody>
         ${rfhRows.length>1?`<tfoot><tr><td><b>Total</b></td><td class="num"><b>${rfhTot}</b></td>${fee?`<td class="num"><b>${esc(money(rfhTot*fee))}</b></td>`:""}</tr></tfoot>`:""}</table>
+      ${D.rfhSkip.length?`<p class="small"><b>Not counted (paying family):</b> ${esc(D.rfhSkip.join(", "))}</p>`:""}
       ${D.unbilled.length?`<p class="small"><b>Not counted (scan with no invoice that month, such as free family scans):</b> ${esc(D.unbilled.map(s=>`${clientName(s.id)} (${fmtDate(s.a.date)})`).join(", "))}</p>`:""}
-      <p class="small muted">Each person billed in a month counts once, even with more than one invoice that month. For the full list of names, use Billing → By month.</p></div>
+      <p class="small muted">Each person billed in a month counts once, even with more than one invoice that month. To leave out family who pay you, tick “Family: don\u2019t count for Roaring Fork” on their Billing tab.</p></div>
 
     <div class="formsec stack"><h3>How you got paid</h3>
       ${meth.length?`<table class="inv-tab"><tbody>${meth.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${esc(money(v))}</td><td class="num">${meter(v,D.received)} ${share(v,D.received)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty small">No payments recorded in ${esc(p.label)}.</div>`}
@@ -2238,7 +2244,7 @@ function renderReports(){
     if(act==="csvpays"){ const out=[["Date","Client","Invoice","Method","Amount","Note"]]; D.pays.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(x=>out.push([x.date, clientName(x.v.clientId), x.v.number||"", x.method||"", r2(x.amount).toFixed(2), x.note||""])); out.push([]); out.push(["Total","","","",D.received.toFixed(2),""]); downloadCsv(`Payments ${tag}.csv`, out); return; }
     if(act==="csvlines"){ const out=[["Service date","Invoice","Billed to","Person served","Service","Description","Qty","Amount (after discounts)","Invoice status"]]; D.lines.slice().sort((a,b)=>svcDate(a.v).localeCompare(svcDate(b.v))).forEach(l=>out.push([svcDate(l.v), l.v.number||"", clientName(l.v.clientId), l.person, l.cat, l.i.desc||"", l.qty, l.amt.toFixed(2), invStatus(l.v)[0]])); out.push([]); out.push(["Total","","","","","","",D.billed.toFixed(2),""]); downloadCsv(`Invoice lines ${tag}.csv`, out); return; }
     if(act==="csvmonths"){ const out=[["Month","Received","Billed","Still owed","Clients billed","New clients","Scans done", ...(fee?["To pay RFH"]:[])]];
-      months.forEach(m=>{ const q={from:m+"-01", to:ymd(new Date(+m.slice(0,4), +m.slice(5,7), 0, 12))}, x=repData(q); out.push([moLabel(m,true), x.received.toFixed(2), x.billed.toFixed(2), x.owed.toFixed(2), x.people.length, x.people.filter(y=>y.isNew).length, x.scans.length, ...(fee?[(x.people.length*fee).toFixed(2)]:[])]); });
+      months.forEach(m=>{ const q={from:m+"-01", to:ymd(new Date(+m.slice(0,4), +m.slice(5,7), 0, 12))}, x=repData(q); out.push([moLabel(m,true), x.received.toFixed(2), x.billed.toFixed(2), x.owed.toFixed(2), x.people.length, x.people.filter(y=>y.isNew).length, x.scans.length, ...(fee?[(Object.values(x.billedByMonth).reduce((t,s)=>t+s.size,0)*fee).toFixed(2)]:[])]); });
       downloadCsv(`Summary ${tag}.csv`, out); return; }
   };
   const ch=document.querySelector(".rpt-scroll"); if(ch) ch.scrollLeft=ch.scrollWidth;
