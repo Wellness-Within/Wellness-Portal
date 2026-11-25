@@ -2199,7 +2199,7 @@ function repSummaryPrint(p, D, P, word){
 /* who counts for Roaring Fork each month: [{m, people:[{name, services, amt}]}] */
 function rfhMonths(p, D){
   const months=[]; { const d=dOf(p.from.slice(0,7)+"-15"); while(ymd(d).slice(0,7)<=p.to.slice(0,7)){ months.push(ymd(d).slice(0,7)); d.setMonth(d.getMonth()+1); } }
-  return months.map(m=>{ const map=new Map(); D.lines.filter(l=>l.amt>0 && svcDate(l.v).slice(0,7)===m && !noRfh(l.person, l.v.clientId)).forEach(l=>{ const k=personKey(l.person), x=map.get(k)||{name:l.person, services:new Set(), amt:0}; x.services.add(l.cat); x.amt=r2(x.amt+l.amt); map.set(k,x); });
+  return months.map(m=>{ const map=new Map(); D.lines.filter(l=>l.amt>0 && svcDate(l.v).slice(0,7)===m && !noRfh(l.person, l.v.clientId)).forEach(l=>{ const k=personKey(l.person), x=map.get(k)||{name:l.person, services:new Set(), amt:0, paid:0}; const im=invMath(l.v); x.services.add(l.cat); x.amt=r2(x.amt+l.amt); x.paid=r2(x.paid+(im.total>0 ? l.amt*Math.min(im.paid,im.total)/im.total : 0)); map.set(k,x); });
     return {m, people:[...map.values()].sort((a,b)=>a.name.localeCompare(b.name))}; });
 }
 /* Roaring Fork report: one month, the clients Dawn pays the fee for (paying family and free scans left off) */
@@ -2209,13 +2209,13 @@ function repRfhPrint(mo, fee){
   repPrintOpen("Roaring Fork Homeopathy report", moLabel(mo,true), `
     <div class="kpis">${`<div class="kpi"><span class="small muted">Clients billed</span><b>${people.length}</b></div>`}${fee?`<div class="kpi"><span class="small muted">Fee per client</span><b>${esc(money(fee))}</b></div><div class="kpi"><span class="small muted">Amount due</span><b>${esc(money(people.length*fee))}</b></div>`:""}</div>
     <h2>Clients for ${esc(moLabel(mo,true))}</h2>
-    ${people.length?`<table><thead><tr><th>#</th><th>Client</th><th>Services</th>${fee?`<th class="num">Fee</th>`:""}</tr></thead><tbody>${people.map((y,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(y.name)}</td><td>${esc([...y.services].join(", "))}</td>${fee?`<td class="num">${esc(money(fee))}</td>`:""}</tr>`).join("")}</tbody>
-      ${fee?`<tfoot><tr><td></td><td>Total</td><td></td><td class="num">${esc(money(people.length*fee))}</td></tr></tfoot>`:""}</table>`:`<p class="muted">No billed clients this month.</p>`}`);
+    ${people.length?`<table><thead><tr><th>#</th><th>Client</th><th>Services</th><th class="num">Client paid</th>${fee?`<th class="num">Fee</th>`:""}</tr></thead><tbody>${people.map((y,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(y.name)}</td><td>${esc([...y.services].join(", "))}</td><td class="num">${esc(money(y.paid))}${y.paid<y.amt?`<div class="small muted">of ${esc(money(y.amt))} billed</div>`:""}</td>${fee?`<td class="num">${esc(money(fee))}</td>`:""}</tr>`).join("")}</tbody>
+      <tfoot><tr><td></td><td>Total</td><td></td><td class="num">${esc(money(people.reduce((t,y)=>t+y.paid,0)))}</td>${fee?`<td class="num">${esc(money(people.length*fee))}</td>`:""}</tr></tfoot></table>`:`<p class="muted">No billed clients this month.</p>`}`);
 }
 function repRfhCsv(mo, fee){
-  const {people}=rfhMonthData(mo), out=[["Month","#","Client","Services",...(fee?["Fee"]:[])]];
-  people.forEach((y,i)=>out.push([moLabel(mo,true), i+1, y.name, [...y.services].join("; "), ...(fee?[fee.toFixed(2)]:[])]));
-  out.push([]); out.push(["Total","",people.length+" client"+(people.length===1?"":"s"),"",...(fee?[(people.length*fee).toFixed(2)]:[])]);
+  const {people}=rfhMonthData(mo), out=[["Month","#","Client","Services","Client paid","Billed",...(fee?["Fee"]:[])]];
+  people.forEach((y,i)=>out.push([moLabel(mo,true), i+1, y.name, [...y.services].join("; "), y.paid.toFixed(2), y.amt.toFixed(2), ...(fee?[fee.toFixed(2)]:[])]));
+  out.push([]); out.push(["Total","",people.length+" client"+(people.length===1?"":"s"),"",r2(people.reduce((t,y)=>t+y.paid,0)).toFixed(2),r2(people.reduce((t,y)=>t+y.amt,0)).toFixed(2),...(fee?[(people.length*fee).toFixed(2)]:[])]);
   downloadCsv(`Roaring Fork ${moLabel(mo,true)}.csv`, out);
 }
 function renderReports(){
@@ -2270,7 +2270,8 @@ function renderReports(){
     <div class="formsec stack"><h3>Roaring Fork payout</h3>
       <div class="row no-print" style="gap:10px;align-items:end;flex-wrap:wrap"><label class="field" style="margin:0"><span>Month</span><input type="month" id="rfh-month" value="${esc(rfhMo)}"></label><label class="field" style="margin:0"><span>Fee per client</span><input id="rpt-fee" type="number" min="0" step="0.01" style="width:110px" value="${fee||""}" placeholder="0.00"></label><button type="button" class="small" data-rpt="savefee">Save fee</button></div>
       <div class="rpt-kpis">${kpi("Clients for "+moLabel(rfhMo,true), String(R.people.length))}${fee?kpi("Amount due", money(R.people.length*fee)):""}</div>
-      ${R.people.length?`<table class="inv-tab"><thead><tr><th>#</th><th>Client</th><th>Services</th>${fee?`<th class="num">Fee</th>`:""}</tr></thead><tbody>${R.people.map((y,i)=>`<tr><td class="small muted">${i+1}</td><td>${esc(y.name)}</td><td class="small">${esc([...y.services].join(", "))}</td>${fee?`<td class="num">${esc(money(fee))}</td>`:""}</tr>`).join("")}</tbody></table>`:`<div class="empty small">No billed clients in ${esc(moLabel(rfhMo,true))}.</div>`}
+      ${R.people.length?`<table class="inv-tab"><thead><tr><th>#</th><th>Client</th><th>Services</th><th class="num">Client paid</th>${fee?`<th class="num">Fee</th>`:""}</tr></thead><tbody>${R.people.map((y,i)=>`<tr><td class="small muted">${i+1}</td><td>${esc(y.name)}</td><td class="small">${esc([...y.services].join(", "))}</td><td class="num">${esc(money(y.paid))}${y.paid<y.amt?`<div class="small muted">of ${esc(money(y.amt))}</div>`:""}</td>${fee?`<td class="num">${esc(money(fee))}</td>`:""}</tr>`).join("")}</tbody>
+        <tfoot><tr><td></td><td><b>Total</b></td><td></td><td class="num"><b>${esc(money(R.people.reduce((t,y)=>t+y.paid,0)))}</b></td>${fee?`<td class="num"><b>${esc(money(R.people.length*fee))}</b></td>`:""}</tr></tfoot></table>`:`<div class="empty small">No billed clients in ${esc(moLabel(rfhMo,true))}.</div>`}
       <p class="small muted">Clients billed that month, each counted once. Paying family (ticked “Family: don\u2019t count for Roaring Fork” on their Billing tab) and free scans with no invoice are left off.</p>
       <div class="row no-print" style="gap:8px;flex-wrap:wrap"><button type="button" class="primary" data-rpt="pdfrfh">Save RFH report (PDF)</button><button type="button" data-rpt="csvrfh">Download RFH spreadsheet</button></div></div>
 
