@@ -701,12 +701,12 @@ function startPractitioner(){
   renderTabs();
   S.db.collection("clients").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.clients = m; S.clientsLoaded = true;
-    resolveNames(); renderTabs(); if(S.tab==="home") renderHome(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="reports" && S.invLoaded && !document.activeElement?.closest?.("#rpt-fee, #rpt-from, #rpt-to")) renderReports(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
+    resolveNames(); renderTabs(); if(S.tab==="home") renderHome(); if(S.tab==="inbox") renderInbox(); if(S.tab==="schedule") renderSchedule(); if(S.tab==="reports" && S.invLoaded && !document.activeElement?.closest?.("#rpt-fee, #rpt-from, #rpt-to, #rfh-month")) renderReports(); if(S.tab==="clients" && !document.activeElement?.closest?.("#pi-form, #ps-form, #notesBox, .bottle, #pl-instr, #pfu-form, #pfu-dawn, #msg-box, #compose, #appt-form, #inv-form, #pay-form, #disc-form, #prog-form")) render();
   }, e => console.warn(e));
   S.db.collection("invoices").onSnapshot(snap => {
     const m = {}; snap.docs.forEach(d => m[d.id] = d.data()); S.inv = m; S.invLoaded = true;
     if(S.tab==="billing") renderBilling();
-    if(S.tab==="reports" && !document.activeElement?.closest?.("#rpt-fee, #rpt-from, #rpt-to")) renderReports();
+    if(S.tab==="reports" && !document.activeElement?.closest?.("#rpt-fee, #rpt-from, #rpt-to, #rfh-month")) renderReports();
     if(S.tab==="home") renderHome();
     if(S.tab==="clients" && S.sel && S.sub==="billing" && !document.activeElement?.closest?.("#inv-form, #pay-form")) renderClients();
   }, e => { console.warn(e); S.invLoaded = true; });
@@ -2197,25 +2197,21 @@ function rfhMonths(p, D){
   return months.map(m=>{ const map=new Map(); D.lines.filter(l=>l.amt>0 && svcDate(l.v).slice(0,7)===m && !noRfh(l.person, l.v.clientId)).forEach(l=>{ const k=personKey(l.person), x=map.get(k)||{name:l.person, services:new Set(), amt:0}; x.services.add(l.cat); x.amt=r2(x.amt+l.amt); map.set(k,x); });
     return {m, people:[...map.values()].sort((a,b)=>a.name.localeCompare(b.name))}; });
 }
-function repRfhPrint(p, D, fee){
-  const ms=rfhMonths(p, D), tot=ms.reduce((t,x)=>t+x.people.length,0);
-  repPrintOpen("Roaring Fork Homeopathy report", p.label, `
-    <table><thead><tr><th>Month</th><th class="num">Clients billed</th>${fee?`<th class="num">Per client</th><th class="num">Amount due</th>`:""}</tr></thead><tbody>
-      ${ms.map(x=>`<tr><td>${esc(moLabel(x.m,true))}</td><td class="num">${x.people.length}</td>${fee?`<td class="num">${esc(money(fee))}</td><td class="num">${esc(money(x.people.length*fee))}</td>`:""}</tr>`).join("")}</tbody>
-      ${ms.length>1?`<tfoot><tr><td>Total</td><td class="num">${tot}</td>${fee?`<td></td><td class="num">${esc(money(tot*fee))}</td>`:""}</tr></tfoot>`:""}</table>
-    ${ms.map(x=>`<div class="month"><h2>${esc(moLabel(x.m,true))} · ${x.people.length} client${x.people.length===1?"":"s"}</h2>${x.people.length?`<table><thead><tr><th>#</th><th>Client</th><th>Services</th></tr></thead><tbody>${x.people.map((y,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(y.name)}</td><td>${esc([...y.services].join(", "))}</td></tr>`).join("")}</tbody></table>`:`<p class="muted">No billed clients.</p>`}</div>`).join("")}
-    ${D.rfhSkip.length||D.unbilled.length?`<h2>Not counted</h2>${D.rfhSkip.length?`<p><b>Family (paying):</b> ${esc(D.rfhSkip.join(", "))}</p>`:""}${D.unbilled.length?`<p><b>Scans with no invoice (such as free family scans):</b> ${esc(D.unbilled.map(s=>`${clientName(s.id)} (${fmtDate(s.a.date)})`).join(", "))}</p>`:""}`:""}
-    <p class="small muted">Each person billed in a month counts once, even with more than one invoice that month. Based on invoices sent (not drafts or voided), by service date.</p>`);
+/* Roaring Fork report: one month, the clients Dawn pays the fee for (paying family and free scans left off) */
+function rfhMonthData(mo){ const to=ymd(new Date(+mo.slice(0,4), +mo.slice(5,7), 0, 12)), pm={from:mo+"-01", to, label:moLabel(mo,true)}, Dm=repData(pm); return {pm, Dm, people:rfhMonths(pm, Dm)[0].people}; }
+function repRfhPrint(mo, fee){
+  const {people}=rfhMonthData(mo);
+  repPrintOpen("Roaring Fork Homeopathy report", moLabel(mo,true), `
+    <div class="kpis">${`<div class="kpi"><span class="small muted">Clients billed</span><b>${people.length}</b></div>`}${fee?`<div class="kpi"><span class="small muted">Fee per client</span><b>${esc(money(fee))}</b></div><div class="kpi"><span class="small muted">Amount due</span><b>${esc(money(people.length*fee))}</b></div>`:""}</div>
+    <h2>Clients for ${esc(moLabel(mo,true))}</h2>
+    ${people.length?`<table><thead><tr><th>#</th><th>Client</th><th>Services</th>${fee?`<th class="num">Fee</th>`:""}</tr></thead><tbody>${people.map((y,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(y.name)}</td><td>${esc([...y.services].join(", "))}</td>${fee?`<td class="num">${esc(money(fee))}</td>`:""}</tr>`).join("")}</tbody>
+      ${fee?`<tfoot><tr><td></td><td>Total</td><td></td><td class="num">${esc(money(people.length*fee))}</td></tr></tfoot>`:""}</table>`:`<p class="muted">No billed clients this month.</p>`}`);
 }
-function repRfhCsv(p, D, fee, tag){
-  const ms=rfhMonths(p, D), out=[["Month","Client","Services","Billed","Counted for RFH",...(fee?["Amount due RFH"]:[])]];
-  ms.forEach(x=>x.people.forEach(y=>out.push([moLabel(x.m,true), y.name, [...y.services].join("; "), y.amt.toFixed(2), "Yes", ...(fee?[fee.toFixed(2)]:[])])));
-  const fam=new Map(); D.lines.filter(l=>l.amt>0 && noRfh(l.person, l.v.clientId)).forEach(l=>{ const m=svcDate(l.v).slice(0,7), k=m+"|"+personKey(l.person), x=fam.get(k)||{m, name:l.person, services:new Set(), amt:0}; x.services.add(l.cat); x.amt=r2(x.amt+l.amt); fam.set(k,x); });
-  [...fam.values()].sort((a,b)=>(a.m+a.name).localeCompare(b.m+b.name)).forEach(x=>out.push([moLabel(x.m,true), x.name, [...x.services].join("; "), x.amt.toFixed(2), "No (family)", ...(fee?["0.00"]:[])]));
-  D.unbilled.forEach(s=>out.push([moLabel(s.a.date.slice(0,7),true), clientName(s.id), "Scan, no invoice", "0.00", "No (not billed)", ...(fee?["0.00"]:[])]));
-  out.push([]); ms.forEach(x=>out.push([moLabel(x.m,true)+" total","","","",x.people.length, ...(fee?[(x.people.length*fee).toFixed(2)]:[])]));
-  if(ms.length>1){ const t=ms.reduce((a,x)=>a+x.people.length,0); out.push(["Total","","","",t, ...(fee?[(t*fee).toFixed(2)]:[])]); }
-  downloadCsv(`Roaring Fork ${tag}.csv`, out);
+function repRfhCsv(mo, fee){
+  const {people}=rfhMonthData(mo), out=[["Month","#","Client","Services",...(fee?["Fee"]:[])]];
+  people.forEach((y,i)=>out.push([moLabel(mo,true), i+1, y.name, [...y.services].join("; "), ...(fee?[fee.toFixed(2)]:[])]));
+  out.push([]); out.push(["Total","",people.length+" client"+(people.length===1?"":"s"),"",...(fee?[(people.length*fee).toFixed(2)]:[])]);
+  downloadCsv(`Roaring Fork ${moLabel(mo,true)}.csv`, out);
 }
 function renderReports(){
   const st=S.rep||(S.rep=recall("wfw.rep",null)||{mode:"month", anchor:today()});
@@ -2225,7 +2221,8 @@ function renderReports(){
   const newN=D.people.filter(x=>x.isNew).length;
   const svc=Object.values(D.services).sort((a,b)=>b.amt-a.amt), svcTot=r2(svc.reduce((t,s)=>t+s.amt,0));
   const months=[]; { const d=dOf(p.from.slice(0,7)+"-15"); while(ymd(d).slice(0,7)<=p.to.slice(0,7)){ months.push(ymd(d).slice(0,7)); d.setMonth(d.getMonth()+1); } }
-  const rfhRows=months.map(m=>({m, n:(D.billedByMonth[m]||new Set()).size})), rfhTot=rfhRows.reduce((t,r)=>t+r.n,0);
+  const rfhMo = p.mode==="month" ? p.from.slice(0,7) : (S.rfhMonth && S.rfhMonth>=p.from.slice(0,7) && S.rfhMonth<=p.to.slice(0,7) ? S.rfhMonth : (p.to<today()?p.to:today()).slice(0,7));
+  const R=rfhMonthData(rfhMo);
   const meth=Object.entries(D.methods).sort((a,b)=>b[1]-a[1]);
   const deliv={imprint:0, ship:0, none:0}, rx={}; let zoomN=0, quartzN=0;
   D.scans.forEach(({c,a})=>{ deliv[apptDelivery(a)]=(deliv[apptDelivery(a)]||0)+1; if(a.how) zoomN++; const f=(c.qest||{}).rxForm; const k=f===RX_OTHER?"Other item":f||"Not on form"; rx[k]=(rx[k]||0)+1; if((c.qest||{}).quartz) quartzN++; });
@@ -2266,13 +2263,10 @@ function renderReports(){
       <div class="row no-print" style="gap:8px"><button type="button" class="primary" data-rpt="pdfsum">Save summary report (PDF)</button><span class="small muted">Everything above: totals, chart, income by service and clients serviced.</span></div></div>
 
     <div class="formsec stack"><h3>Roaring Fork payout</h3>
-      <div class="row no-print" style="gap:8px;align-items:center"><label class="small" for="rpt-fee">Amount you pay RFH per client</label><input id="rpt-fee" type="number" min="0" step="0.01" style="width:110px" value="${fee||""}" placeholder="0.00"><button type="button" class="small" data-rpt="savefee">Save</button></div>
-      <table class="inv-tab"><thead><tr><th>Month</th><th class="num">Billed clients</th>${fee?`<th class="num">To pay RFH</th>`:""}</tr></thead><tbody>
-        ${rfhRows.map(r=>`<tr><td>${esc(moLabel(r.m,true))}</td><td class="num">${r.n}</td>${fee?`<td class="num">${esc(money(r.n*fee))}</td>`:""}</tr>`).join("")}</tbody>
-        ${rfhRows.length>1?`<tfoot><tr><td><b>Total</b></td><td class="num"><b>${rfhTot}</b></td>${fee?`<td class="num"><b>${esc(money(rfhTot*fee))}</b></td>`:""}</tr></tfoot>`:""}</table>
-      ${D.rfhSkip.length?`<p class="small"><b>Not counted (paying family):</b> ${esc(D.rfhSkip.join(", "))}</p>`:""}
-      ${D.unbilled.length?`<p class="small"><b>Not counted (scan with no invoice that month, such as free family scans):</b> ${esc(D.unbilled.map(s=>`${clientName(s.id)} (${fmtDate(s.a.date)})`).join(", "))}</p>`:""}
-      <p class="small muted">Each person billed in a month counts once, even with more than one invoice that month. To leave out family who pay you, tick “Family: don\u2019t count for Roaring Fork” on their Billing tab.</p>
+      <div class="row no-print" style="gap:10px;align-items:end;flex-wrap:wrap"><label class="field" style="margin:0"><span>Month</span><input type="month" id="rfh-month" value="${esc(rfhMo)}"></label><label class="field" style="margin:0"><span>Fee per client</span><input id="rpt-fee" type="number" min="0" step="0.01" style="width:110px" value="${fee||""}" placeholder="0.00"></label><button type="button" class="small" data-rpt="savefee">Save fee</button></div>
+      <div class="rpt-kpis">${kpi("Clients for "+moLabel(rfhMo,true), String(R.people.length))}${fee?kpi("Amount due", money(R.people.length*fee)):""}</div>
+      ${R.people.length?`<table class="inv-tab"><thead><tr><th>#</th><th>Client</th><th>Services</th>${fee?`<th class="num">Fee</th>`:""}</tr></thead><tbody>${R.people.map((y,i)=>`<tr><td class="small muted">${i+1}</td><td>${esc(y.name)}</td><td class="small">${esc([...y.services].join(", "))}</td>${fee?`<td class="num">${esc(money(fee))}</td>`:""}</tr>`).join("")}</tbody></table>`:`<div class="empty small">No billed clients in ${esc(moLabel(rfhMo,true))}.</div>`}
+      <p class="small muted">Clients billed that month, each counted once. Paying family (ticked “Family: don\u2019t count for Roaring Fork” on their Billing tab) and free scans with no invoice are left off.</p>
       <div class="row no-print" style="gap:8px;flex-wrap:wrap"><button type="button" class="primary" data-rpt="pdfrfh">Save RFH report (PDF)</button><button type="button" data-rpt="csvrfh">Download RFH spreadsheet</button></div></div>
 
     <div class="formsec stack"><h3>How you got paid</h3>
@@ -2306,8 +2300,8 @@ function renderReports(){
       S.db.doc("settings/practice").update({billing}).then(()=>{ S.settings={...S.settings, billing}; toast(v?`Saved: ${money(v)} per client`:"Cleared"); renderReports(); }).catch(()=>{ b.disabled=false; toast("That didn't save. Please try again."); }); return; }
     const tag=p.label.replace(/[^\w\- ]+/g,"").replace(/\s+/g," ").trim();
     if(act==="pdfsum"){ repSummaryPrint(p, D, P, word); return; }
-    if(act==="pdfrfh"){ repRfhPrint(p, D, fee); return; }
-    if(act==="csvrfh"){ repRfhCsv(p, D, fee, tag); return; }
+    if(act==="pdfrfh"){ repRfhPrint(rfhMo, fee); return; }
+    if(act==="csvrfh"){ repRfhCsv(rfhMo, fee); return; }
     if(act==="csvpays"){ const out=[["Date","Client","Invoice","Method","Amount","Note"]]; D.pays.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(x=>out.push([x.date, clientName(x.v.clientId), x.v.number||"", x.method||"", r2(x.amount).toFixed(2), x.note||""])); out.push([]); out.push(["Total","","","",D.received.toFixed(2),""]); downloadCsv(`Payments ${tag}.csv`, out); return; }
     if(act==="csvlines"){ const out=[["Service date","Invoice","Billed to","Person served","Service","Description","Qty","Amount (after discounts)","Invoice status"]]; D.lines.slice().sort((a,b)=>svcDate(a.v).localeCompare(svcDate(b.v))).forEach(l=>out.push([svcDate(l.v), l.v.number||"", clientName(l.v.clientId), l.person, l.cat, l.i.desc||"", l.qty, l.amt.toFixed(2), invStatus(l.v)[0]])); out.push([]); out.push(["Total","","","","","","",D.billed.toFixed(2),""]); downloadCsv(`Invoice lines ${tag}.csv`, out); return; }
     if(act==="csvmonths"){ const out=[["Month","Received","Billed","Still owed","Clients billed","New clients","Scans done", ...(fee?["To pay RFH"]:[])]];
@@ -2315,7 +2309,8 @@ function renderReports(){
       downloadCsv(`Summary ${tag}.csv`, out); return; }
   };
   const ch=document.querySelector(".rpt-scroll"); if(ch) ch.scrollLeft=ch.scrollWidth;
-  $("#app").onchange=e=>{ if(e.target.id==="rpt-from"||e.target.id==="rpt-to"){ S.rep={...st, mode:"custom", from:$("#rpt-from").value||st.from, to:$("#rpt-to").value||st.to}; store("wfw.rep",S.rep); renderReports(); } };
+  $("#app").onchange=e=>{ if(e.target.id==="rfh-month" && e.target.value){ const v=e.target.value; if(p.mode==="month" || v<p.from.slice(0,7) || v>p.to.slice(0,7)){ S.rep={...st, mode:"month", anchor:v+"-01"}; store("wfw.rep",S.rep); } S.rfhMonth=v; renderReports(); document.getElementById("rfh-month")?.scrollIntoView({block:"center"}); return; }
+    if(e.target.id==="rpt-from"||e.target.id==="rpt-to"){ S.rep={...st, mode:"custom", from:$("#rpt-from").value||st.from, to:$("#rpt-to").value||st.to}; store("wfw.rep",S.rep); renderReports(); } };
 }
 /* ---------- monthly summary + CSV ---------- */
 function monthlySummary(){
